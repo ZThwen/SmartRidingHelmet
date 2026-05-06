@@ -17,7 +17,7 @@ import machine
 import time
 
 from Base_Module import BaseModule
-from config import EVENT_XXX_READY, EVENT_XXX_ERROR, POWER_STATE_ACTIVE
+from config import EVENT_XXX_READY, EVENT_SENSOR_ERROR, EVENT_CONFIG_UPDATE, POWER_STATE_ACTIVE
 
 
 class YourModule(BaseModule):
@@ -164,10 +164,7 @@ class YourModule(BaseModule):
             # 连续失败超限则发布故障事件
             if self.ctx["err_count"] > self.cfg["max_retry"]:
                 if self.event_bus:
-                    self.event_bus.publish(EVENT_XXX_ERROR, {
-                        "source": self.name,
-                        "error": str(e)
-                    })
+                    self.event_bus.publish(EVENT_SENSOR_ERROR, self.get_error_data(e))
         finally:
             self.ctx["is_busy"] = False
             self.ctx["last_tick"] = now  # 刷新时间戳
@@ -178,11 +175,16 @@ class YourModule(BaseModule):
         \brief 配置更新回调
         \param payload: {"target": module_name, "key": value}
         """
-        if payload.get("target") == self.name:
-            # 更新配置参数
-            if "sample_ms" in payload:
-                self.cfg["sample_ms"] = int(payload["sample_ms"])
-                print(f"[{self.name}] 采样间隔更新为 {self.cfg['sample_ms']}ms")
+        # ====== 1. 采样间隔更新（模块特定配置）======
+        if payload.get("target") == self.name and "sample_ms" in payload:
+            self.cfg["sample_ms"] = int(payload["sample_ms"])
+            print(f"[{self.name}] 采样间隔更新为 {self.cfg['sample_ms']}ms")
+        
+        # ====== 2. 功耗状态更新（全局配置）======
+        if "power_state" in payload:
+            old_state = self.ctx["power_state"]
+            self.ctx["power_state"] = payload["power_state"]
+            print(f"[{self.name}] 功耗状态: {old_state} -> {payload['power_state']}")
 
     # ==================== 辅助方法 ====================
     def get_data(self):

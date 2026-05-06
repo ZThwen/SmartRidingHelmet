@@ -6,7 +6,7 @@ import machine
 import time
 
 from Base_Module import BaseModule
-from config import EVENT_TEMP_HUMID_READY,EVENT_SENSOR_ERROR, EVENT_CONFIG_UPDATE, DEFAULT_SAMPLE_MS, POWER_STATE_ACTIVE
+from config import EVENT_TEMP_HUMID_READY,EVENT_SENSOR_ERROR, EVENT_CONFIG_UPDATE, TEMP_HUMID_SAMPLE_MS, POWER_STATE_ACTIVE
 from ahtx0 import AHT20
 
 
@@ -25,7 +25,7 @@ class TempHumidDriver(BaseModule):
             "i2c_freq": 400000,     # 通信频率 400kHz
             "i2c_timeout": 50000,   # 超时 50ms
             "addr": 0x38,           # AHT20 固定地址
-            "sample_ms": DEFAULT_SAMPLE_MS,  # 默认采样间隔 2000ms
+            "sample_ms": TEMP_HUMID_SAMPLE_MS,  # 默认采样间隔 2000ms
             "max_retry": 3          # 连续失败最大重试次数
         }
 
@@ -117,11 +117,7 @@ class TempHumidDriver(BaseModule):
             # 连续失败超限则发布故障事件
             if self.ctx["err_count"] > self.cfg["max_retry"]:
                 if self.event_bus:
-                    self.event_bus.publish(EVENT_SENSOR_ERROR, {
-                        "source": self.name,
-                        "code": self.ctx["err_count"],
-                        "error": str(e)
-                    })
+                    self.event_bus.publish(EVENT_SENSOR_ERROR, self.get_error_data(e))
         finally:
             self.ctx["is_busy"] = False
             self.ctx["last_tick"] = now
@@ -130,11 +126,22 @@ class TempHumidDriver(BaseModule):
     def _on_config_update(self, payload):
         """
         brief 配置更新回调处理
-        param payload: 配置事件负载 {"target": module_name, "sample_ms": ms}
+        param payload: 配置事件负载
+        note 
+            - target: 指定目标模块（可选，用于模块特定配置）
+            - sample_ms: 采样间隔（需要target）
+            - power_state: 功耗状态（全局配置）
         """
+        # ====== 1. 采样间隔更新（模块特定配置）======
         if payload.get("target") == self.name and "sample_ms" in payload:
             self.cfg["sample_ms"] = int(payload["sample_ms"])
             print(f"[{self.name}] 采样间隔更新为 {self.cfg['sample_ms']}ms")
+        
+        # ====== 2. 功耗状态更新（全局配置）======
+        if "power_state" in payload:
+            old_state = self.ctx["power_state"]
+            self.ctx["power_state"] = payload["power_state"]
+            print(f"[{self.name}] 功耗状态: {old_state} -> {payload['power_state']}")
 
     def get_data(self):
         """

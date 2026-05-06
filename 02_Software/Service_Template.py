@@ -27,7 +27,7 @@
 import time
 
 from Base_Module import BaseModule
-from config import EVENT_XXX_DATA, EVENT_XXX_RESULT, POWER_STATE_ACTIVE
+from config import EVENT_XXX_DATA, EVENT_XXX_RESULT, POWER_STATE_ACTIVE,EVENT_CONFIG_UPDATE
 
 
 class YourService(BaseModule):
@@ -92,7 +92,7 @@ class YourService(BaseModule):
                 # 订阅传感器数据事件
                 self.event_bus.subscribe(EVENT_XXX_DATA, self._on_data_received)
                 # 订阅配置更新事件
-                self.event_bus.subscribe("CONFIG_UPDATE", self._on_config_update)
+                self.event_bus.subscribe(EVENT_CONFIG_UPDATE, self._on_config_update)
             
             # ====== 2. 初始化业务状态 ======
             # 示例：初始化滑动窗口
@@ -183,10 +183,17 @@ class YourService(BaseModule):
         \brief 配置更新回调
         \param payload: {"target": module_name, "key": value}
         """
+        # ====== 1. 模块特定配置 ======
         if payload.get("target") == self.name:
             if "threshold" in payload:
                 self.cfg["threshold"] = float(payload["threshold"])
                 print(f"[{self.name}] 阈值更新为 {self.cfg['threshold']}")
+        
+        # ====== 2. 功耗状态更新（全局配置）======
+        if "power_state" in payload:
+            old_state = self.ctx["power_state"]
+            self.ctx["power_state"] = payload["power_state"]
+            print(f"[{self.name}] 功耗状态: {old_state} -> {payload['power_state']}")
 
     # ==================== 业务逻辑 ====================
     def _process_algorithm(self):
