@@ -10,6 +10,9 @@ EVENT_SENSOR_ERROR      = "SENSOR_ERROR"        # 传感器错误事件
 EVENT_CONFIG_UPDATE     = "CONFIG_UPDATE"       # 配置更新事件
 
 # ================= 默认参数配置 =================
+#传感器各自采样间隔
+TEMP_HUMID_SAMPLE_MS   = 2000    # 温湿度传感器采样间隔 (ms)
+
 DEFAULT_SAMPLE_MS       = 2000    # 传感器默认采样间隔 (ms)
 DEFAULT_RETRY_COUNT     = 3       # 硬件通信最大重试次数
 DEFAULT_TIMEOUT_MS      = 500     # 单次硬件操作超时阈值 (ms)

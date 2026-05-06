@@ -42,3 +42,19 @@ class BaseModule:
         return dict 状态快照
         """
         return dict(self.ctx) if hasattr(self, 'ctx') else {}
+    
+    def get_error_data(self, error):
+        """
+        brief 获取错误数据快照
+        param error: 异常对象或错误信息
+        return dict 错误数据
+        note 用于发布SENSOR_ERROR事件时构造统一的数据结构
+        """
+        import time
+        return {
+            "source": self.name,
+            "code": self.ctx.get("err_count", 0) if hasattr(self, 'ctx') else 0,
+            "error": str(error),
+            "timestamp": time.ticks_ms(),
+            "is_init": self.ctx.get("is_init", False) if hasattr(self, 'ctx') else False
+        }
