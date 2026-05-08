@@ -57,7 +57,7 @@
 - 发布加速度数据就绪事件
 
 **发布事件**：
-- `EVENT_IMU_READY`：加速度数据就绪，携带数据 `{acc_x, acc_y, acc_z, acc_total, valid, timestamp}`
+- `EVENT_IMU_READY`：加速度数据就绪，携带数据 `{acc_x, acc_y, acc_z, acc_total, valid}`
 
 **订阅事件**：
 - `EVENT_CONFIG_UPDATE`：远程配置更新
@@ -65,7 +65,6 @@
 **硬件说明**：
 - 传感器：LIS2DH12TR（I2C 地址 0x19）
 - 接口：I2C1 总线（S502 开关拨至 ARDU 侧）
-- 可选：配置内部阈值中断（INT 引脚 J301-8pin）
 - 参考示例：`examples/imu.py`
 
 ---
@@ -98,18 +97,18 @@
 
 **模块功能**：
 - 初始化 ADC 读取光敏电阻
-- 周期读取光照等级（明/暗/极暗）
+- 周期读取光照数据（直接读取ADC数据）
 - 发布光照数据就绪事件
 
 **发布事件**：
-- `EVENT_LIGHT_READY`：光照数据就绪，携带数据 `{light_level, valid, timestamp}`
+- `EVENT_LIGHT_READY`：光照数据就绪，携带数据 `{light_intensity, valid}`
 
 **订阅事件**：
 - `EVENT_CONFIG_UPDATE`：远程配置更新
 
 **硬件说明**：
 - 传感器：光敏电阻 GL5528（R316）
-- 接口：ADC 引脚 J303-1Pin
+- 接口：ADC 引脚 PC5
 - 参考示例：`examples/ldr.py`
 
 ---
