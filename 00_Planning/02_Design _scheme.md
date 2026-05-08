@@ -115,15 +115,17 @@
 
 #### 2.1.5 SOS 按键驱动模块（Button.py）
 
+**所属层次**：Device层（设备封装层）
+
 **需求对应**：F-ALM-02 一键SOS求助
 
-**模块功能**：
-- 初始化按键外部中断（上升沿触发）
-- 软件消抖（200ms）
-- 按键按下时发布 SOS 事件
+**模块功能**（纯硬件检测）：
+- 初始化按键GPIO外部中断（下降沿触发）
+- 软件消抖处理（200ms）
+- 按键按下时发布SOS事件
 
 **发布事件**：
-- `EVENT_SOS_PRESSED`：SOS 按键按下，携带数据 `{timestamp}`
+- `EVENT_SOS_TRIGGERED`：SOS按键按下，携带数据 `{timestamp}`
 
 **订阅事件**：无
 
@@ -131,70 +133,123 @@
 - 接口：Arduino D2 引脚（外部上拉，按下接地）
 - 参考示例：`examples/pin.py`
 
+**分层设计说明**：
+- Device层负责硬件状态检测，发布事件通知Service层
+- 不订阅任何事件，纯输入设备
+- Service层（AlarmService）订阅EVENT_SOS_TRIGGERED实现业务逻辑
+
 ---
 
 #### 2.1.6 LED 驱动模块（LED.py）
 
+**所属层次**：Device层（设备封装层）
+
 **需求对应**：F-ALM-03 本地声光报警
 
-**模块功能**：
-- 初始化 LED GPIO
-- 控制LED闪烁/常亮/熄灭
+**模块功能**（纯硬件控制，无业务逻辑）：
+- 初始化LED GPIO
+- 控制LED常亮
+- 控制LED熄灭
+- 控制LED闪烁（指定间隔）
 
 **发布事件**：无
 
 **订阅事件**：
-- `EVENT_ALARM_TRIGGERED`：报警触发，控制LED闪烁
-- `EVENT_ALARM_CANCELED`：报警取消，控制LED熄灭
+- `EVENT_CONFIG_UPDATE`：配置更新
+
+**公共接口**（供Service层调用）：
+- `on()`：LED常亮
+- `off()`：LED熄灭
+- `blink(interval_ms)`：LED闪烁（指定闪烁间隔）
+- `set_brightness(level)`：设置亮度（如果支持PWM）
 
 **硬件说明**：
 - 接口：Arduino D3 引脚（外接LED）
 - 参考示例：`examples/pin.py`
 
+**分层设计说明**：
+- Device层只提供基础硬件控制，不包含业务逻辑
+- 不订阅业务事件（ALARM_TRIGGERED等），由Service层调用
+- Service层（AlarmService）订阅业务事件后调用LED公共接口
+
 ---
 
 #### 2.1.7 音频驱动模块（Audio.py）
 
+**所属层次**：Device层（设备封装层）
+
 **需求对应**：F-ALM-03 本地声光报警
 
-**模块功能**：
-- 初始化音频模块
-- 播放报警音/TTS语音
+**模块功能**（纯硬件控制，无业务逻辑）：
+- 初始化音频硬件（quectel.Audio）
+- 播放本地音频文件（MP3/WAV）
+- TTS语音播报
 - 停止播放
+- 音量控制（TTS音量、扬声器音量、语速调节）
+- 录音功能（可选）
+- 播放状态回调处理
 
-**发布事件**：无
+**发布事件**：
+- `EVENT_AUDIO_PLAYBACK_START`：音频开始播放，携带数据 `{"type": "alarm", "file": "alarm.mp3"}`
+- `EVENT_AUDIO_PLAYBACK_END`：播放完成，携带数据 `{"file": "alarm.mp3", "duration": 3000}`
+- `EVENT_AUDIO_ERROR`：音频播放失败，携带数据 `{"error": "file not found"}`
 
 **订阅事件**：
-- `EVENT_ALARM_TRIGGERED`：报警触发，播放报警音
-- `EVENT_ALARM_CANCELED`：报警取消，停止播放
+- `EVENT_CONFIG_UPDATE`：配置更新（音量/语速参数）
+
+**公共接口**（供Service层调用）：
+- `play_file(file_path)`：播放音频文件
+- `play_tts(text)`：TTS语音播报
+- `stop()`：停止播放
+- `set_volume(volume)`：设置音量
+- `start_record(file)`：开始录音
+- `stop_record()`：停止录音
 
 **硬件说明**：
 - 接口：扬声器接口 J402（外接喇叭）
 - 功放：EC200U 内置功放（8欧/800mW）
 - 参考示例：`examples/audio.py`
 
+**分层设计说明**：
+- Device层只提供基础播放控制，不包含业务逻辑
+- 不订阅业务事件（COLLISION_DETECTED等），由Service层调用
+- Service层（AlarmService）负责业务逻辑，调用Audio的公共接口
+
 ---
 
 #### 2.1.8 LCD 驱动模块（LCD.py）
 
+**所属层次**：Device层（设备封装层）
+
 **需求对应**：F-ALM-03 本地声光报警
 
-**模块功能**：
-- 初始化 LCD 扩展板
-- 显示正常数据（温湿度、定位状态）
-- 显示报警画面（红色 SOS 字样）
+**模块功能**（纯硬件控制，无业务逻辑）：
+- 初始化LCD扩展板（SPI通信）
+- 显示正常数据画面（温湿度、定位信息）
+- 显示报警画面（红色SOS字样）
+- 清屏操作
+- 设置背光亮度
 
 **发布事件**：无
 
 **订阅事件**：
-- `EVENT_ALARM_TRIGGERED`：报警触发，显示报警画面
-- `EVENT_ALARM_CANCELED`：报警取消，恢复正常显示
-- `EVENT_TEMP_HUMID_READY`：温湿度数据，更新显示
-- `EVENT_GNSS_READY`：定位数据，更新显示
+- `EVENT_CONFIG_UPDATE`：配置更新
+
+**公共接口**（供Service层调用）：
+- `show_normal_data(temp, humid, lat, lon)`：显示正常骑行数据
+- `show_alarm(alarm_type)`：显示报警画面（collision/sos）
+- `clear()`：清屏
+- `set_backlight(level)`：设置背光亮度
 
 **硬件说明**：
-- 硬件：LCD 扩展板（1.8寸 TFT）
+- 硬件：LCD扩展板（1.8寸TFT）
+- 接口：SPI总线
 - 参考示例：`examples/lcd.py`
+
+**分层设计说明**：
+- Device层只提供基础显示控制，不包含业务逻辑
+- 不订阅业务/数据事件（ALARM_TRIGGERED、TEMP_HUMID_READY等）
+- Service层（AlarmService、CloudService）调用LCD公共接口更新显示
 
 ---
 
@@ -226,40 +281,91 @@
 
 #### 2.2.2 报警联动服务（AlarmService.py）
 
+**所属层次**：Service层（业务服务层）
+
 **需求对应**：F-ALM-01 碰撞自动报警、F-ALM-02 一键SOS求助、F-ALM-03 本地声光报警
 
-**模块功能**：
-- 接收碰撞事件和 SOS 按键事件
-- 触发本地报警联动（LED、Audio、LCD）
-- 发布报警触发事件
-- 报警超时后自动取消，发布报警取消事件
+**模块功能**（业务逻辑编排）：
+- 订阅碰撞事件和SOS按键事件
+- 根据业务规则触发报警联动
+- 调用Device层模块（LED、Audio、LCD）实现具体报警
+- 报警超时管理
+- 报警状态维护
 
 **发布事件**：
-- `EVENT_ALARM_TRIGGERED`：报警触发，携带数据 `{alarm_type, timestamp}`
+- `EVENT_ALARM_TRIGGERED`：报警触发，携带数据 `{alarm_type, level, timestamp}`
 - `EVENT_ALARM_CANCELED`：报警取消，携带数据 `{duration, timestamp}`
 
 **订阅事件**：
-- `EVENT_COLLISION_DETECTED`：碰撞事件，触发报警
-- `EVENT_SOS_PRESSED`：SOS 按键事件，触发报警
+- `EVENT_COLLISION_DETECTED`：碰撞事件，触发碰撞报警
+- `EVENT_SOS_TRIGGERED`：SOS按键事件，触发SOS报警
+- `EVENT_BATTERY_LOW`：低电量事件，触发TTS语音提示
+- `EVENT_GPS_LOST`：GPS丢失事件，触发TTS语音提示
+- `EVENT_CONFIG_UPDATE`：配置更新
 
-**业务逻辑**：
-- 报警类型：碰撞报警、SOS 报警
-- 报警持续时间：默认 30 秒
+**业务逻辑说明**：
+
+碰撞报警流程：
+- 接收碰撞事件，提取碰撞等级（Level 1-3）
+- 根据业务规则选择对应报警音频文件
+- 调用Audio驱动播放报警音
+- 调用LED驱动闪烁（频率根据碰撞等级调整）
+- 调用LCD驱动显示报警画面（显示碰撞等级）
+- 发布报警触发事件通知其他模块
+
+SOS报警流程：
+- 接收SOS按键事件
+- 调用Audio驱动播放SOS求救音
+- 调用LED驱动快速闪烁（200ms间隔）
+- 调用LCD驱动显示SOS报警画面
+- 发布报警触发事件
+
+低电量提示流程：
+- 接收低电量事件，获取电量百分比
+- 调用Audio驱动的TTS功能播报电量不足提示
+- 调用LCD驱动更新显示电量状态
+
+报警取消流程：
+- 报警超时后自动取消
+- 调用LED驱动熄灭
+- 调用LCD驱动恢复正常数据显示
+- 发布报警取消事件
+
+**业务规则**：
+- 报警类型：碰撞报警、SOS报警
+- 报警持续时间：默认30秒
+- 碰撞等级映射：
+  - Level 1：轻微碰撞 → 播放alarm_l1.mp3
+  - Level 2：中等碰撞 → 播放alarm_l2.mp3
+  - Level 3：严重碰撞 → 播放alarm_l3.mp3（循环3次）
 - 可配置：是否启用本地声光报警
+
+**依赖关系**：
+- 依赖Audio驱动（调用play_file、play_tts方法）
+- 依赖LED驱动（调用blink、on、off方法）
+- 依赖LCD驱动（调用show_alarm方法）
+
+**分层设计说明**：
+- Service层负责业务逻辑编排和事件订阅
+- 不直接操作硬件，通过调用Device层接口实现具体功能
+- 业务规则（碰撞等级映射、报警流程等）在此层实现
 
 ---
 
 #### 2.2.3 云端通信服务（CloudService.py）
 
+**所属层次**：Service层（业务服务层）
+
 **需求对应**：F-NET-01 骑行数据远程上传、F-NET-02 紧急报警远程推送、F-NET-03 远程参数配置
 
-**模块功能**：
-- 初始化 4G 网络连接
-- 连接 MQTT 服务器（ConnectLab 平台）
+**模块功能**（业务逻辑与数据上传）：
+- 初始化4G网络连接
+- 连接MQTT服务器（ConnectLab平台）
 - 周期性上传传感器数据
 - 紧急报警立即推送（高优先级）
 - 接收云端配置下发
 - 断网时本地缓存数据，网络恢复后补发
+- 更新LCD显示传感器数据
 
 **发布事件**：
 - `EVENT_DATA_UPLOAD_SUCCESS`：数据上传成功
@@ -268,27 +374,41 @@
 - `EVENT_NETWORK_DISCONNECTED`：网络断开
 
 **订阅事件**：
-- `EVENT_TEMP_HUMID_READY`：温湿度数据，准备上传
+- `EVENT_TEMP_HUMID_READY`：温湿度数据，准备上传并更新LCD显示
 - `EVENT_IMU_READY`：加速度数据，准备上传
-- `EVENT_GNSS_READY`：定位数据，准备上传
+- `EVENT_GNSS_READY`：定位数据，准备上传并更新LCD显示
 - `EVENT_COLLISION_DETECTED`：碰撞事件，立即推送报警
-- `EVENT_SOS_PRESSED`：SOS 事件，立即推送报警
+- `EVENT_SOS_TRIGGERED`：SOS事件，立即推送报警
+
+**依赖关系**：
+- 依赖网络模块（quectel.Network）
+- 依赖MQTT客户端（umqtt.robust）
+- 依赖LCD驱动（调用show_normal_data更新显示）
 
 **技术要点**：
 - 网络操作在独立线程执行，避免阻塞主循环
 - 使用队列缓冲待发送数据
 - 本地文件缓存断网期间的数据
+- 订阅传感器数据事件后调用LCD更新显示
+
+**分层设计说明**：
+- Service层负责数据上传业务逻辑和显示更新
+- 订阅传感器数据事件，打包上传并更新LCD显示
+- 不直接操作网络硬件，通过Network模块接口实现
 
 ---
 
-#### 2.2.4 电源管理服务（PowerService.py）(P1)
+#### 2.2.4 电源管理服务（PowerService.py）
+
+**所属层次**：Service层（业务服务层）
 
 **需求对应**：F-ALM-04 低电量提醒
 
-**模块功能**：
-- 周期读取电池电量（ADC 或 AT 指令）
+**模块功能**（业务逻辑与电量监测）：
+- 周期读取电池电量（ADC或AT指令）
 - 电量低于阈值时发布低电量事件
 - 控制系统进入休眠状态
+- 电量状态管理和判断
 
 **发布事件**：
 - `EVENT_BATTERY_LOW`：电量低于警告阈值
@@ -299,9 +419,53 @@
 - `EVENT_CONFIG_UPDATE`：远程配置更新
 
 **业务逻辑**：
-- 电量监测周期：默认 10000ms
+- 电量监测周期：默认10000ms
 - 低电量阈值：20%
 - 严重不足阈值：10%
+- 电量判断逻辑：低于阈值时发布对应事件
+
+**分层设计说明**：
+- Service层负责电量状态判断和业务逻辑
+- 发布电量事件通知其他Service层模块（AlarmService）
+- 不直接操作硬件，通过ADC或AT指令读取电量
+
+---
+
+#### 2.2.5 显示管理服务（DisplayService.py）
+
+**所属层次**：Service层（业务服务层）
+
+**需求对应**：F-SEN-04 环境光照采集（背光调节）
+
+**模块功能**（业务逻辑与显示管理）：
+- 根据环境光照强度自动调节LCD背光
+- 系统休眠时关闭LCD显示
+- 系统唤醒时恢复LCD显示
+- 显示管理策略实现
+
+**发布事件**：无
+
+**订阅事件**：
+- `EVENT_LIGHT_READY`：光照数据就绪，调节背光
+- `EVENT_POWER_STATE_CHANGE`：功耗状态变化，控制LCD开关
+
+**依赖关系**：
+- 依赖Light驱动（订阅光照事件）
+- 依赖LCD驱动（调用set_backlight方法）
+
+**业务逻辑**：
+- 光照强度判断：
+  - 高光照（>4000）：背光100%（强光环境需高亮度）
+  - 中光照（1000-4000）：背光60%（正常环境）
+  - 低光照（<1000）：背光30%（弱光环境省电+护眼）
+- 功耗状态管理：
+  - 休眠状态：关闭LCD背光
+  - 唤醒状态：恢复LCD背光
+
+**分层设计说明**：
+- Service层负责显示策略和背光调节逻辑
+- 订阅光照事件实现自适应背光
+- 不直接操作硬件，通过调用LCD驱动接口实现
 
 ---
 
@@ -318,11 +482,14 @@
 ├── Audio             # 音频播放
 └── LCD               # LCD 显示
 
-服务层（依赖驱动层）
+服务层（依赖驱动层，部分模块间也有依赖）
 ├── CollisionService  # 依赖 IMU
-├── AlarmService      # 依赖 LED、Audio、LCD
-├── CloudService      # 依赖所有传感器驱动
-└── PowerService      # 依赖 ADC 或 AT 指令
+├── PowerService      # 依赖 ADC 或 AT 指令
+├── AlarmService      # 依赖 LED、Audio、LCD、CollisionService、PowerService
+├── CloudService      # 依赖所有传感器驱动、LCD
+└── DisplayService    # 依赖 Light、LCD
+
+注：服务层模块间依赖关系在开发时进一步细化
 ```
 
 ---
@@ -341,9 +508,10 @@
 7. 音频驱动（Audio）
 8. LCD 驱动（LCD）
 9. 碰撞检测服务（CollisionService）
-10. 报警联动服务（AlarmService）
-11. 云端通信服务（CloudService）
-12. 电源管理服务（PowerService）(P1)
+10. 电源管理服务（PowerService）
+11. 报警联动服务（AlarmService）
+12. 云端通信服务（CloudService）
+13. 显示管理服务（DisplayService）
 ```
 
 ---
@@ -399,9 +567,11 @@
 | F-ALM-03 | 本地声光报警 | 在 AlarmService 中实现报警联动（LED闪烁、音频播放、LCD显示） | 报警时 LED 闪烁、播放报警音、LCD 显示 SOS |
 | F-NET-01 | 骑行数据远程上传 | 开发 CloudService，实现数据打包和上传逻辑 | 能将传感器数据打包并准备上传 |
 | F-NET-02 | 紧急报警远程推送 | 在 CloudService 中实现报警数据优先级上传 | 报警事件能优先上传 |
-| F-SEN-05 | 心率采集 (P1) | 开发 HeartRate.py 驱动（如硬件就绪） | 能读取心率数据并发布事件 |
+| F-ALM-04 | 低电量提醒 | 开发 PowerService，实现电量监测和提醒 | 电量低于阈值能发布事件 |
+| F-SEN-04 | 环境光照应用 | 开发 DisplayService，实现LCD背光自动调节 | 光照变化时自动调节背光 |
 
 **说明**：
+- F-SEN-05 心率采集因硬件约束暂不实现，待外接模块确定后再添加（架构支持扩展）
 - 每开发一个业务模块，立即在板子上测试
 - 验证事件订阅/发布流程正确
 - 使用 Service_Template.py 快速创建业务模块
@@ -592,6 +762,6 @@ M1: 起步验证 ──→ M2: 本地闭环 ──→ M3: 云端打通 ──→
 
 ---
 
-**文档版本**：v3.0  
-**更新日期**：2026-05-05  
+**文档版本**：v4.0  
+**更新日期**：2026-05-08  
 **维护团队**：锦依卫队
