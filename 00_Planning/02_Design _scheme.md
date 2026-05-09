@@ -34,7 +34,7 @@
 - 发布温湿度数据就绪事件
 
 **发布事件**：
-- `EVENT_TEMP_HUMID_READY`：温湿度数据就绪，携带数据 `{temp, humid, valid, timestamp}`
+- `EVENT_TEMP_HUMID_READY`：温湿度数据就绪，携带数据 `{temp, humid, valid}`
 
 **订阅事件**：
 - `EVENT_CONFIG_UPDATE`：远程配置更新（如修改采样间隔）
@@ -62,7 +62,7 @@
 **订阅事件**：
 - `EVENT_CONFIG_UPDATE`：远程配置更新
 
-**硬件说明**：
+​	**硬件说明**：
 - 传感器：LIS2DH12TR（I2C 地址 0x19）
 - 接口：I2C1 总线（S502 开关拨至 ARDU 侧）
 - 参考示例：`examples/imu.py`
@@ -74,6 +74,7 @@
 **需求对应**：F-SEN-03 位置与速度采集
 
 **模块功能**：
+
 - 初始化 GNSS 模块
 - 周期读取定位数据（经纬度、速度、定位状态）
 - 发布定位数据就绪事件
@@ -239,7 +240,7 @@
 - `show_normal_data(temp, humid, lat, lon)`：显示正常骑行数据
 - `show_alarm(alarm_type)`：显示报警画面（collision/sos）
 - `clear()`：清屏
-- `set_backlight(level)`：设置背光亮度
+- `set_backlight(level)`：设置背光亮度（如果支持PWM）
 
 **硬件说明**：
 - 硬件：LCD扩展板（1.8寸TFT）
