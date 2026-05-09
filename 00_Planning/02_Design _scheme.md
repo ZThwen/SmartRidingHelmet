@@ -166,9 +166,10 @@
 
 **硬件说明**：
 - 接口：Arduino D3 引脚（外接LED）
-- 参考示例：`examples/pin.py`
+- 参考示例：`examples/pin.py, PWM.py`
 
 **分层设计说明**：
+
 - Device层只提供基础硬件控制，不包含业务逻辑
 - 不订阅业务事件（ALARM_TRIGGERED等），由Service层调用
 - Service层（AlarmService）订阅业务事件后调用LED公共接口
