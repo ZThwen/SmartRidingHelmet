@@ -246,7 +246,7 @@
 **硬件说明**：
 - 硬件：LCD扩展板（1.8寸TFT）
 - 接口：SPI总线
-- 参考示例：`examples/lcd.py`
+- 参考示例：`examples/lcd.py，PWM.py`
 
 **分层设计说明**：
 - Device层只提供基础显示控制，不包含业务逻辑
