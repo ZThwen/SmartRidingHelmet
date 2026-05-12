@@ -126,12 +126,16 @@
 - 按键按下时发布SOS事件
 
 **发布事件**：
+<<<<<<< Updated upstream
 - `EVENT_SOS_TRIGGERED`：SOS按键按下，携带数据 `{timestamp}`
+=======
+- `EVENT_SOS_PRESSED`：SOS 按键按下，携带数据 
+>>>>>>> Stashed changes
 
 **订阅事件**：无
 
 **硬件说明**：
-- 接口：Arduino D2 引脚（外部上拉，按下接地）
+- 接口ID：SW
 - 参考示例：`examples/pin.py`
 
 **分层设计说明**：
