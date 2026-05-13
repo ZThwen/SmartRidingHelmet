@@ -7,9 +7,9 @@ import sys
 
 sys.path.insert(0, "/")
 
-from config import EVENT_IMU_READY, EVENT_CONFIG_UPDATE
-from Event_Bus import EventBus
-from imu import IMUDriver
+from core.config import EVENT_IMU_READY, EVENT_CONFIG_UPDATE
+from core.Event_Bus import EventBus
+from Drivers.sensor.imu import IMUDriver
 
 
 def test_event_flow():

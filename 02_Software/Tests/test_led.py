@@ -7,9 +7,9 @@ import sys
 
 sys.path.insert(0, "/")
 
-from config import EVENT_LED_ERROR, EVENT_CONFIG_UPDATE
+from core.config import EVENT_LED_ERROR, EVENT_CONFIG_UPDATE
 from core.Event_Bus import EventBus
-from LED import LEDDriver
+from Drivers.actuator.LED import LEDDriver
 
 
 def test_led():

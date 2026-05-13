@@ -10,7 +10,7 @@ import time
 sys.path.append("..")
 
 from core.Event_Bus import EventBus
-from core.config import (EVENT_GNSS_READY, EVENT_GPS_LOST, EVENT_SENSOR_ERROR)
+from core.config import (EVENT_GNSS_READY, EVENT_GPS_LOST, EVENT_SENSOR_ERROR,EVENT_CONFIG_UPDATE)
 from Drivers.sensor.GNSS import GNSSDriver, GNSS_STATE_IDLE, GNSS_STATE_SEARCH, GNSS_STATE_FIXED
 
 # ==================== 回调日志记录 ====================

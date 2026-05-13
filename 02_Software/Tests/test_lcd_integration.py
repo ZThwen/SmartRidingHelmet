@@ -7,11 +7,11 @@ import time
 
 sys.path.append("..")
 
-from Event_Bus import EventBus
-from config import (
+from core.Event_Bus import EventBus
+from core.config import (
     EVENT_SYSTEM_READY, EVENT_LCD_ERROR, EVENT_CONFIG_UPDATE
 )
-from LCD import LCDDriver
+from Drivers.actuator.LCD import LCDDriver
 
 try:
     from images import QQ_ICON_40x40

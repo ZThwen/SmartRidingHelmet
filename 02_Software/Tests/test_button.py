@@ -5,8 +5,8 @@ note 用于验证 Button.py 的功能是否正常
 import sys
 
 from core.Event_Bus import EventBus
-from config import EVENT_BUTTON_PRESSED, EVENT_BUTTON_ERROR
-from Button import Button
+from core.config import EVENT_BUTTON_PRESSED, EVENT_BUTTON_ERROR
+from Drivers.interface.Button import Button
 
 event_bus = EventBus()
 event_bus.debug = True

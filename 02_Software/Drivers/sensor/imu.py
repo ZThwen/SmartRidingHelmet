@@ -7,8 +7,8 @@ import machine
 import time
 import math
 
-from Base_Module import BaseModule
-from config import EVENT_IMU_READY, EVENT_SENSOR_ERROR, EVENT_CONFIG_UPDATE, IMU_SAMPLE_MS, POWER_STATE_ACTIVE
+from core.Base_Module import BaseModule
+from core.config import EVENT_IMU_READY, EVENT_SENSOR_ERROR, EVENT_CONFIG_UPDATE, IMU_SAMPLE_MS, POWER_STATE_ACTIVE
 from lis2dh12 import LIS2DH12
 
 

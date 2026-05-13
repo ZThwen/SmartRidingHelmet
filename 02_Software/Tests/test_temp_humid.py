@@ -2,12 +2,11 @@
 brief 温湿度驱动测试脚本
 note 用于验证 Temp_Humid.py 的功能是否正常
 """
-import sys
-sys.path.append("..")
 
-from Event_Bus import EventBus
-from config import EVENT_TEMP_HUMID_READY, EVENT_SENSOR_ERROR
-from Temp_Humid import TempHumidDriver
+
+from core.Event_Bus import EventBus
+from core.config import EVENT_TEMP_HUMID_READY, EVENT_SENSOR_ERROR
+from Drivers.sensor.Temp_Humid import TempHumidDriver
 
 # 创建事件总线
 event_bus = EventBus()

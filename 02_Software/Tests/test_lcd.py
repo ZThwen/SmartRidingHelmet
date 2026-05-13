@@ -7,9 +7,9 @@ import sys
 
 sys.path.insert(0, "/")
 
-from config import EVENT_LCD_ERROR, EVENT_CONFIG_UPDATE
-from Event_Bus import EventBus
-from LCD import LCDDriver
+from core.config import EVENT_LCD_ERROR, EVENT_CONFIG_UPDATE
+from core.Event_Bus import EventBus
+from Drivers.actuator.LCD import LCDDriver
 
 try:
     from images import QQ_ICON_40x40

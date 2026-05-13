@@ -7,9 +7,9 @@ import time
 
 sys.path.append("..")
 
-from Event_Bus import EventBus
-from config import EVENT_SYSTEM_READY, EVENT_SENSOR_ERROR, EVENT_CONFIG_UPDATE
-from Light import LightSensorDiver
+from core.Event_Bus import EventBus
+from core.config import EVENT_SYSTEM_READY, EVENT_SENSOR_ERROR, EVENT_CONFIG_UPDATE
+from Drivers.sensor.Light import LightSensorDiver
 
 try:
     from config import EVENT_LIGHT_READY

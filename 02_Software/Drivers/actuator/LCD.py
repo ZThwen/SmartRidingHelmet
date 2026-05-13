@@ -7,8 +7,8 @@ note 严格遵循四元组架构规范，适配移远模组SPI1总线
 import machine
 import time
 
-from Base_Module import BaseModule
-from config import (
+from core.Base_Module import BaseModule
+from core.config import (
     EVENT_LCD_ERROR, EVENT_CONFIG_UPDATE,
     LCD_BACKLIGHT_HIGH, LCD_SAMPLE_MS, POWER_STATE_ACTIVE
 )

@@ -9,6 +9,9 @@ EVENT_SYSTEM_READY          = "SYSTEM_READY"          # 系统就绪事件
 EVENT_CONFIG_UPDATE         = "CONFIG_UPDATE"         # 配置更新事件
 EVENT_SENSOR_ERROR          = "SENSOR_ERROR"          # 传感器错误事件
 EVENT_LCD_ERROR             = "LCD_ERROR"             # LCD错误事件
+EVENT_BUTTON_ERROR          = "BUTTON_ERROR"          # 按键错误事件
+EVENT_BUTTON_PRESSED        = "BUTTON_PRESSED"        # 按键按下事件
+EVENT_LED_ERROR             = "LED_ERROR"             # LED错误事件
 
 # 传感器数据就绪事件
 EVENT_TEMP_HUMID_READY      = "TEMP_HUMID_READY"      # 温湿度数据就绪
@@ -63,6 +66,7 @@ AUDIO_ALARM_FILE_L2       = "SD:alarm_l2.mp3"     # 碰撞等级2报警音
 AUDIO_ALARM_FILE_L3       = "SD:alarm_l3.mp3"     # 碰撞等级3报警音
 AUDIO_SOS_FILE            = "SD:sos.mp3"          # SOS求救音
 AUDIO_BUTTON_FILE         = "SD:button.wav"       # 按键反馈音
+AUDIO_TEST_FILE           = "SD:Test.mp3"         # 测试音频
 
 AUDIO_TTS_SPEED           = 85                     # TTS语速(0-100)
 AUDIO_TTS_VOLUME          = 50                     # TTS音量(0-100)
@@ -95,3 +99,10 @@ LCD_BACKLIGHT_MEDIUM      = 60     # 中背光亮度(%)
 LCD_BACKLIGHT_LOW         = 30     # 低背光亮度(%)
 LIGHT_THRESHOLD_HIGH      = 4000   # 高光照阈值(ADC值)
 LIGHT_THRESHOLD_LOW       = 1000   # 低光照阈值(ADC值)
+
+# ================= LED配置 =================
+LED_PIN_NAME              = "LED_BLUE"
+LED_BLINK_INTERVAL_MS     = 500
+LED_BLINK_MIN_MS          = 100
+LED_BLINK_MAX_MS          = 5000
+TIMER_ID_LED              = 1

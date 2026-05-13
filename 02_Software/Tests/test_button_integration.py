@@ -8,9 +8,9 @@ import time
 sys.path.append("..")
 
 from core.Event_Bus import EventBus
-from config import (EVENT_SYSTEM_READY, EVENT_BUTTON_PRESSED, EVENT_BUTTON_ERROR,
+from core.config import (EVENT_SYSTEM_READY, EVENT_BUTTON_PRESSED, EVENT_BUTTON_ERROR,
                     EVENT_CONFIG_UPDATE, POWER_STATE_ACTIVE)
-from Button import Button
+from Drivers.interface.Button import Button
 
 
 class ButtonIntegrationTest:

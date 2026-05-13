@@ -5,9 +5,9 @@ note 用于验证 Light.py 的功能是否正常
 import sys
 sys.path.append("..")
 
-from Event_Bus import EventBus
-from config import EVENT_SENSOR_ERROR
-from Light import LightSensorDiver
+from core.Event_Bus import EventBus
+from core.config import EVENT_SENSOR_ERROR
+from Drivers.sensor.Light import LightSensorDiver
 
 try:
     from config import EVENT_LIGHT_READY

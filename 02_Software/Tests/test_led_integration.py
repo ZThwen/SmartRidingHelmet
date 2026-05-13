@@ -8,12 +8,12 @@ import time
 sys.path.append("..")
 
 from core.Event_Bus import EventBus
-from config import (
+from core.config import (
     EVENT_LED_ERROR, EVENT_CONFIG_UPDATE,
     EVENT_ALARM_TRIGGERED, EVENT_ALARM_CANCELED,
     POWER_STATE_ACTIVE, POWER_STATE_SUSPENDED
 )
-from LED import LEDDriver
+from Drivers.actuator.LED import LEDDriver
 
 
 class IntegrationTest:

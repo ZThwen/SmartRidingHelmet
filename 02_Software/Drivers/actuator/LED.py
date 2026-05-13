@@ -11,7 +11,7 @@ from machine import Pin, Timer
 import time
 
 from core.Base_Module import BaseModule
-from config import (
+from core.config import (
     EVENT_LED_ERROR, EVENT_CONFIG_UPDATE,
     LED_PIN_NAME, LED_BLINK_INTERVAL_MS,
     LED_BLINK_MIN_MS, LED_BLINK_MAX_MS,

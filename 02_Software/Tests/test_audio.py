@@ -11,7 +11,7 @@ sys.path.append("..")
 from core.Event_Bus import EventBus
 from core.config import (EVENT_AUDIO_PLAYBACK_START, EVENT_AUDIO_PLAYBACK_END,
                     EVENT_AUDIO_ERROR, AUDIO_TEST_FILE)
-from Audio import AudioDriver
+from Drivers.actuator.Audio import AudioDriver
 
 # ==================== 回调日志记录 ====================
 event_log = []

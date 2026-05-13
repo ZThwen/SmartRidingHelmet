@@ -7,9 +7,9 @@ import time
 
 sys.path.append("..")
 
-from Event_Bus import EventBus
-from config import (EVENT_SYSTEM_READY,EVENT_TEMP_HUMID_READY,EVENT_SENSOR_ERROR,EVENT_CONFIG_UPDATE)
-from Temp_Humid import TempHumidDriver
+from core.Event_Bus import EventBus
+from core.config import (EVENT_SYSTEM_READY,EVENT_TEMP_HUMID_READY,EVENT_SENSOR_ERROR,EVENT_CONFIG_UPDATE)
+from Drivers.sensor.Temp_Humid import TempHumidDriver
 
 class IntegrationTest:
     def __init__(self):

@@ -12,7 +12,7 @@ from core.Event_Bus import EventBus
 from core.config import (EVENT_SYSTEM_READY, EVENT_AUDIO_PLAYBACK_START,
                     EVENT_AUDIO_PLAYBACK_END, EVENT_AUDIO_ERROR,
                     EVENT_CONFIG_UPDATE, AUDIO_TEST_FILE)
-from Audio import AudioDriver
+from Drivers.actuator.Audio import AudioDriver
 
 
 class IntegrationTest:

@@ -3,7 +3,7 @@ from machine import Pin
 import time
 
 from core.Base_Module import BaseModule
-from config import EVENT_BUTTON_PRESSED, EVENT_BUTTON_ERROR, POWER_STATE_ACTIVE, DEBOUNCE_MS
+from core.config import EVENT_BUTTON_PRESSED, EVENT_BUTTON_ERROR, POWER_STATE_ACTIVE, DEBOUNCE_MS
 
 
 class Button(BaseModule):
