@@ -380,6 +380,7 @@ SmartRidingHelmet-TeamX/
 │   │   ├── actuator/
 │   │   │   ├── buzzer.py        # 蜂鸣器
 │   │   │   └── led.py           # LED指示灯
+│   │   │   └── LCD.py           # LCD屏幕
 │   │   ├── interface/
 │   │   │   └── button.py        # SOS按键
 │   │   └── network/

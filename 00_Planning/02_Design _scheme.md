@@ -126,11 +126,7 @@
 - 按键按下时发布SOS事件
 
 **发布事件**：
-<<<<<<< Updated upstream
-- `EVENT_SOS_TRIGGERED`：SOS按键按下，携带数据 `{timestamp}`
-=======
-- `EVENT_SOS_PRESSED`：SOS 按键按下，携带数据 
->>>>>>> Stashed changes
+- `EVENT_SOS_PRESSED`：SOS 按键按下 
 
 **订阅事件**：无
 
@@ -161,6 +157,7 @@
 
 **订阅事件**：
 - `EVENT_CONFIG_UPDATE`：配置更新
+- `EVENT_LCD_ERROR`：LCD错误事件，携带数据 `{"name", "err_count",  "timestamp", "is_init"}`
 
 **公共接口**（供Service层调用）：
 - `on()`：LED常亮

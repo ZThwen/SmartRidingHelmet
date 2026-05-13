@@ -8,6 +8,7 @@ note 所有模块通信必须引用此处常量，禁止硬编码事件名或阈
 EVENT_SYSTEM_READY          = "SYSTEM_READY"          # 系统就绪事件
 EVENT_CONFIG_UPDATE         = "CONFIG_UPDATE"         # 配置更新事件
 EVENT_SENSOR_ERROR          = "SENSOR_ERROR"          # 传感器错误事件
+EVENT_LCD_ERROR             = "LCD_ERROR"             # LCD错误事件
 
 # 传感器数据就绪事件
 EVENT_TEMP_HUMID_READY      = "TEMP_HUMID_READY"      # 温湿度数据就绪
@@ -48,7 +49,10 @@ TEMP_HUMID_SAMPLE_MS   = 2000    # 温湿度传感器采样间隔 (ms)
 IMU_SAMPLE_MS          = 100     # IMU传感器采样间隔 (ms) - 碰撞检测需要高频
 GNSS_SAMPLE_MS         = 2000    # GNSS采样间隔 (ms)
 LIGHT_SAMPLE_MS        = 2000    # 光照传感器采样间隔 (ms)
+LCD_SAMPLE_MS          = 2000    # LCD显示更新间隔 (ms)
 DEFAULT_SAMPLE_MS      = 2000    # 传感器默认采样间隔 (ms)
+
+BUTTON_DEBOUNCE_MS     = 50      # 按键防抖动时间窗口 (ms)
 
 DEFAULT_RETRY_COUNT    = 3       # 硬件通信最大重试次数
 DEFAULT_TIMEOUT_MS     = 500     # 单次硬件操作超时阈值 (ms)
