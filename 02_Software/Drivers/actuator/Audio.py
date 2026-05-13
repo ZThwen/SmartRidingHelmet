@@ -30,26 +30,29 @@ class AudioDriver(BaseModule):
         self.event_bus = event_bus
         self.name = "audio"
 
+        # ===================== 四元组：静态配置 =====================
         self.cfg = {
-            "speaker_volume": AUDIO_SPEAKER_VOLUME,
-            "tts_speed": AUDIO_TTS_SPEED,
-            "tts_volume": AUDIO_TTS_VOLUME,
-            "max_retry": 3
+            "speaker_volume": AUDIO_SPEAKER_VOLUME,  # 扬声器音量 0-5
+            "tts_speed": AUDIO_TTS_SPEED,            # TTS 语速 0-100
+            "tts_volume": AUDIO_TTS_VOLUME,          # TTS 音量 0-100
+            "max_retry": 3,                           # 连续失败最大重试次数
         }
 
+        # ===================== 四元组：运行时上下文 =====================
         self.ctx = {
-            "is_init": False,
-            "is_playing": False,
-            "is_tts_playing": False,
-            "current_file": None,
-            "err_count": 0,
-            "power_state": POWER_STATE_ACTIVE
+            "is_init": False,          # 硬件初始化完成标志
+            "is_playing": False,       # 音频文件播放中标志
+            "is_tts_playing": False,   # TTS 播报中标志
+            "current_file": None,      # 当前播放文件名
+            "err_count": 0,            # 连续操作错误计数
+            "power_state": POWER_STATE_ACTIVE,  # 功耗状态
         }
 
+        # ===================== 四元组：当前数据 =====================
         self._data = {
-            "playback_status": "idle",
-            "volume": AUDIO_SPEAKER_VOLUME,
-            "tts_speed": AUDIO_TTS_SPEED
+            "playback_status": "idle",           # 播放状态: idle/playing/stopped
+            "volume": AUDIO_SPEAKER_VOLUME,      # 当前音量
+            "tts_speed": AUDIO_TTS_SPEED,        # 当前 TTS 语速
         }
 
         self.audio = None
