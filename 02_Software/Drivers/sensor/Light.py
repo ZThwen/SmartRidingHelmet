@@ -1,21 +1,16 @@
-import machine
-import time
+"""
+brief 光敏传感器驱动模块 (GL5528)
+note 严格遵循四元组架构规范，使用ADC采集光敏电阻
+      硬件：光敏电阻 GL5528（R316），接口引脚 PC5
+"""
 import time
 from machine import ADC, Pin
 
-from Base_Module import BaseModule
-from config import EVENT_LIGHT_READY, EVENT_SENSOR_ERROR, EVENT_CONFIG_UPDATE, POWER_STATE_ACTIVE, LIGHT_SAMPLE_MS
+from core.Base_Module import BaseModule
+from core.config import EVENT_LIGHT_READY, EVENT_SENSOR_ERROR, EVENT_CONFIG_UPDATE, POWER_STATE_ACTIVE, LIGHT_SAMPLE_MS
 
 
 class LightSensorDiver(BaseModule):
-    """
-    模块说明：[一句话描述模块功能]
-    
-    例如：
-    - 温湿度传感器驱动（AHT20）
-    - 碰撞检测服务
-    - 报警联动服务
-    """
     
     def __init__(self, event_bus=None):
         """

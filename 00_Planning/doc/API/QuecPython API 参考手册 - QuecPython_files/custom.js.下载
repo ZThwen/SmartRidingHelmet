@@ -1,0 +1,331 @@
+// API BSP接口表格分型号方案
+
+
+// BSP型号数据 （ 数据以API表格数量为准）
+var BSPData = [];    // 下拉框型号列表
+// API 表格数据
+var tableData_api = [];   // 表格数据
+var headerData_api = [];  // 表头数据
+// 常量 表格数据
+var tableData_cons = [];   // 表格数据
+var headerData_cons = [];  // 表头数据
+// 正文内容
+var content_list = [];
+var content_global_list = [];
+
+
+
+function main() {
+
+    // 判断是否有BSP相关的API表格
+    var table_api = document.querySelector(".table-QuecPython")
+
+    if (table_api) {
+        console.log("有api相关的表格");
+        getTableData("api", table_api)
+    } else {
+        console.log("没有api相关的表格");
+    }
+    
+
+    // 判断是否有BSP相关的API常量表格
+    var table_cons = document.querySelector(".table-cons-QuecPython")
+
+    if (table_cons) {
+        console.log("有cons相关的表格");
+        getTableData("cons", table_cons)
+    } else {
+        console.log("没有cons相关的表格");
+    }
+
+    content_list = document.querySelectorAll(".content-QuecPython")
+    console.log(content_list)
+    if (content_list) {
+        content_list.forEach(function(content) {
+            content_global = content.cloneNode(true)
+            content_global_list.push(content_global)
+        })
+    }
+    console.log(content_global_list)
+
+    BSPData.sort();
+    console.log('BSP数据:', BSPData);
+    
+
+
+    // 渲染分页栏
+    if (BSPData.length > 0) {
+        renderPagination(BSPData);
+    }
+
+}
+
+
+
+
+// 获取表格数据
+function getTableData(type, tables) {
+    var elements = tables.querySelectorAll('table');
+    elements.forEach(function(element) {
+        var BSPName = element.className
+        // 生成BSP型号数据
+        if (type == "api") {
+            BSPData.push(BSPName)
+        }
+        
+        if (type == "api") {
+            // 表头数据
+            if (headerData_api.length == 0) {
+                headerData_api.push("适用平台")
+                var thead = element.querySelector('thead');
+                if (thead) {
+                    var rows = thead.querySelectorAll('tr');
+                    if (rows) {
+                        var headers = rows[0].querySelectorAll('th');
+                        headers.forEach(function(header) {
+                            headerData_api.push(header.textContent.trim());
+                        });
+                    }
+                }
+            }
+
+            // 表格数据
+            var tbody = element.querySelector('tbody');
+            if (tbody) {
+                var rows = tbody.querySelectorAll('tr');
+                if (rows) {
+                    rows.forEach(function(row) {
+                        var cells = row.querySelectorAll('td');
+                        var rowData = {};
+                        rowData[headerData_api[0]] = BSPName
+                        cells.forEach(function(cell, index) {
+                            rowData[headerData_api[index + 1]] = cell.textContent.trim();
+                        });
+                        tableData_api.push(rowData);
+                    });
+                }
+            }
+        }
+        
+        if (type == "cons") {
+             // 表头数据
+            if (headerData_cons.length == 0) {
+                headerData_cons.push("适用平台")
+                var thead = element.querySelector('thead');
+                if (thead) {
+                    var rows = thead.querySelectorAll('tr');
+                    if (rows) {
+                        var headers = rows[0].querySelectorAll('th');
+                        headers.forEach(function(header) {
+                            headerData_cons.push(header.textContent.trim());
+                        });
+                    }
+                }
+            }
+
+            // 表格数据
+            var tbody = element.querySelector('tbody');
+            if (tbody) {
+                var rows = tbody.querySelectorAll('tr');
+                if (rows) {
+                    rows.forEach(function(row) {
+                        var cells = row.querySelectorAll('td');
+                        var rowData = {};
+                        rowData[headerData_cons[0]] = BSPName
+                        cells.forEach(function(cell, index) {
+                            rowData[headerData_cons[index + 1]] = cell.textContent.trim();
+                        });
+                        tableData_cons.push(rowData);
+                    });
+                }
+            }
+        }
+       
+    });
+
+    // console.log('表格数据:', tableData_api, tableData_cons);
+
+}
+
+
+// 渲染正文
+function renderContent(page) {
+
+    // 判断是否有BSP相关的正文属性内容
+    
+    console.log(content_global_list)
+    content_global_list.forEach(function(content_global, index) {
+        if (content_global) {
+            var divs = content_global.querySelectorAll("div");
+            console.log(divs)
+    
+            for (const div of divs) {
+                match_flag = false
+                if (div.className.includes(page)) {
+                    console.log("有BSP相关的正文属性内容");
+                    content_list[index].innerHTML = div.innerHTML
+                    match_flag = true
+                    break;
+                    
+                }else{
+                    // div.style.display = "none"
+                }
+            }
+            if (match_flag == false) {
+                content_list[index].innerHTML = ""
+                console.log("ces正文属性内容")
+            }
+        }
+        
+    })
+    
+
+
+}
+
+// 渲染表格
+function renderTable(page) {
+    // 渲染API表格
+    const table_div = document.querySelector(".table-QuecPython")
+    if ( table_div == null) {
+        // 如果没有api表格 默认视为也没有常量表格
+        return;
+    }
+    table_div.innerHTML = ""; // 清空表格内容
+    var pageData = []
+    // 筛选表格中需要渲染的数据
+    tableData_api.forEach(function(item) {
+        if (item[headerData_api[0]] == page) {
+            pageData.push(item)
+        }
+    });
+    // console.log(pageData)
+    table_div.innerHTML = `
+    <table class="table table-bordered table-striped table-hover table-QuecPython">
+        <thead>
+            <tr>
+            </tr>
+        </thead>
+        <tbody>
+        </tbody>
+    </table>
+    `;
+    
+    const thead = table_div.querySelector("thead tr");
+    headerData_api.forEach(function(header) {
+        const th = document.createElement("th");
+        th.textContent = header;
+        thead.appendChild(th);
+    });
+    const tbody = table_div.querySelector("tbody");
+    pageData.forEach(item => {
+        const tr = document.createElement("tr");
+        for (const key in item) {
+            if (item.hasOwnProperty(key)) {
+                const td = document.createElement("td");
+                td.textContent = item[key];
+                tr.appendChild(td);
+            }
+        }
+        // console.log(tr)
+        tbody.innerHTML += tr.outerHTML;
+        
+    });
+
+    // 渲染 常量表格
+    const table_cons = document.querySelector(".table-cons-QuecPython")
+    if ( table_cons == null) {
+        // 如果没有常量表格
+        return;
+    }
+    table_cons.innerHTML = ""; // 清空表格内容
+    var pageData = []
+    // 筛选表格中需要渲染的数据
+    tableData_cons.forEach(function(item) {
+        if (item[headerData_cons[0]] == page) {
+            pageData.push(item)
+        }
+    });
+    // console.log(pageData)
+    table_cons.innerHTML = `
+    <table class="table table-bordered table-striped table-hover table-cons-QuecPython">
+        <thead>
+            <tr>
+            </tr>
+        </thead>
+        <tbody>
+        </tbody>
+    </table>
+    `;
+    
+    const thead_cons = table_cons.querySelector("thead tr");
+    headerData_cons.forEach(function(header) {
+        const th = document.createElement("th");
+        th.textContent = header;
+        thead_cons.appendChild(th);
+    });
+
+    const tbody_cons = table_cons.querySelector("tbody");
+    pageData.forEach(item => {
+        const tr = document.createElement("tr");
+        for (const key in item) {
+            if (item.hasOwnProperty(key)) {
+                const td = document.createElement("td");
+                td.textContent = item[key];
+                tr.appendChild(td);
+            }
+        }
+        // console.log(tr)
+        tbody_cons.innerHTML += tr.outerHTML;
+    });
+
+
+}
+
+
+
+// 渲染型号选择下拉框
+function renderPagination(data) {
+
+    const pageSelect = document.querySelector("#pageSelect");
+    pageSelect.innerHTML = ""; // 清空下拉框内容
+
+
+    data.forEach(function(item) {
+        const option = document.createElement("option");
+        option.value = item;
+        option.textContent = item;
+        pageSelect.appendChild(option);
+    });
+
+
+    // 监听下拉框变化
+    pageSelect.addEventListener("change", (event) => {
+        currentPage = event.target.value;
+        renderTable(currentPage);
+        renderContent(currentPage);
+    });
+}
+
+
+
+// 页面刷新进入的响应函数  (初始化时主动刷新)
+$(document).ready(function(){
+    main();
+
+
+    if (BSPData.length > 0) {
+        // 默认显示html中排序为最靠前的型号
+        renderTable(BSPData[0])
+        renderContent(BSPData[0])
+    }
+   
+
+});
+
+
+
+
+// TODO CSS样式调整
+
+// 修改light.css

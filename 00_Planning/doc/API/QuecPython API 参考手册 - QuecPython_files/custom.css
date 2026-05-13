@@ -1,0 +1,121 @@
+
+
+/* 版本选择器 */
+#toc span {
+    font-size: 18px; /* 你可以根据需要调整字体大小 */
+    font-weight: bolder; /* 加粗 */
+}
+
+#toc {
+    margin-top: 20px;
+}
+
+.pagination {
+    display: flex;
+    align-items: center;
+}
+
+#pageSelect {
+    margin-bottom: 18px; /* 可选：增加底部间距 */
+    padding: 4px 10px;
+    margin-left: 4px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 16px;
+    background-color: #fff;
+    appearance: auto; /* 去掉默认的下拉箭头 */
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 4 5"><path fill="#333" d="M2 0L0 2h4z"/></svg>');
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    background-size: 10px 6px;
+}
+
+#pageSelect:focus {
+    border-color: #007bff;
+    outline: none;
+    box-shadow: 0 0 5px rgba(0, 123, 255, 0.5);
+}
+
+/* 按钮相对于父容器定位 */
+.search_ctrl_btn {
+  position: absolute;
+  top: 50px;    /* 距离父容器顶部 50px */
+  right: 10px;  /* 距离父容器右侧 10px */
+}
+
+/* 版本选择器 */
+
+/* 搜索按钮基础样式 */
+#search_ctrl_btn {
+    position: fixed;
+    top: 50%;
+    transform: translateY(-50%);
+    right: 2em;
+    display: flex;
+    flex-direction: column;
+    z-index: 999;
+    user-select: none;
+    flex-wrap: nowrap;
+    align-content: flex-start;
+    justify-content: flex-end;
+    align-items: flex-start;
+}
+
+#search_ctrl_btn > div {
+    border-radius: 0.2em;
+    min-width: 5em;
+    min-height: 2.5em;
+    background-color: #fae94e;
+    margin: 0.2em;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    padding: 0.2em;
+    cursor: pointer;
+    box-shadow: 0 0 12px 0 rgb(0, 0, 0, 0.06);
+    transition: 0.4s;
+    color: #8b7000;
+}
+#search_ctrl_btn > div:hover {
+    box-shadow: 0 0 12px 0 rgb(0, 0, 0, 0.2);
+}
+#search_ctrl_btn > .previous .icon {
+    background-image: url("/doc/quecpython/static/image/search/up.svg");
+    -ms-transform: rotate(270deg);
+    -moz-transform: rotate(270deg);
+    -webkit-transform: rotate(270deg);
+    transform: rotate(270deg);
+    background-size: 2em;
+    background-repeat: no-repeat;
+    background-position: center;
+    min-height: 1.5em;
+    min-width: 1.5em;
+    height: 1.5em;
+    width: 1.5em;
+}
+#search_ctrl_btn > .next .icon {
+    background-image: url("/doc/quecpython/static/image/search/up.svg");
+    -ms-transform: rotate(90deg);
+    -moz-transform: rotate(90deg);
+    -webkit-transform: rotate(90deg);
+    transform: rotate(90deg);
+    background-size: 2em;
+    background-repeat: no-repeat;
+    background-position: center;
+    min-height: 1.5em;
+    min-width: 1.5em;
+    height: 1.5em;
+    width: 1.5em;
+}
+
+#remove_search > .icon {
+    background-image: url("/doc/quecpython/static/image/search/cancel.svg");
+    background-size: 2em;
+    background-repeat: no-repeat;
+    background-position: center;
+    min-height: 1.5em;
+    min-width: 1.5em;
+    height: 1.5em;
+    width: 1.5em;
+}
