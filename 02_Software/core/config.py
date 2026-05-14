@@ -21,7 +21,7 @@ EVENT_LIGHT_READY           = "LIGHT_READY"           # 光照数据就绪
 
 # 报警相关事件
 EVENT_COLLISION_DETECTED    = "COLLISION_DETECTED"    # 碰撞检测到
-EVENT_SOS_TRIGGERED         = "SOS_TRIGGERED"         # SOS按键触发
+EVENT_BUTTON_PRESSED        = "BUTTON_PRESSED"        # 按键按下事件
 EVENT_ALARM_TRIGGERED       = "ALARM_TRIGGERED"       # 报警触发（通用）
 EVENT_ALARM_CANCELED        = "ALARM_CANCELED"        # 报警取消
 
