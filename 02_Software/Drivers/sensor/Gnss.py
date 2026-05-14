@@ -52,11 +52,10 @@ class GNSSDriver(BaseModule):
         self._data = {
             "latitude": 0.0,          # 纬度
             "longitude": 0.0,         # 经度
+            "altitude": 0.0,          # 海拔 (m)
+            "speed_kmh": 0.0,         # 速度 (km/h)
+            "signal_quality": "none", # 信号质量: good/fair/poor/none
             "valid": False,           # 数据有效性标志
-            # ↓ 以下字段待实板验证是否存在于 get_location() 返回值中 ↓
-            "altitude": 0.0,          # [待验证] 海拔 (m)
-            "speed": 0.0,             # [待验证] 速度 (km/h)
-            "course": 0.0,            # [待验证] 航向角 (°)
         }
 
         self.gnss = None              # GNSS 实例句柄
@@ -100,13 +99,23 @@ class GNSSDriver(BaseModule):
             if loc:  # 有定位
                 self._data["latitude"] = loc["latitude"]
                 self._data["longitude"] = loc["longitude"]
+                self._data["altitude"] = loc["altitude"]
+                self._data["speed_kmh"] = loc["speed_kmh"]
                 self._data["valid"] = True
-                # ↓ 以下字段待实板验证 ↓
-                self._data["altitude"] = loc.get("altitude", 0.0)  # [待验证]
-                self._data["speed"] = loc.get("speed", 0.0)        # [待验证]
-                self._data["course"] = loc.get("course", 0.0)      # [待验证]
                 self.ctx["err_count"] = 0
                 self.ctx["no_fix_count"] = 0
+
+                # 信号质量判定
+                satellites = loc.get("satellites", 0)
+                hdop = loc.get("hdop", 99.0)
+                if satellites >= 4 and hdop < 2.0:
+                    self._data["signal_quality"] = "good"
+                elif satellites >= 3 and hdop < 5.0:
+                    self._data["signal_quality"] = "fair"
+                elif satellites > 0:
+                    self._data["signal_quality"] = "poor"
+                else:
+                    self._data["signal_quality"] = "none"
 
                 # 状态恢复
                 old_state = self.ctx["gnss_state"]
@@ -118,7 +127,7 @@ class GNSSDriver(BaseModule):
                     self.event_bus.publish(EVENT_GNSS_READY, self.get_data())
 
                 if old_state != GNSS_STATE_FIXED:
-                    print(f"[{self.name}] ✓ 定位成功 | {loc['latitude']:.4f}, {loc['longitude']:.4f}")
+                    print(f"[{self.name}] ✓ 定位成功 | {loc['latitude']:.4f}, {loc['longitude']:.4f} | {self._data['signal_quality']}")
 
             else:  # 无定位
                 self._data["valid"] = False
@@ -165,16 +174,14 @@ class GNSSDriver(BaseModule):
 
     # ==================== 辅助方法 ====================
     def get_data(self):
-        """获取定位数据快照
-        note altitude/speed/course 暂未验证，待实板打印 loc.keys() 确认
-        """
+        """获取定位数据快照"""
         return {
             "latitude": self._data["latitude"],
             "longitude": self._data["longitude"],
+            "altitude": self._data["altitude"],
+            "speed_kmh": self._data["speed_kmh"],
+            "signal_quality": self._data["signal_quality"],
             "valid": self._data["valid"],
-            "altitude": self._data["altitude"],   # [待验证]
-            "speed": self._data["speed"],           # [待验证]
-            "course": self._data["course"],         # [待验证]
             "timestamp": time.ticks_ms()
         }
 

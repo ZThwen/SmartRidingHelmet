@@ -130,6 +130,9 @@ class LCDDriver(BaseModule):
         if not self.ctx["is_init"]:
             return
 
+        if self._data["display_mode"] in ("alarm_collision", "alarm_sos", "alarm_unknown"):
+            return
+
         if self.ctx["is_busy"]:
             return
 
@@ -242,7 +245,7 @@ class LCDDriver(BaseModule):
             self.lcd.flush()
 
             # ====== 重置显示数据 ======
-            self._data["display_mode"] = "blank"
+            self._data["display_mode"] = "normal"
             self._data["temp"] = 0.0
             self._data["humid"] = 0.0
             self._data["lat"] = 0.0

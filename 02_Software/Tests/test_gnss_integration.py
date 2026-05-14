@@ -60,6 +60,9 @@ class IntegrationTest:
         print(f"\n[事件回调] GNSS_READY")
         print(f"  经度: {payload['longitude']:.4f}")
         print(f"  纬度: {payload['latitude']:.4f}")
+        print(f"  海拔: {payload['altitude']:.1f} m")
+        print(f"  速度: {payload['speed_kmh']:.1f} km/h")
+        print(f"  信号质量: {payload['signal_quality']}")
         print(f"  有效: {payload['valid']}")
         self.test_results["gnss_ready_event_ok"] = True
 
@@ -116,6 +119,9 @@ class IntegrationTest:
             if data["valid"]:
                 print(f"  经度: {data['longitude']:.4f}")
                 print(f"  纬度: {data['latitude']:.4f}")
+                print(f"  海拔: {data['altitude']:.1f} m")
+                print(f"  速度: {data['speed_kmh']:.1f} km/h")
+                print(f"  信号质量: {data['signal_quality']}")
             else:
                 print(f"  暂无定位数据")
 

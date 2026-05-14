@@ -2,7 +2,6 @@
 brief GNSS定位驱动单模块测试脚本
 note 用于验证 GNSSDriver 的各项公共接口功能是否正常
      GNSS 搜星需要时间且在室外才能定位，室内无定位属于正常情况
-     测试中会打印 loc.keys() 便于后续验证 altitude/speed/course 字段是否存在
 """
 import sys
 import time
@@ -92,9 +91,9 @@ def test_gnss():
         if data["valid"]:
             print(f"  经度: {data['longitude']:.4f}")
             print(f"  纬度: {data['latitude']:.4f}")
-            print(f"  海拔: {data['altitude']:.1f} m  [待验证]")
-            print(f"  速度: {data['speed']:.1f} km/h  [待验证]")
-            print(f"  航向: {data['course']:.1f}°  [待验证]")
+            print(f"  海拔: {data['altitude']:.1f} m")
+            print(f"  速度: {data['speed_kmh']:.1f} km/h")
+            print(f"  信号质量: {data['signal_quality']}")
         else:
             print("  暂无定位数据")
 
@@ -106,9 +105,29 @@ def test_gnss():
     print(f"\n  收到 GNSS_READY 事件: {len(ready_events)} 次")
     print(f"  收到 GPS_LOST 事件:  {len(lost_events)} 次")
 
-    # ==================== 测试 4：定位字段探测 ====================
+    # ==================== 测试 4：数据字段完整性 ====================
     print("\n" + "-" * 60)
-    print("[测试 4] 定位字段探测")
+    print("[测试 4] 数据字段完整性验证")
+    print("-" * 60)
+
+    data = gnss.get_data()
+    expected_fields = ["latitude", "longitude", "altitude", "speed_kmh", "signal_quality", "valid", "timestamp"]
+    missing = [f for f in expected_fields if f not in data]
+    if not missing:
+        print("  ✓ get_data() 包含所有预期字段")
+        print(f"    字段列表: {list(data.keys())}")
+    else:
+        print(f"  ✗ get_data() 缺少字段: {missing}")
+
+    # 验证初始信号质量值为 none
+    if data["signal_quality"] == "none":
+        print("  ✓ signal_quality 初始值为 none")
+    else:
+        print(f"  ✗ signal_quality 初始异常: {data['signal_quality']}")
+
+    # ==================== 测试 5：定位字段探测 ====================
+    print("\n" + "-" * 60)
+    print("[测试 5] 定位字段探测")
     print("-" * 60)
     print("  当有定位时，打印 loc.keys() 确认实际返回字段")
     print("  如果处于无定位状态，本条测试仅提示跳过")
@@ -126,9 +145,9 @@ def test_gnss():
     except Exception as e:
         print(f"\n  读取异常: {e}")
 
-    # ==================== 测试 5：配置更新测试 ====================
+    # ==================== 测试 6：配置更新测试 ====================
     print("\n" + "-" * 60)
-    print("[测试 5] 配置更新测试")
+    print("[测试 6] 配置更新测试")
     print("-" * 60)
 
     print(f"\n  更新前采样间隔: {gnss.cfg['sample_ms']}ms")
@@ -141,9 +160,9 @@ def test_gnss():
     print(f"  更新后采样间隔: {gnss.cfg['sample_ms']}ms")
     print(f"  {'✓ 配置更新成功' if gnss.cfg['sample_ms'] == 5000 else '✗ 配置更新失败'}")
 
-    # ==================== 测试 6：stop() 测试 ====================
+    # ==================== 测试 7：stop() 测试 ====================
     print("\n" + "-" * 60)
-    print("[测试 6] stop() 停止定位测试")
+    print("[测试 7] stop() 停止定位测试")
     print("-" * 60)
 
     result = gnss.stop()

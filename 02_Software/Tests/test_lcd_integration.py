@@ -232,7 +232,7 @@ class IntegrationTest:
             self.event_bus.pump()
 
             data = self.lcd.get_data()
-            if data["valid"] or data["display_mode"] == "blank":
+            if data["valid"] or data["display_mode"] == "normal":
                 success_count += 1
 
             time.sleep(0.1)
