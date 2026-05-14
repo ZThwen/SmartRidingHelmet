@@ -34,7 +34,7 @@
 - 发布温湿度数据就绪事件
 
 **发布事件**：
-- `EVENT_TEMP_HUMID_READY`：温湿度数据就绪，携带数据 `{temp, humid, valid}`
+- `EVENT_TEMP_HUMID_READY`：温湿度数据就绪，携带数据 `{temp, humid, valid, timestamp}`
 
 **订阅事件**：
 - `EVENT_CONFIG_UPDATE`：远程配置更新（如修改采样间隔）
@@ -57,12 +57,12 @@
 - 发布加速度数据就绪事件
 
 **发布事件**：
-- `EVENT_IMU_READY`：加速度数据就绪，携带数据 `{acc_x, acc_y, acc_z, acc_total, valid}`
+- `EVENT_IMU_READY`：加速度数据就绪，携带数据 `{acc_x, acc_y, acc_z, acc_total, valid, timestamp}`
 
 **订阅事件**：
 - `EVENT_CONFIG_UPDATE`：远程配置更新
 
-​	**硬件说明**：
+**硬件说明**：
 - 传感器：LIS2DH12TR（I2C 地址 0x19）
 - 接口：I2C1 总线（S502 开关拨至 ARDU 侧）
 - 参考示例：`examples/imu.py`
@@ -74,13 +74,12 @@
 **需求对应**：F-SEN-03 位置与速度采集
 
 **模块功能**：
-
 - 初始化 GNSS 模块
-- 周期读取定位数据（经纬度、速度、定位状态）
+- 周期读取定位数据（经纬度、海拔、速度、信号质量）
 - 发布定位数据就绪事件
 
 **发布事件**：
-- `EVENT_GNSS_READY`：定位数据就绪，携带数据 `{latitude, longitude, speed, valid, timestamp}`
+- `EVENT_GNSS_READY`：定位数据就绪，携带数据 `{latitude, longitude, altitude, speed_kmh, signal_quality, valid, timestamp}`
 
 **订阅事件**：
 - `EVENT_CONFIG_UPDATE`：远程配置更新
@@ -102,7 +101,7 @@
 - 发布光照数据就绪事件
 
 **发布事件**：
-- `EVENT_LIGHT_READY`：光照数据就绪，携带数据 `{light_intensity, valid}`
+- `EVENT_LIGHT_READY`：光照数据就绪，携带数据 `{light_intensity, valid, timestamp}`
 
 **订阅事件**：
 - `EVENT_CONFIG_UPDATE`：远程配置更新
@@ -126,18 +125,18 @@
 - 按键按下时发布SOS事件
 
 **发布事件**：
-- `EVENT_SOS_PRESSED`：SOS 按键按下 
+- `EVENT_BUTTON_PRESSED`：按键按下，携带数据 `{timestamp}`
 
 **订阅事件**：无
 
 **硬件说明**：
-- 接口ID：SW
+- 接口：Arduino D2 引脚（外部上拉，按下接地）
 - 参考示例：`examples/pin.py`
 
 **分层设计说明**：
 - Device层负责硬件状态检测，发布事件通知Service层
 - 不订阅任何事件，纯输入设备
-- Service层（AlarmService）订阅EVENT_SOS_TRIGGERED实现业务逻辑
+- Service层（AlarmService）订阅EVENT_BUTTON_PRESSED，解释为SOS触发业务逻辑
 
 ---
 
@@ -157,7 +156,6 @@
 
 **订阅事件**：
 - `EVENT_CONFIG_UPDATE`：配置更新
-- `EVENT_LCD_ERROR`：LCD错误事件，携带数据 `{"name", "err_count",  "timestamp", "is_init"}`
 
 **公共接口**（供Service层调用）：
 - `on()`：LED常亮
@@ -167,10 +165,9 @@
 
 **硬件说明**：
 - 接口：Arduino D3 引脚（外接LED）
-- 参考示例：`examples/pin.py, PWM.py`
+- 参考示例：`examples/pin.py`
 
 **分层设计说明**：
-
 - Device层只提供基础硬件控制，不包含业务逻辑
 - 不订阅业务事件（ALARM_TRIGGERED等），由Service层调用
 - Service层（AlarmService）订阅业务事件后调用LED公共接口
@@ -193,9 +190,9 @@
 - 播放状态回调处理
 
 **发布事件**：
-- `EVENT_AUDIO_PLAYBACK_START`：音频开始播放，携带数据 `{"type": "alarm", "file": "alarm.mp3"}`
-- `EVENT_AUDIO_PLAYBACK_END`：播放完成，携带数据 `{"file": "alarm.mp3", "duration": 3000}`
-- `EVENT_AUDIO_ERROR`：音频播放失败，携带数据 `{"error": "file not found"}`
+- `EVENT_AUDIO_PLAYBACK_START`：音频开始播放，携带数据 `{"type": "alarm", "file": "alarm.mp3", "timestamp"}`
+- `EVENT_AUDIO_PLAYBACK_END`：播放完成，携带数据 `{"file": "alarm.mp3", "duration": 3000, "timestamp"}`
+- `EVENT_AUDIO_ERROR`：音频播放失败，携带数据 `{"error": "file not found", "timestamp"}`
 
 **订阅事件**：
 - `EVENT_CONFIG_UPDATE`：配置更新（音量/语速参数）
@@ -242,12 +239,19 @@
 - `show_normal_data(temp, humid, lat, lon)`：显示正常骑行数据
 - `show_alarm(alarm_type)`：显示报警画面（collision/sos）
 - `clear()`：清屏
-- `set_backlight(level)`：设置背光亮度（如果支持PWM）
+- `set_backlight(level)`：设置背光亮度
+
+**状态锁说明**：
+LCD 内部维护 `display_mode` 状态（normal / alarm），用于防止 Service 层间显示冲突：
+- `show_alarm()` 调用时 → `display_mode` 设为 `alarm`
+- `show_normal_data()` 调用时 → 检查 `display_mode`，如果是 `alarm` 则**拒绝更新**，保持报警画面
+- 报警取消后 `clear()` → `display_mode` 恢复 `normal`
+- `set_backlight()` 不受状态锁影响，任何时候都可调节背光
 
 **硬件说明**：
 - 硬件：LCD扩展板（1.8寸TFT）
 - 接口：SPI总线
-- 参考示例：`examples/lcd.py，PWM.py`
+- 参考示例：`examples/lcd.py`
 
 **分层设计说明**：
 - Device层只提供基础显示控制，不包含业务逻辑
@@ -264,21 +268,20 @@
 
 **模块功能**：
 - 接收 IMU 加速度数据
-- 实现碰撞检测算法（滑动窗口 + 双阈值过滤）
 - 判断是否发生真实碰撞（排除骑行颠簸误报）
 - 检测到碰撞时发布碰撞事件
 
 **发布事件**：
-- `EVENT_COLLISION_DETECTED`：检测到碰撞，携带数据 `{acc_total, confidence, timestamp}`
+- `EVENT_COLLISION_DETECTED`：检测到碰撞，携带数据 `{acc_total, level, timestamp}`
 
 **订阅事件**：
 - `EVENT_IMU_READY`：接收加速度数据
 - `EVENT_CONFIG_UPDATE`：远程配置更新（如修改碰撞阈值）
 
-**算法说明**：
-- 滑动窗口：缓存最近 N 个加速度值
-- 双阈值过滤：低阈值触发检测，高阈值确认碰撞
-- 持续时间判断：超过阈值持续一定时间才算碰撞
+**实现要求**：
+- 从 IMU 合加速度数据中识别真实碰撞，排除骑行颠簸误报
+- 区分碰撞等级（如轻微/中等/严重），随事件发布
+- 具体算法（阈值、窗口、滤波方式）由开发人员自行设计
 
 ---
 
@@ -301,47 +304,22 @@
 
 **订阅事件**：
 - `EVENT_COLLISION_DETECTED`：碰撞事件，触发碰撞报警
-- `EVENT_SOS_TRIGGERED`：SOS按键事件，触发SOS报警
+- `EVENT_BUTTON_PRESSED`：按键事件，触发SOS报警
 - `EVENT_BATTERY_LOW`：低电量事件，触发TTS语音提示
+- `EVENT_BATTERY_CRITICAL`：电量严重不足，触发紧急TTS提示
 - `EVENT_GPS_LOST`：GPS丢失事件，触发TTS语音提示
 - `EVENT_CONFIG_UPDATE`：配置更新
 
 **业务逻辑说明**：
+- 接收碰撞/SOS/低电量/GPS丢失等事件，协调 LED、Audio、LCD 驱动完成报警联动
+- 报警超时自动取消，恢复设备正常状态
+- 碰撞等级（Level 1-3）映射到不同的报警表现（声/光强度），具体映射方式由开发人员决定
 
-碰撞报警流程：
-- 接收碰撞事件，提取碰撞等级（Level 1-3）
-- 根据业务规则选择对应报警音频文件
-- 调用Audio驱动播放报警音
-- 调用LED驱动闪烁（频率根据碰撞等级调整）
-- 调用LCD驱动显示报警画面（显示碰撞等级）
-- 发布报警触发事件通知其他模块
-
-SOS报警流程：
-- 接收SOS按键事件
-- 调用Audio驱动播放SOS求救音
-- 调用LED驱动快速闪烁（200ms间隔）
-- 调用LCD驱动显示SOS报警画面
-- 发布报警触发事件
-
-低电量提示流程：
-- 接收低电量事件，获取电量百分比
-- 调用Audio驱动的TTS功能播报电量不足提示
-- 调用LCD驱动更新显示电量状态
-
-报警取消流程：
-- 报警超时后自动取消
-- 调用LED驱动熄灭
-- 调用LCD驱动恢复正常数据显示
-- 发布报警取消事件
-
-**业务规则**：
-- 报警类型：碰撞报警、SOS报警
-- 报警持续时间：默认30秒
-- 碰撞等级映射：
-  - Level 1：轻微碰撞 → 播放alarm_l1.mp3
-  - Level 2：中等碰撞 → 播放alarm_l2.mp3
-  - Level 3：严重碰撞 → 播放alarm_l3.mp3（循环3次）
-- 可配置：是否启用本地声光报警
+**约束规则**：
+- **优先级**：SOS 报警 > 碰撞报警，执行中的报警可被更高优先级事件打断
+- **重复触发**：同类型报警持续期间收到新触发，刷新超时计时，不重复播放报警音
+- **等级联动**：严重碰撞（Level 3）自动触发 SOS 远程报警
+- **可配置**：是否启用本地声光报警
 
 **依赖关系**：
 - 依赖Audio驱动（调用play_file、play_tts方法）
@@ -351,7 +329,6 @@ SOS报警流程：
 **分层设计说明**：
 - Service层负责业务逻辑编排和事件订阅
 - 不直接操作硬件，通过调用Device层接口实现具体功能
-- 业务规则（碰撞等级映射、报警流程等）在此层实现
 
 ---
 
@@ -367,7 +344,7 @@ SOS报警流程：
 - 周期性上传传感器数据
 - 紧急报警立即推送（高优先级）
 - 接收云端配置下发
-- 断网时本地缓存数据，网络恢复后补发
+- 断网时 SD 卡缓存数据，网络恢复后补发
 - 更新LCD显示传感器数据
 
 **发布事件**：
@@ -380,52 +357,62 @@ SOS报警流程：
 - `EVENT_TEMP_HUMID_READY`：温湿度数据，准备上传并更新LCD显示
 - `EVENT_IMU_READY`：加速度数据，准备上传
 - `EVENT_GNSS_READY`：定位数据，准备上传并更新LCD显示
-- `EVENT_COLLISION_DETECTED`：碰撞事件，立即推送报警
-- `EVENT_SOS_TRIGGERED`：SOS事件，立即推送报警
+- `EVENT_ALARM_TRIGGERED`：报警触发事件，立即推送报警到云端
 
 **依赖关系**：
-- 依赖网络模块（quectel.Network）
-- 依赖MQTT客户端（umqtt.robust）
-- 依赖LCD驱动（调用show_normal_data更新显示）
+- 依赖 Network 封装（`Drivers/interface/Network.py`，封装 quectel.Network）
+- 依赖 MQTT 封装（`Drivers/interface/MQTT.py`，封装 umqtt client）
+- 依赖 LCD 驱动（调用 show_normal_data 更新显示）
 
 **技术要点**：
-- 网络操作在独立线程执行，避免阻塞主循环
-- 使用队列缓冲待发送数据
-- 本地文件缓存断网期间的数据
-- 订阅传感器数据事件后调用LCD更新显示
+- 网络连接在独立线程中运行，主循环通过队列将数据传递给网络线程，避免阻塞
+- 云端下发配置通过 MQTT 回调接收，发布 `EVENT_CONFIG_UPDATE` 事件通知各模块
+- 传感器数据（GNSS 定位、温湿度、加速度等）周期写入 SD 卡，用于：
+  - 正常时：作为骑行日志本地留底
+  - 断网时：SD 卡缓存未发送数据，重连后按时间顺序补发
 
 **分层设计说明**：
 - Service层负责数据上传业务逻辑和显示更新
 - 订阅传感器数据事件，打包上传并更新LCD显示
 - 不直接操作网络硬件，通过Network模块接口实现
 
+**骑行数据扩展（可选）**：
+
+若需要骑行路线记录和数据总结，CloudService 可维护以下累加字段，随传感器数据一并上传：
+
+| 字段 | 来源 | 说明 |
+|:----:|:----:|:------|
+| `total_distance` | GNSS 经纬度 | 累加相邻点 Haversine 距离，单位 km |
+| `max_speed` | GNSS 速度 | 周期内取最大值，单位 km/h |
+| `ride_duration` | 系统计时 | 进入 RUNNING 态至今，单位 s |
+| `total_ascent` | GNSS 海拔 | 累加海拔正差值，单位 m |
+| `collision_count` | CollisionService | 碰撞触发计数 |
+| `gps_track` | GNSS 点队列 | 最近 N 个 `{lat, lon}` 点，上报后清空 |
+
+上传后云端可用这些数据还原骑行路线、生成骑行总结卡片。
+
 ---
 
 #### 2.2.4 电源管理服务（PowerService.py）
 
-**所属层次**：Service层（业务服务层）
+**当前状态**：空壳占位（等待电池供电接入）
 
-**需求对应**：F-ALM-04 低电量提醒
+当前开发阶段使用 USB 双线供电（EC200U Type-C + Nucleo Micro-USB），无法读取真实电池电量，因此 PowerService 暂不实现。
 
-**模块功能**（业务逻辑与电量监测）：
-- 周期读取电池电量（ADC或AT指令）
-- 电量低于阈值时发布低电量事件
-- 控制系统进入休眠状态
-- 电量状态管理和判断
+后续若接入锂电池（18650 + 5V 升压模块），需在电源输出端加分压电路到空闲 ADC 引脚，然后在本模块的 tick() 中周期读取 ADC 值换算电量。
 
-**发布事件**：
+**发布事件**（预留）：
 - `EVENT_BATTERY_LOW`：电量低于警告阈值
 - `EVENT_BATTERY_CRITICAL`：电量严重不足
 - `EVENT_POWER_STATE_CHANGE`：功耗状态切换
 
-**订阅事件**：
+**订阅事件**（预留）：
 - `EVENT_CONFIG_UPDATE`：远程配置更新
 
-**业务逻辑**：
-- 电量监测周期：默认10000ms
-- 低电量阈值：20%
-- 严重不足阈值：10%
-- 电量判断逻辑：低于阈值时发布对应事件
+**实现要求**（预留）：
+- 周期读取电池电量（ADC 分压或 AT+CBC），低于阈值时发布对应事件
+- 检测到严重低电量时，通知系统进入低功耗模式
+- 具体阈值和采样周期由开发人员根据电池特性决定
 
 **分层设计说明**：
 - Service层负责电量状态判断和业务逻辑
@@ -441,40 +428,57 @@ SOS报警流程：
 **需求对应**：F-SEN-04 环境光照采集（背光调节）
 
 **模块功能**（业务逻辑与显示管理）：
-- 根据环境光照强度自动调节LCD背光
-- 系统休眠时关闭LCD显示
-- 系统唤醒时恢复LCD显示
-- 显示管理策略实现
+- 启动时显示开机画面（队伍 Logo + 队名 + TTS 语音播报）
+- 定义正常骑行状态的 LCD 画面布局（温湿度/定位/速度等信息的显示位置和格式）
+- 报警时联动切换画面（碰撞/SOS 画面由 AlarmService 调用 LCD 接口实现，DisplayService 负责背光等协调配合）
+- 根据环境光照强度自动调节 LCD 背光
+- 系统休眠时关闭背光（接口预留）
 
 **发布事件**：无
 
 **订阅事件**：
+- `EVENT_TEMP_HUMID_READY`：温湿度数据，用于判断系统是否正常运行
+- `EVENT_GNSS_READY`：定位数据，用于判断定位是否有效
 - `EVENT_LIGHT_READY`：光照数据就绪，调节背光
-- `EVENT_POWER_STATE_CHANGE`：功耗状态变化，控制LCD开关
+- `EVENT_ALARM_TRIGGERED`：报警触发，可配合调整背光或显示策略
+- `EVENT_ALARM_CANCELED`：报警取消，恢复正常显示策略
+- `EVENT_POWER_STATE_CHANGE`：功耗状态变化，控制背光开关（接口预留）
 
 **依赖关系**：
-- 依赖Light驱动（订阅光照事件）
-- 依赖LCD驱动（调用set_backlight方法）
+- 依赖 Light 驱动（订阅光照事件）
+- 依赖 LCD 驱动（调用 show_image/show_string、set_backlight、show_normal_data、show_alarm、clear 等方法）
+- 依赖 Audio 驱动（开机画面播放 TTS 语音）
 
-**业务逻辑**：
-- 光照强度判断：
-  - 高光照（>4000）：背光100%（强光环境需高亮度）
-  - 中光照（1000-4000）：背光60%（正常环境）
-  - 低光照（<1000）：背光30%（弱光环境省电+护眼）
-- 功耗状态管理：
-  - 休眠状态：关闭LCD背光
-  - 唤醒状态：恢复LCD背光
+**实现要求**：
+
+开机画面（init() 末尾执行）：
+1. LCD 显示队伍 Logo（RGB565 取模数据，存放于 `team_logo.py`）
+2. LCD 显示队伍名称
+3. Audio TTS 播报系统就绪提示语（`TTS_SYSTEM_READY`）
+4. 保持 2~3 秒后清屏，进入正常运行
+
+正常画面策略：
+- 定义 LCD 屏幕各信息区域的布局（如：顶部显示温湿度、中部显示定位、底部显示速度）
+- CloudService 调用 `lcd.show_normal_data()` 时按此布局渲染
+
+报警画面配合：
+- 报警触发时 LCD 状态锁自动拦截正常数据刷新，DisplayService 不干预，但可配合调整背光（如报警时提高背光亮度）
+- 报警取消后 LCD 恢复 normal 模式
+
+背光调节：
+- 收到 `EVENT_LIGHT_READY` 后根据光照强度调节 LCD 背光亮度
+- 具体光照-背光映射策略由开发人员自行决定
 
 **分层设计说明**：
-- Service层负责显示策略和背光调节逻辑
-- 订阅光照事件实现自适应背光
-- 不直接操作硬件，通过调用LCD驱动接口实现
+- Service 层负责显示策略和背光调节逻辑
+- 订阅光照事件实现自适应背光，订阅报警事件协调显示策略
+- 不直接操作硬件，通过调用 LCD 驱动接口实现
 
 ---
 
 ### 2.3 模块依赖关系
 
-```
+
 驱动层（无依赖，直接操作硬件）
 ├── Temp_Humid        # 温湿度传感器
 ├── IMU               # 加速度传感器
@@ -490,11 +494,150 @@ SOS报警流程：
 ├── PowerService      # 依赖 ADC 或 AT 指令
 ├── AlarmService      # 依赖 LED、Audio、LCD、CollisionService、PowerService
 ├── CloudService      # 依赖所有传感器驱动、LCD
-└── DisplayService    # 依赖 Light、LCD
+└── DisplayService    # 依赖 Light、LCD、Audio
 
 注：服务层模块间依赖关系在开发时进一步细化
+
+### 2.3.1 事件流总览
+
+**阅读说明**：每个场景按时间从上到下展开，箭头表示事件流向。`[S]`=同步调用，`[E]`=事件驱动（异步）。
+
+---
+
+#### 场景一：主循环调度（RUNNING 态）
+
+```
+主循环 for mod in modules: mod.tick() → pump()         每10ms
+ │
+ ├── Temp_Humid.tick()  (每2000ms)
+ │    └── 读取 AHT20
+ │    └── [E] EVENT_TEMP_HUMID_READY {temp, humid, valid, timestamp}
+ │          └──→ CloudService._on_temp_humid_ready()
+ │                 ├── 打包数据 → send_queue.put()     网络线程上传
+ │                 └── LCD.show_normal_data()          报警中会被状态锁拦截
+ │
+ ├── IMU.tick()  (每100ms)
+ │    └── 读取 LIS2DH12TR
+ │    └── [E] EVENT_IMU_READY {acc_x, acc_y, acc_z, acc_total, valid, timestamp}
+ │          ├──→ CollisionService._on_imu_data()
+ │          │      └── 滑动窗口+阈值判断 → 是否碰撞
+ │          └──→ CloudService._on_imu() → 缓存加速度，等待打包上传
+ │
+ ├── GNSS.tick()  (每2000ms)
+ │    └── gnss.get_location()
+ │    ├── 有定位 → [E] EVENT_GNSS_READY {lat, lon, alt, speed_kmh, signal_quality, valid, ts}
+ │    │              └──→ CloudService._on_gnss_ready() → 上传 + LCD
+ │    └── 无定位 → no_fix_count++, 超阈值后:
+ │                 [E] EVENT_GPS_LOST → AlarmService._on_gps_lost() → TTS
+ │
+ ├── Light.tick()  (每2000ms)
+ │    └── [E] EVENT_LIGHT_READY {light_intensity, valid, timestamp}
+ │          └──→ DisplayService._on_light_ready() → LCD.set_backlight()
+ │
+ ├── PowerService.tick()  (每10000ms)
+ │    ├── [E] EVENT_BATTERY_LOW       → AlarmService → TTS
+ │    └── [E] EVENT_BATTERY_CRITICAL  → AlarmService → TTS + 低功耗
+ │
+ └── event_bus.pump()   ← 一次性分发所有待处理事件
+      └── 逐个调用回调，异常隔离
 ```
 
+---
+
+#### 场景二：碰撞报警（ALARM 态）
+
+```
+CollisionService 判定碰撞 (Level 1/2/3)
+ │
+ └── [E] EVENT_COLLISION_DETECTED {acc_total, level, timestamp}
+       │
+       └──→ AlarmService._on_collision()
+              ├── [S] LED.blink(interval)         // 闪烁频率取决于等级
+              ├── [S] Audio.play_file(file)        // 等级对应的报警音
+              ├── [S] LCD.show_alarm("collision") // 状态锁生效
+              ├── 启动报警超时计时器 (30s)
+              └── [E] EVENT_ALARM_TRIGGERED {alarm_type="collision", level, ts}
+                    └──→ CloudService._on_alarm() → 紧急推送云端
+
+30s 后超时:
+alarm_timer 到期
+ └── [E] EVENT_ALARM_CANCELED {duration, timestamp}
+       └──→ AlarmService._on_alarm_canceled()
+              ├── LED.off()
+              ├── LCD.clear()              // display_mode 恢复 normal
+              └── 重置报警状态
+```
+
+---
+
+#### 场景三：SOS 按键报警（ALARM 态）
+
+```
+Button 外部中断 (GPIO + 200ms消抖)
+ │
+ └── [E] EVENT_BUTTON_PRESSED {timestamp}
+       │
+       └──→ AlarmService._on_button_press()
+              ├── **打断**: 执行中碰撞报警立即切换为 SOS
+              ├── [S] LED.blink(200)             // 快速闪烁
+              ├── [S] Audio.play_file(sos.mp3)
+              ├── [S] LCD.show_alarm("sos")
+              ├── 启动/刷新 30s 超时
+              └── [E] EVENT_ALARM_TRIGGERED {alarm_type="sos", level=3, ts}
+                    └──→ CloudService._on_alarm() → 紧急推送（含GPS位置）
+```
+
+---
+
+#### 场景四：配置更新（任何状态）
+
+```
+云端 MQTT 下发 (独立网络线程)
+ │
+ └── [E] EVENT_CONFIG_UPDATE {target, key:value...}
+       │
+       ├──→ Temp_Humid   → 更新 sample_ms
+       ├──→ IMU           → 更新碰撞阈值
+       ├──→ GNSS          → 更新 sample_ms / lost_count
+       ├──→ LED           → 更新闪烁参数
+       ├──→ Audio         → 更新音量/语速
+       ├──→ PowerService  → 更新电池阈值
+       └──→ LCD           → 更新刷新间隔/背光
+```
+
+---
+
+#### 场景五：GPS 信号丢失与恢复（RUNNING 态）
+
+```
+GNSS.tick() 连续多次无定位
+ └── no_fix_count ≥ lost_count
+       └── [E] EVENT_GPS_LOST {source, timestamp}
+             └──→ AlarmService._on_gps_lost()
+                    └── Audio.play_tts("GPS信号已丢失")
+
+恢复后:
+gnss.get_location() 返回有效数据
+ └── gps_lost_reported → False
+ └── [E] EVENT_GNSS_READY → 恢复正常上传
+```
+
+---
+
+#### 时序对照表
+
+| 周期 | 模块 | 频率 | 事件 | 消费方 |
+|:----:|:----|:----:|:-----|:-------|
+| 10ms | 主循环 | 固定 | — | 遍历所有 tick() → pump() → sleep |
+| 100ms | IMU | 固定 | → EVENT_IMU_READY | CollisionService + CloudService |
+| 2000ms | Temp_Humid | 固定 | → EVENT_TEMP_HUMID_READY | CloudService |
+| 2000ms | GNSS | 固定 | → EVENT_GNSS_READY / EVENT_GPS_LOST | CloudService / AlarmService |
+| 2000ms | Light | 固定 | → EVENT_LIGHT_READY | DisplayService |
+| 10000ms | PowerService | 固定 | → EVENT_BATTERY_LOW / CRITICAL | AlarmService（预留） |
+| 中断 | Button | 按需 | → EVENT_BUTTON_PRESSED | AlarmService |
+| 云端 | CloudService | 按需 | → EVENT_CONFIG_UPDATE | 所有模块 |
+| 碰撞 | CollisionService | 按需 | → EVENT_COLLISION_DETECTED | AlarmService |
+| 报警 | AlarmService | 按需 | → EVENT_ALARM_TRIGGERED | CloudService + DisplayService |
 ---
 
 ### 2.4 初始化顺序
@@ -560,21 +703,28 @@ SOS报警流程：
 **核心任务**：
 - 开发业务服务模块（使用 Service_Template.py）
 - 实现核心业务逻辑和算法
+- 补充 Device 层辅助驱动（Network、MQTT）
 
 **需完成的需求**：
 
 | 需求ID | 需求名称 | 实现内容 | 验收标准 |
 |--------|---------|---------|---------|
-| F-ALM-01 | 碰撞自动报警 | 开发 CollisionService，实现碰撞检测算法（滑动窗口+双阈值过滤） | 能从 IMU 数据中识别真实碰撞，排除颠簸误报 |
-| F-ALM-02 | 一键SOS求助 | 开发 AlarmService，实现 SOS 按键触发报警逻辑 | 按键按下立即触发报警流程 |
-| F-ALM-03 | 本地声光报警 | 在 AlarmService 中实现报警联动（LED闪烁、音频播放、LCD显示） | 报警时 LED 闪烁、播放报警音、LCD 显示 SOS |
-| F-NET-01 | 骑行数据远程上传 | 开发 CloudService，实现数据打包和上传逻辑 | 能将传感器数据打包并准备上传 |
-| F-NET-02 | 紧急报警远程推送 | 在 CloudService 中实现报警数据优先级上传 | 报警事件能优先上传 |
-| F-ALM-04 | 低电量提醒 | 开发 PowerService，实现电量监测和提醒 | 电量低于阈值能发布事件 |
-| F-SEN-04 | 环境光照应用 | 开发 DisplayService，实现LCD背光自动调节 | 光照变化时自动调节背光 |
+| F-ALM-01 | 碰撞自动报警 | 开发 CollisionService，订阅 IMU 数据，实现碰撞检测算法 | 能从 IMU 数据中识别真实碰撞，排除颠簸误报，发布碰撞等级 |
+| F-ALM-02 | 一键SOS求助 | 开发 AlarmService，订阅 `EVENT_BUTTON_PRESSED`，实现 SOS 报警流程 | 按键按下立即触发 SOS 声光报警 |
+| F-ALM-03 | 本地声光报警 | 在 AlarmService 中实现报警联动（LED 闪烁、音频播放、LCD 显示），发布 `EVENT_ALARM_TRIGGERED` | 报警时 LED 闪烁、播放报警音、LCD 显示报警画面 |
+| F-NET-01 | 骑行数据远程上传 | 开发 `Drivers/interface/Network.py` + `Drivers/interface/MQTT.py` + CloudService，实现数据打包和上传 | 传感器数据能实时上传到云端 |
+| F-NET-02 | 紧急报警远程推送 | CloudService 订阅 `EVENT_ALARM_TRIGGERED`，实现报警数据推送 | 报警事件能立即推送到云端 |
+| F-ALM-04 | 低电量提醒 | PowerService 暂为空壳（无电池），后续接入电池后再补 | 现阶段占位，不影响其他模块 |
+| F-SEN-04 | 环境光照应用 | 开发 DisplayService，实现开机画面（Logo + TTS）+ 背光自动调节 | 开机显示队标和语音，光照变化时自动调节背光 |
 
 **说明**：
-- F-SEN-05 心率采集因硬件约束暂不实现，待外接模块确定后再添加（架构支持扩展）
+- F-ALM-01 碰撞检测算法（阈值、窗口、滤波方式）由开发人员自行设计
+- F-ALM-02/03 报警优先级由 AlarmService 统一仲裁（SOS > 碰撞），通过发布 `EVENT_ALARM_TRIGGERED` 通知 CloudService
+- F-NET-01 依赖 `Drivers/interface/Network.py` 和 `Drivers/interface/MQTT.py`，需在 CloudService 之前或同步完成
+- F-NET-02 CloudService 只订阅 `EVENT_ALARM_TRIGGERED`，不直接订阅碰撞/按键原始事件，避免重复推送
+- PowerService 当前阶段为空壳占位（USB 供电无法读取电池电量），不影响其他模块开发
+- DisplayService 包含开机画面（队伍 Logo + TTS）和背光调节，依赖 LCD、Audio、Light
+- DisplayService 需要提前准备队伍 Logo 的 RGB565 取模数据，存入 `team_logo.py`
 - 每开发一个业务模块，立即在板子上测试
 - 验证事件订阅/发布流程正确
 - 使用 Service_Template.py 快速创建业务模块
@@ -765,6 +915,6 @@ M1: 起步验证 ──→ M2: 本地闭环 ──→ M3: 云端打通 ──→
 
 ---
 
-**文档版本**：v4.0  
-**更新日期**：2026-05-08  
+**文档版本**：v5.0  
+**更新日期**：2026-05-14  
 **维护团队**：锦依卫队
