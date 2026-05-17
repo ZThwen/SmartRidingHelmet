@@ -21,7 +21,7 @@ EVENT_LIGHT_READY           = "LIGHT_READY"           # 光照数据就绪
 
 # 报警相关事件
 EVENT_COLLISION_DETECTED    = "COLLISION_DETECTED"    # 碰撞检测到
-EVENT_BUTTON_PRESSED        = "BUTTON_PRESSED"        # 按键按下事件
+EVENT_SOS_TRIGGERED         = "SOS_TRIGGERED"         # SOS按键触发
 EVENT_ALARM_TRIGGERED       = "ALARM_TRIGGERED"       # 报警触发（通用）
 EVENT_ALARM_CANCELED        = "ALARM_CANCELED"        # 报警取消
 
@@ -92,6 +92,35 @@ BATTERY_CRITICAL_THRESHOLD = 10    # 严重不足阈值(%)
 POWER_STATE_ACTIVE        = "ACTIVE"        # 正常工作状态
 POWER_STATE_SUSPENDED     = "SUSPENDED"     # 挂起状态
 POWER_STATE_DEEP_SLEEP    = "DEEP_SLEEP"    # 深度休眠状态
+
+# ================= 网络通信配置 =================
+NETWORK_CONNECT_TIMEOUT_MS = 60000    # 4G网络连接超时时间 (ms)
+
+# ================= MQTT通信配置 =================
+MQTT_BROKER             = "172.188.83.251"    # ConnectLab 服务器地址
+MQTT_PORT               = 48513               # ConnectLab 端口（每次创建会话不同）
+MQTT_USERNAME           = "quectel"           # MQTT 用户名
+MQTT_PASSWORD           = "12345678"          # MQTT 密码
+MQTT_CLIENT_ID          = "66ccff"            # MQTT 客户端 ID
+MQTT_KEEPALIVE          = 60                  # 心跳间隔 (秒)
+MQTT_MAX_RETRY          = 3                   # 最大重试次数
+
+# MQTT Topic 定义
+MQTT_TOPIC_DATA         = "helmet/data"       # 传感器数据上传
+MQTT_TOPIC_CONFIG       = "helmet/config"     # 云端配置下发
+MQTT_TOPIC_ALARM        = "helmet/alarm"      # 紧急报警推送
+MQTT_TOPIC_STATUS       = "helmet/status"     # 设备状态（含遗嘱消息）
+
+# MQTT QoS 等级
+MQTT_QOS_DATA           = 0                   # 传感器数据（允许丢失）
+MQTT_QOS_ALARM          = 1                   # 报警数据（必须送达）
+MQTT_QOS_CONFIG         = 1                   # 配置下发（必须送达）
+
+# 遗嘱消息配置
+MQTT_WILL_TOPIC         = "helmet/status"     # 遗嘱消息 Topic
+MQTT_WILL_MESSAGE       = '{"status":"offline","reason":"unexpected"}'
+MQTT_WILL_QOS           = 1
+MQTT_WILL_RETAIN        = True
 
 # ================= 显示配置 =================
 LCD_BACKLIGHT_HIGH        = 100    # 高背光亮度(%)
