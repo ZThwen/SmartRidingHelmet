@@ -5,8 +5,8 @@ note 严格遵循四元组架构规范，适配移远模组默认I2C引脚
 import machine
 import time
 
-from Base_Module import BaseModule
-from config import EVENT_TEMP_HUMID_READY,EVENT_SENSOR_ERROR, EVENT_CONFIG_UPDATE, TEMP_HUMID_SAMPLE_MS, POWER_STATE_ACTIVE
+from core.Base_Module import BaseModule
+from core.config import EVENT_TEMP_HUMID_READY,EVENT_SENSOR_ERROR, EVENT_CONFIG_UPDATE, TEMP_HUMID_SAMPLE_MS, POWER_STATE_ACTIVE
 from ahtx0 import AHT20
 
 
