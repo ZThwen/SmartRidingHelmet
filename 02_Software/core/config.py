@@ -122,6 +122,10 @@ MQTT_WILL_MESSAGE       = '{"status":"offline","reason":"unexpected"}'
 MQTT_WILL_QOS           = 1
 MQTT_WILL_RETAIN        = True
 
+# ================= CloudService 配置 =================
+CLOUD_UPLOAD_INTERVAL_MS = 2000    # 数据上传间隔 (ms)
+CLOUD_GPS_TRACK_MAX      = 50      # GPS 轨迹点缓存上限
+
 # ================= 显示配置 =================
 LCD_BACKLIGHT_HIGH        = 100    # 高背光亮度(%)
 LCD_BACKLIGHT_MEDIUM      = 60     # 中背光亮度(%)
