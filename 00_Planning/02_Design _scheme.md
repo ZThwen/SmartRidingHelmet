@@ -285,7 +285,7 @@ LCD 内部维护 `display_mode` 状态（normal / alarm），用于防止 Servic
 
 ---
 
-#### 2.2.2 报警联动服务（AlarmService.py）
+#### 2.2.2 报警联动服务（AlarmService.py）（✅ v1 已实现）
 
 **所属层次**：Service层（业务服务层）
 
@@ -294,7 +294,7 @@ LCD 内部维护 `display_mode` 状态（normal / alarm），用于防止 Servic
 **模块功能**（业务逻辑编排）：
 - 订阅碰撞事件和SOS按键事件
 - 根据业务规则触发报警联动
-- 调用Device层模块（LED、Audio、LCD）实现具体报警
+- 调用Device层模块（LED、Audio）实现具体报警
 - 报警超时管理
 - 报警状态维护
 
@@ -311,7 +311,7 @@ LCD 内部维护 `display_mode` 状态（normal / alarm），用于防止 Servic
 - `EVENT_CONFIG_UPDATE`：配置更新
 
 **业务逻辑说明**：
-- 接收碰撞/SOS/低电量/GPS丢失等事件，协调 LED、Audio、LCD 驱动完成报警联动
+- 接收碰撞/SOS/低电量/GPS丢失等事件，协调 LED、Audio 驱动完成报警联动
 - 报警超时自动取消，恢复设备正常状态
 - 碰撞等级（Level 1-3）映射到不同的报警表现（声/光强度），具体映射方式由开发人员决定
 
@@ -324,7 +324,6 @@ LCD 内部维护 `display_mode` 状态（normal / alarm），用于防止 Servic
 **依赖关系**：
 - 依赖Audio驱动（调用play_file、play_tts方法）
 - 依赖LED驱动（调用blink、on、off方法）
-- 依赖LCD驱动（调用show_alarm方法）
 
 **分层设计说明**：
 - Service层负责业务逻辑编排和事件订阅
@@ -332,20 +331,18 @@ LCD 内部维护 `display_mode` 状态（normal / alarm），用于防止 Servic
 
 ---
 
-#### 2.2.3 云端通信服务（CloudService.py）
+#### 2.2.3 云端通信服务（CloudService.py）（✅ v1 已实现）
 
 **所属层次**：Service层（业务服务层）
 
 **需求对应**：F-NET-01 骑行数据远程上传、F-NET-02 紧急报警远程推送、F-NET-03 远程参数配置
 
 **模块功能**（业务逻辑与数据上传）：
-- 初始化4G网络连接
-- 连接MQTT服务器（ConnectLab平台）
-- 周期性上传传感器数据
-- 紧急报警立即推送（高优先级）
-- 接收云端配置下发
-- 断网时 SD 卡缓存数据，网络恢复后补发
-- 更新LCD显示传感器数据
+- 持有 NetworkDriver 和 MQTTDriver 实例，在独立网络线程中初始化和运行
+- 通过 tick() 定时拼装传感器缓存数据，经线程安全队列送入网络线程发送
+- 收到报警事件后立即拼装报警 JSON 入队，不等待 tick 周期
+- 接收云端 MQTT 下行配置，转发为 EVENT_CONFIG_UPDATE 事件
+- 未读到的传感器数据字段在 JSON 中输出 null（区分"未采集"与"值为 0"）
 
 **发布事件**：
 - `EVENT_DATA_UPLOAD_SUCCESS`：数据上传成功
@@ -354,40 +351,43 @@ LCD 内部维护 `display_mode` 状态（normal / alarm），用于防止 Servic
 - `EVENT_NETWORK_DISCONNECTED`：网络断开
 
 **订阅事件**：
-- `EVENT_TEMP_HUMID_READY`：温湿度数据，准备上传并更新LCD显示
-- `EVENT_IMU_READY`：加速度数据，准备上传
-- `EVENT_GNSS_READY`：定位数据，准备上传并更新LCD显示
-- `EVENT_ALARM_TRIGGERED`：报警触发事件，立即推送报警到云端
+- `EVENT_TEMP_HUMID_READY`：温湿度数据，缓存等待打包
+- `EVENT_IMU_READY`：加速度数据，缓存等待打包
+- `EVENT_GNSS_READY`：定位数据，缓存 GPS 并更新骑行扩展字段（不上传入队）
+- `EVENT_ALARM_TRIGGERED`：报警触发事件，立即拼装报警 JSON 入队
 
 **依赖关系**：
-- 依赖 Network 封装（`Drivers/interface/Network.py`，封装 quectel.Network）
-- 依赖 MQTT 封装（`Drivers/interface/MQTT.py`，封装 umqtt client）
-- 依赖 LCD 驱动（调用 show_normal_data 更新显示）
+- 依赖 Network 封装（`Drivers/network/Network.py`，封装 quectel.Network）
+- 依赖 MQTT 封装（`Drivers/network/MQTT.py`，封装 umqtt client）
+- 依赖线程安全队列（`Drivers/network/thread_queue.py`）
 
 **技术要点**：
-- 网络连接在独立线程中运行，主循环通过队列将数据传递给网络线程，避免阻塞
-- 云端下发配置通过 MQTT 回调接收，发布 `EVENT_CONFIG_UPDATE` 事件通知各模块
-- 传感器数据（GNSS 定位、温湿度、加速度等）周期写入 SD 卡，用于：
-  - 正常时：作为骑行日志本地留底
-  - 断网时：SD 卡缓存未发送数据，重连后按时间顺序补发
+- 上传触发：由 tick() 按 `CLOUD_UPLOAD_INTERVAL_MS`（默认 2000ms）定时触发，不依赖 GNSS 定位状态，室内无 GPS 时仍可上传温湿度和加速度
+- 双线程架构：主线程（事件回调 → 拼装 JSON → 入队）与网络线程（出队 → MQTT publish）通过线程安全队列解耦，主线程不做任何网络 I/O
+- 网络线程：使用 CloudService 持有的 NetworkDriver / MQTTDriver 实例（Service → Device），不在线程内创建
+- 云端配置下发：通过 MQTT 回调在网路线程中接收，发布 `EVENT_CONFIG_UPDATE` 事件通知各模块
+- SD 卡缓存（v2 计划）：断网时数据落 SD 卡，重连后补发。v1 暂不实现
+- 未读到数据的字段在 JSON 中输出 null，如首次启动时 Temp/Humi/G-Sensor/GNSS 均为 null
 
 **分层设计说明**：
-- Service层负责数据上传业务逻辑和显示更新
-- 订阅传感器数据事件，打包上传并更新LCD显示
-- 不直接操作网络硬件，通过Network模块接口实现
+- Service层负责数据打包和上传业务逻辑
+- 持有 Device 层对象（NetworkDriver / MQTTDriver），调用其公共接口完成网络通信
+- 订阅传感器数据事件，缓存后由 tick 定时触发打包
+- 不直接操作网络硬件，通过 Device 层模块接口实现
+- 不依赖 LCD 驱动（显示由 DisplayService 负责）
 
 **骑行数据扩展（可选）**：
 
-若需要骑行路线记录和数据总结，CloudService 可维护以下累加字段，随传感器数据一并上传：
+若需要骑行路线记录和数据总结，CloudService 维护以下累加字段，随传感器数据一并上传：
 
 | 字段 | 来源 | 说明 |
 |:----:|:----:|:------|
 | `total_distance` | GNSS 经纬度 | 累加相邻点 Haversine 距离，单位 km |
 | `max_speed` | GNSS 速度 | 周期内取最大值，单位 km/h |
-| `ride_duration` | 系统计时 | 进入 RUNNING 态至今，单位 s |
+| `ride_duration` | 系统计时 | v2 计划（需状态机就绪） |
 | `total_ascent` | GNSS 海拔 | 累加海拔正差值，单位 m |
 | `collision_count` | CollisionService | 碰撞触发计数 |
-| `gps_track` | GNSS 点队列 | 最近 N 个 `{lat, lon}` 点，上报后清空 |
+| `gps_track` | GNSS 点队列 | 最近 N 个 `{lat, lon}` 点（上限 `CLOUD_GPS_TRACK_MAX`），上报后清空 |
 
 上传后云端可用这些数据还原骑行路线、生成骑行总结卡片。
 
@@ -430,7 +430,7 @@ LCD 内部维护 `display_mode` 状态（normal / alarm），用于防止 Servic
 **模块功能**（业务逻辑与显示管理）：
 - 启动时显示开机画面（队伍 Logo + 队名 + TTS 语音播报）
 - 定义正常骑行状态的 LCD 画面布局（温湿度/定位/速度等信息的显示位置和格式）
-- 报警时联动切换画面（碰撞/SOS 画面由 AlarmService 调用 LCD 接口实现，DisplayService 负责背光等协调配合）
+- 报警时联动切换画面（碰撞/SOS 画面由 DisplayService 订阅 `EVENT_ALARM_TRIGGERED` 后调用 LCD 接口实现，背光调节等协调配合）
 - 根据环境光照强度自动调节 LCD 背光
 - 系统休眠时关闭背光（接口预留）
 
@@ -551,21 +551,20 @@ CollisionService 判定碰撞 (Level 1/2/3)
  │
  └── [E] EVENT_COLLISION_DETECTED {acc_total, level, timestamp}
        │
-       └──→ AlarmService._on_collision()
-              ├── [S] LED.blink(interval)         // 闪烁频率取决于等级
-              ├── [S] Audio.play_file(file)        // 等级对应的报警音
-              ├── [S] LCD.show_alarm("collision") // 状态锁生效
-              ├── 启动报警超时计时器 (30s)
-              └── [E] EVENT_ALARM_TRIGGERED {alarm_type="collision", level, ts}
-                    └──→ CloudService._on_alarm() → 紧急推送云端
+        └──→ AlarmService._on_collision()
+               ├── [S] LED.blink(duration, interval)  // 闪烁频率取决于等级
+               ├── [S] Audio.play_file(file)           // 等级对应的报警音
+               ├── 启动报警超时计时器 (30s)
+               └── [E] EVENT_ALARM_TRIGGERED {alarm_type="collision", level, ts}
+                     └──→ CloudService._on_alarm() → 紧急推送云端
 
 30s 后超时:
 alarm_timer 到期
- └── [E] EVENT_ALARM_CANCELED {duration, timestamp}
-       └──→ AlarmService._on_alarm_canceled()
-              ├── LED.off()
-              ├── LCD.clear()              // display_mode 恢复 normal
-              └── 重置报警状态
+  └── [E] EVENT_ALARM_CANCELED {duration, timestamp}
+        └──→ AlarmService._cancel_alarm()
+               ├── LED.off()
+               ├── Audio.stop()
+               └── 重置报警状态
 ```
 
 ---
@@ -577,14 +576,14 @@ Button 外部中断 (GPIO + 200ms消抖)
  │
  └── [E] EVENT_BUTTON_PRESSED {timestamp}
        │
-       └──→ AlarmService._on_button_press()
-              ├── **打断**: 执行中碰撞报警立即切换为 SOS
-              ├── [S] LED.blink(200)             // 快速闪烁
-              ├── [S] Audio.play_file(sos.mp3)
-              ├── [S] LCD.show_alarm("sos")
-              ├── 启动/刷新 30s 超时
-              └── [E] EVENT_ALARM_TRIGGERED {alarm_type="sos", level=3, ts}
-                    └──→ CloudService._on_alarm() → 紧急推送（含GPS位置）
+        └──→ AlarmService._on_button_press()
+               ├── **报警中(ALARMING)**: 取消报警 (Cancel)
+               ├── **空闲(IDLE)**: SOS 触发
+               ├── [S] LED.blink(30000, 200)           // 快速闪烁
+               ├── [S] Audio.play_file(sos.mp3)
+               ├── 启动 30s 超时
+               └── [E] EVENT_ALARM_TRIGGERED {alarm_type="sos", level=3, ts}
+                     └──→ CloudService._on_alarm() → 紧急推送（含GPS位置）
 ```
 
 ---
@@ -637,7 +636,7 @@ gnss.get_location() 返回有效数据
 | 中断 | Button | 按需 | → EVENT_BUTTON_PRESSED | AlarmService |
 | 云端 | CloudService | 按需 | → EVENT_CONFIG_UPDATE | 所有模块 |
 | 碰撞 | CollisionService | 按需 | → EVENT_COLLISION_DETECTED | AlarmService |
-| 报警 | AlarmService | 按需 | → EVENT_ALARM_TRIGGERED | CloudService + DisplayService |
+| 报警 | AlarmService | 按需 | → EVENT_ALARM_TRIGGERED | CloudService（推送） + DisplayService（LCD画面） |
 ---
 
 ### 2.4 初始化顺序
@@ -645,18 +644,18 @@ gnss.get_location() 返回有效数据
 按依赖关系确定初始化顺序：
 
 ```
-1. 温湿度驱动（Temp_Humid）
-2. IMU 驱动（IMU）
-3. GNSS 驱动（GNSS）
-4. 光照驱动（Light）
-5. SOS 按键驱动（Button）
-6. LED 驱动（LED）
-7. 音频驱动（Audio）
-8. LCD 驱动（LCD）
+1. 温湿度驱动（Temp_Humid）           （✅ 已实现）
+2. IMU 驱动（IMU）                   （✅ 已实现）
+3. GNSS 驱动（GNSS）                 （✅ 已实现）
+4. 光照驱动（Light）                  （✅ 已实现）
+5. SOS 按键驱动（Button）             （✅ 已实现）
+6. LED 驱动（LED）                   （✅ 已实现）
+7. 音频驱动（Audio）                  （✅ 已实现）
+8. LCD 驱动（LCD）                   （✅ 已实现）
 9. 碰撞检测服务（CollisionService）
 10. 电源管理服务（PowerService）
-11. 报警联动服务（AlarmService）
-12. 云端通信服务（CloudService）
+11. 报警联动服务（AlarmService）       （✅ v1 已实现）
+12. 云端通信服务（CloudService）       （✅ v1 已实现）
 13. 显示管理服务（DisplayService）
 ```
 
@@ -711,7 +710,7 @@ gnss.get_location() 返回有效数据
 |--------|---------|---------|---------|
 | F-ALM-01 | 碰撞自动报警 | 开发 CollisionService，订阅 IMU 数据，实现碰撞检测算法 | 能从 IMU 数据中识别真实碰撞，排除颠簸误报，发布碰撞等级 |
 | F-ALM-02 | 一键SOS求助 | 开发 AlarmService，订阅 `EVENT_BUTTON_PRESSED`，实现 SOS 报警流程 | 按键按下立即触发 SOS 声光报警 |
-| F-ALM-03 | 本地声光报警 | 在 AlarmService 中实现报警联动（LED 闪烁、音频播放、LCD 显示），发布 `EVENT_ALARM_TRIGGERED` | 报警时 LED 闪烁、播放报警音、LCD 显示报警画面 |
+| F-ALM-03 | 本地声光报警 | 在 AlarmService 中实现报警联动（LED 闪烁、音频播放、发布 `EVENT_ALARM_TRIGGERED`），LCD 报警画面由 DisplayService 负责 | 报警时 LED 闪烁、播放报警音 |
 | F-NET-01 | 骑行数据远程上传 | 开发 `Drivers/interface/Network.py` + `Drivers/interface/MQTT.py` + CloudService，实现数据打包和上传 | 传感器数据能实时上传到云端 |
 | F-NET-02 | 紧急报警远程推送 | CloudService 订阅 `EVENT_ALARM_TRIGGERED`，实现报警数据推送 | 报警事件能立即推送到云端 |
 | F-ALM-04 | 低电量提醒 | PowerService 暂为空壳（无电池），后续接入电池后再补 | 现阶段占位，不影响其他模块 |
@@ -871,7 +870,7 @@ M1: 起步验证 ──→ M2: 本地闭环 ──→ M3: 云端打通 ──→
 
 **关键成果**：
 - ✅ 碰撞检测算法实现，能识别撞击
-- ✅ 本地报警联动实现（LED 闪烁、音频报警）
+- ✅ 本地报警联动实现（AlarmService v1：LED 闪烁、音频播放、超时取消、按钮取消）
 - ✅ 敲击板子能触发报警演示
 
 
@@ -884,6 +883,7 @@ M1: 起步验证 ──→ M2: 本地闭环 ──→ M3: 云端打通 ──→
 **关键成果**：
 - ✅ 4G 网络连接成功
 - ✅ MQTT 连接 ConnectLab 平台成功
+- ✅ CloudService `Modules/cloud_service.py` 建成并 E2E 测试通过（2026-05-17）
 - ✅ 传感器数据实时上传到云端
 - ✅ 云端能查看实时数据和报警记录
 
