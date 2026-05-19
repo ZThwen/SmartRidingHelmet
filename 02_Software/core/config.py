@@ -21,7 +21,7 @@ EVENT_LIGHT_READY           = "LIGHT_READY"           # 光照数据就绪
 
 # 报警相关事件
 EVENT_COLLISION_DETECTED    = "COLLISION_DETECTED"    # 碰撞检测到
-EVENT_BUTTON_PRESSED        = "BUTTON_PRESSED"        # 按键按下事件
+EVENT_SOS_TRIGGERED         = "SOS_TRIGGERED"         # SOS按键触发
 EVENT_ALARM_TRIGGERED       = "ALARM_TRIGGERED"       # 报警触发（通用）
 EVENT_ALARM_CANCELED        = "ALARM_CANCELED"        # 报警取消
 
@@ -73,11 +73,34 @@ AUDIO_TTS_VOLUME          = 50                     # TTS音量(0-100)
 AUDIO_SPEAKER_VOLUME      = 5                      # 扬声器音量(0-7)
 AUDIO_ALARM_LOOP_COUNT    = 3                      # 报警音循环次数
 
-# ================= 碰撞检测配置 =================
-COLLISION_THRESHOLD_LOW   = 2.0    # 碰撞检测低阈值(g)
-COLLISION_THRESHOLD_HIGH  = 4.0    # 碰撞检测高阈值(g)
-COLLISION_WINDOW_SIZE     = 10     # 滑动窗口大小
-COLLISION_DURATION_MS     = 100    # 持续时间阈值(ms)
+# ================= 碰撞检测配置（裸板适配）=================
+# 多级阈值（单位：g，1g=9.8m/s²）
+COLLISION_THRESHOLD_SUSPECT    = 1.5    # 最低怀疑阈值 — 超过此值进入三级判决
+COLLISION_THRESHOLD_LIKELY     = 3.0    # 疑似碰撞下限
+COLLISION_THRESHOLD_HIGH       = 5.0    # 高度疑似下限
+COLLISION_THRESHOLD_CONFIRMED  = 8.0    # 确定碰撞阈值 — 免鉴别直接报警
+GRAVITY                        = 9.8    # 重力加速度
+
+# 滑动窗口
+COLLISION_WINDOW_SIZE          = 15     # 滑动窗口最大容量(样本数)
+COLLISION_WINDOW_DURATION_MS   = 1500   # 窗口覆盖时间范围(ms)
+
+# 防误报鉴别参数（裸板脉冲更短，但平移/抖动特征不变）
+COLLISION_PULSE_MIN_WIDTH_MS   = 60     # 最小有效脉冲宽度(ms) — 裸板敲击脉冲约 50~100ms
+COLLISION_PRE_WINDOW_MS        = 300    # 碰撞前上下文窗口(ms)
+COLLISION_FREE_FALL_THRESHOLD  = 0.8    # 失重判定阈值(g)
+COLLISION_VARIANCE_THRESHOLD   = 0.5    # 振荡方差阈值(g²)
+COLLISION_PEAK_COUNT_THRESHOLD = 3      # 振荡波峰计数阈值
+
+# 防重复触发（裸板碰撞后稳定较快）
+COLLISION_COOLDOWN_MS          = 3000   # 碰撞事件最短间隔(ms)
+
+# 碰撞等级划分阈值（裸板适用）
+COLLISION_LEVEL1_MAX_G         = 5.0    # 轻微碰撞最大峰值(g) — 轻敲板子
+COLLISION_LEVEL1_MAX_DURATION_MS = 200  # 轻微碰撞最长持续时间(ms)
+COLLISION_LEVEL2_MAX_G         = 8.0    # 中等碰撞最大峰值(g) — 用力敲击
+COLLISION_LEVEL2_MAX_DURATION_MS = 300  # 中等碰撞最长持续时间(ms)
+# 超过上述值即为等级 3（严重碰撞 — 重敲/摔落）
 
 # ================= 报警配置 =================
 ALARM_DURATION_MS         = 30000  # 报警持续时间(ms)
@@ -92,6 +115,39 @@ BATTERY_CRITICAL_THRESHOLD = 10    # 严重不足阈值(%)
 POWER_STATE_ACTIVE        = "ACTIVE"        # 正常工作状态
 POWER_STATE_SUSPENDED     = "SUSPENDED"     # 挂起状态
 POWER_STATE_DEEP_SLEEP    = "DEEP_SLEEP"    # 深度休眠状态
+
+# ================= 网络通信配置 =================
+NETWORK_CONNECT_TIMEOUT_MS = 60000    # 4G网络连接超时时间 (ms)
+
+# ================= MQTT通信配置 =================
+MQTT_BROKER             = "172.188.83.251"    # ConnectLab 服务器地址
+MQTT_PORT               = 48513               # ConnectLab 端口（每次创建会话不同）
+MQTT_USERNAME           = "quectel"           # MQTT 用户名
+MQTT_PASSWORD           = "12345678"          # MQTT 密码
+MQTT_CLIENT_ID          = "66ccff"            # MQTT 客户端 ID
+MQTT_KEEPALIVE          = 60                  # 心跳间隔 (秒)
+MQTT_MAX_RETRY          = 3                   # 最大重试次数
+
+# MQTT Topic 定义
+MQTT_TOPIC_DATA         = "helmet/data"       # 传感器数据上传
+MQTT_TOPIC_CONFIG       = "helmet/config"     # 云端配置下发
+MQTT_TOPIC_ALARM        = "helmet/alarm"      # 紧急报警推送
+MQTT_TOPIC_STATUS       = "helmet/status"     # 设备状态（含遗嘱消息）
+
+# MQTT QoS 等级
+MQTT_QOS_DATA           = 0                   # 传感器数据（允许丢失）
+MQTT_QOS_ALARM          = 1                   # 报警数据（必须送达）
+MQTT_QOS_CONFIG         = 1                   # 配置下发（必须送达）
+
+# 遗嘱消息配置
+MQTT_WILL_TOPIC         = "helmet/status"     # 遗嘱消息 Topic
+MQTT_WILL_MESSAGE       = '{"status":"offline","reason":"unexpected"}'
+MQTT_WILL_QOS           = 1
+MQTT_WILL_RETAIN        = True
+
+# ================= CloudService 配置 =================
+CLOUD_UPLOAD_INTERVAL_MS = 2000    # 数据上传间隔 (ms)
+CLOUD_GPS_TRACK_MAX      = 50      # GPS 轨迹点缓存上限
 
 # ================= 显示配置 =================
 LCD_BACKLIGHT_HIGH        = 100    # 高背光亮度(%)
