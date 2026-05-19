@@ -73,11 +73,34 @@ AUDIO_TTS_VOLUME          = 50                     # TTS音量(0-100)
 AUDIO_SPEAKER_VOLUME      = 5                      # 扬声器音量(0-7)
 AUDIO_ALARM_LOOP_COUNT    = 3                      # 报警音循环次数
 
-# ================= 碰撞检测配置 =================
-COLLISION_THRESHOLD_LOW   = 2.0    # 碰撞检测低阈值(g)
-COLLISION_THRESHOLD_HIGH  = 4.0    # 碰撞检测高阈值(g)
-COLLISION_WINDOW_SIZE     = 10     # 滑动窗口大小
-COLLISION_DURATION_MS     = 100    # 持续时间阈值(ms)
+# ================= 碰撞检测配置（裸板适配）=================
+# 多级阈值（单位：g，1g=9.8m/s²）
+COLLISION_THRESHOLD_SUSPECT    = 1.5    # 最低怀疑阈值 — 超过此值进入三级判决
+COLLISION_THRESHOLD_LIKELY     = 3.0    # 疑似碰撞下限
+COLLISION_THRESHOLD_HIGH       = 5.0    # 高度疑似下限
+COLLISION_THRESHOLD_CONFIRMED  = 8.0    # 确定碰撞阈值 — 免鉴别直接报警
+GRAVITY                        = 9.8    # 重力加速度
+
+# 滑动窗口
+COLLISION_WINDOW_SIZE          = 15     # 滑动窗口最大容量(样本数)
+COLLISION_WINDOW_DURATION_MS   = 1500   # 窗口覆盖时间范围(ms)
+
+# 防误报鉴别参数（裸板脉冲更短，但平移/抖动特征不变）
+COLLISION_PULSE_MIN_WIDTH_MS   = 60     # 最小有效脉冲宽度(ms) — 裸板敲击脉冲约 50~100ms
+COLLISION_PRE_WINDOW_MS        = 300    # 碰撞前上下文窗口(ms)
+COLLISION_FREE_FALL_THRESHOLD  = 0.8    # 失重判定阈值(g)
+COLLISION_VARIANCE_THRESHOLD   = 0.5    # 振荡方差阈值(g²)
+COLLISION_PEAK_COUNT_THRESHOLD = 3      # 振荡波峰计数阈值
+
+# 防重复触发（裸板碰撞后稳定较快）
+COLLISION_COOLDOWN_MS          = 3000   # 碰撞事件最短间隔(ms)
+
+# 碰撞等级划分阈值（裸板适用）
+COLLISION_LEVEL1_MAX_G         = 5.0    # 轻微碰撞最大峰值(g) — 轻敲板子
+COLLISION_LEVEL1_MAX_DURATION_MS = 200  # 轻微碰撞最长持续时间(ms)
+COLLISION_LEVEL2_MAX_G         = 8.0    # 中等碰撞最大峰值(g) — 用力敲击
+COLLISION_LEVEL2_MAX_DURATION_MS = 300  # 中等碰撞最长持续时间(ms)
+# 超过上述值即为等级 3（严重碰撞 — 重敲/摔落）
 
 # ================= 报警配置 =================
 ALARM_DURATION_MS         = 30000  # 报警持续时间(ms)
