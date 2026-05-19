@@ -27,10 +27,16 @@ G = 9.8
 
 class CollisionService(BaseModule):
     def __init__(self, event_bus=None):
+        """
+        brief 初始化碰撞检测服务实例
+        param event_bus: 事件总线实例引用
+        note 三级判决所需的所有阈值参数从 core.config 读取
+        """
         super().__init__()
         self.event_bus = event_bus
         self.name = "collision"
 
+        # ======================= cfg：静态配置 =======================
         self.cfg = {
             "threshold_suspect": COLLISION_THRESHOLD_SUSPECT,
             "threshold_likely": COLLISION_THRESHOLD_LIKELY,
@@ -52,6 +58,7 @@ class CollisionService(BaseModule):
             "debug": False,
         }
 
+        # ======================= ctx：运行时上下文 =======================
         self.ctx = {
             "is_init": False,
             "last_tick": 0,
@@ -61,6 +68,7 @@ class CollisionService(BaseModule):
             "last_collision_ts": 0,
         }
 
+        # ======================= _data：数据快照 =======================
         self._data = {
             "status": "normal",
             "last_peak": 0.0,
@@ -68,6 +76,9 @@ class CollisionService(BaseModule):
         }
 
     def init(self):
+        """
+        brief 初始化服务：订阅 IMU 数据事件 + 重置滑动窗口
+        """
         try:
             if  self.event_bus:
                 self.event_bus.subscribe(EVENT_IMU_READY, self._on_imu_data)
@@ -82,6 +93,10 @@ class CollisionService(BaseModule):
             raise
 
     def tick(self):
+        """
+        brief 周期调度：功耗守卫 + 时间片控制
+        note 当前为保留占位，判决逻辑在 _on_imu_data 回调中执行
+        """
         if self.ctx["power_state"] != POWER_STATE_ACTIVE:
             return
 
@@ -92,22 +107,31 @@ class CollisionService(BaseModule):
         self.ctx["last_tick"] = now
 
     def _on_imu_data(self, payload):
+        """
+        brief IMU 加速度数据回调入口
+        param payload: {"valid", "acc_total", "timestamp"} 等字段
+        note 完成 g 值归一化 → 滑动窗口更新 → 三级判决 → 冷却守卫 → 发布事件
+        """
         if not payload.get("valid", False):
             return
 
+        # ====== 第一级：物理量纲归一化 (m/s² → g) ======
         acc_total = payload.get("acc_total", 0.0)
         timestamp = payload.get("timestamp", time.ticks_ms())
         acc_g = acc_total / G
 
+        # ====== 第二级：滑动窗口更新 ======
         self._update_window(acc_g, timestamp)
 
         if acc_g < self.cfg["threshold_suspect"]:
             return
 
+        # ====== 第三级：防误报鉴别 ======
         level = self._detect_collision()
         if level is None:
             return
 
+        # ====== 冷却守卫：防重复触发 ======
         now = time.ticks_ms()
         if time.ticks_diff(now, self.ctx["last_collision_ts"]) < self.cfg["cooldown_ms"]:
             return
@@ -126,15 +150,26 @@ class CollisionService(BaseModule):
             })
 
     def _update_window(self, acc_g, timestamp):
+        """
+        brief 维护滑动窗口（时间窗口 + 数量上限双约束）
+        param acc_g: 归一化后的加速度值（单位 g）
+        param timestamp: 数据时间戳（ms）
+        """
         self.ctx["window"].append({"acc_g": acc_g, "timestamp": timestamp})
 
+        # 按时间窗口裁剪过期数据
         cutoff = timestamp - self.cfg["window_duration_ms"]
         self.ctx["window"] = [x for x in self.ctx["window"] if x["timestamp"] >= cutoff]
 
+        # 按数量上限裁剪
         if len(self.ctx["window"]) > self.cfg["window_size"] + 2:
             self.ctx["window"] = self.ctx["window"][-(self.cfg["window_size"] + 2):]
 
     def _detect_collision(self):
+        """
+        brief 三级判决算法核心：峰值判定 → 脉冲宽度 → 失重前兆 → 振荡判别 → 等级映射
+        return int（等级 1-3）或 None（非碰撞）
+        """
         window = self.ctx["window"]
         if len(window) < 3:
             return None
@@ -146,26 +181,36 @@ class CollisionService(BaseModule):
         if peak_val < self.cfg["threshold_suspect"]:
             return None
 
-     
-
+        # 峰值超过确认阈值 → 直接判为严重碰撞
         if peak_val > self.cfg["threshold_confirmed"]:
             return 3
 
+        # 峰值位于窗口末尾 → 未过确认期，暂不判决
         if peak_idx == len(acc_values) - 1:
             return None
 
+        # 脉冲宽度鉴别：排除窄脉冲干扰
         if not self._check_pulse_width(window, peak_idx, peak_val):
             return None
 
+        # 失重前兆检测：碰撞前出现自由落体 → 判为非骑行碰撞
         if self._check_freefall(window, peak_idx):
             return None
 
+        # 振荡判别：排除连续颠簸路段误报
         if self._check_oscillation(window, peak_idx):
             return None
 
         return self._determine_level(peak_val, window, peak_idx)
 
     def _check_pulse_width(self, window, peak_idx, peak_val):
+        """
+        brief 脉冲宽度鉴别：排除窄脉冲干扰（如敲击传感器）
+        param window: 滑动窗口数据
+        param peak_idx: 峰值索引
+        param peak_val: 峰值（g）
+        return bool True=有效碰撞脉冲
+        """
         suspect = self.cfg["threshold_suspect"]
         left_idx = peak_idx
         while left_idx > 0 and window[left_idx - 1]["acc_g"] >= suspect:
@@ -177,6 +222,12 @@ class CollisionService(BaseModule):
         return pulse_width >= self.cfg["pulse_min_width_ms"]
 
     def _check_freefall(self, window, peak_idx):
+        """
+        brief 失重前兆检测：碰撞前出现 <free_fall_threshold 则判为自由落体（SOS 场景）
+        param window: 滑动窗口数据
+        param peak_idx: 峰值索引
+        return bool True=存在失重前兆（非骑行碰撞）
+        """
         peak_ts = window[peak_idx]["timestamp"]
         cutoff = peak_ts - self.cfg["pre_window_ms"]
         for x in window:
@@ -186,6 +237,12 @@ class CollisionService(BaseModule):
         return False
 
     def _check_oscillation(self, window, peak_idx):
+        """
+        brief 振荡判别：方差 + 峰值计数排除连续颠簸路段误报
+        param window: 滑动窗口数据
+        param peak_idx: 峰值索引
+        return bool True=振荡特征匹配（判为颠簸非碰撞）
+        """
         acc_values = [x["acc_g"] for x in window]
         if len(acc_values) < 2:
             return False
@@ -204,6 +261,13 @@ class CollisionService(BaseModule):
         return peak_count >= self.cfg["peak_count_threshold"]
 
     def _determine_level(self, peak_val, window, peak_idx):
+        """
+        brief 根据峰值和持续时间确定碰撞等级
+        param peak_val: 加速度峰值（g）
+        param window: 滑动窗口数据
+        param peak_idx: 峰值索引
+        return int 1（轻微）/ 2（中等）/ 3（严重）
+        """
         start_ts = window[0]["timestamp"]
         end_ts = window[-1]["timestamp"]
         duration = end_ts - start_ts
@@ -215,6 +279,11 @@ class CollisionService(BaseModule):
         return 3
 
     def _on_config_update(self, payload):
+        """
+        brief 配置更新回调
+        param payload: 配置事件负载
+        note 支持动态更新所有 cfg 键值 + 功耗状态切换
+        """
         if payload.get("target") in (self.name, "", None):
             for key in self.cfg:
                 if key in payload:
@@ -227,6 +296,10 @@ class CollisionService(BaseModule):
             print(f"[{self.name}] 功耗状态: {old_state} -> {payload['power_state']}")
 
     def get_data(self):
+        """
+        brief 获取碰撞检测数据快照
+        return dict 数据副本
+        """
         return {
             "status": self._data["status"],
             "last_peak": self._data["last_peak"],
@@ -236,6 +309,10 @@ class CollisionService(BaseModule):
         }
 
     def get_status(self):
+        """
+        brief 获取运行状态
+        return dict 状态快照
+        """
         return {
             "is_init": self.ctx["is_init"],
             "power_state": self.ctx["power_state"],
