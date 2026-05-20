@@ -1,6 +1,13 @@
 """
-brief 智能骑行头盔系统入口 — v1 正式版
-note 集成 12 个模块（4 传感器 + 4 执行器 + 4 Service + 4G/MQTT）
+brief [v1] 全系统集成测试 — 12 个模块完整运行
+note 包含调试反馈订阅，用于验证所有模块协作正常
+      版本: v1 (2026-05-20 集成完成)
+      覆盖: 4 传感器 + 4 执行器 + 4 Service + 4G/MQTT
+
+运行方式：
+  1. 将本文件上传到板子 core/main.py
+  2. 或通过 Thonny 直接运行
+  3. 观察串口输出，检查所有模块初始化及事件流转
 """
 import sys
 import time
@@ -8,7 +15,9 @@ import time
 sys.path.append("..")
 
 from core.Event_Bus import EventBus
-from core.config import EVENT_SYSTEM_READY
+from core.config import (EVENT_SYSTEM_READY, EVENT_BUTTON_PRESSED,
+                    EVENT_COLLISION_DETECTED, EVENT_ALARM_TRIGGERED,
+                    EVENT_ALARM_CANCELED)
 
 from Drivers.sensor.Temp_Humid import TempHumidDriver
 from Drivers.sensor.imu import IMUDriver
@@ -28,7 +37,7 @@ from Modules.display_service import DisplayService
 
 def main():
     """
-    brief 系统入口: 12 个模块全集成，v1 正式版
+    brief [v1] 全系统测试: 12 个模块全集成，含调试事件反馈
     """
     print("🚀 智能骑行头盔系统启动...")
 
@@ -74,6 +83,7 @@ def main():
     # 4. 发布系统就绪事件
     success = len(init_order) - len(failed)
     event_bus.publish(EVENT_SYSTEM_READY, {
+        "step": 5,
         "total": len(init_order),
         "success": success,
         "failed": [m.name for m in failed],
@@ -84,6 +94,33 @@ def main():
         print(f"   离线: {', '.join(m.name for m in failed)}")
     else:
         print(f"\n✅ 系统就绪，{success} 个模块在线")
+
+    # =============================================================
+    # 调试反馈：订阅关键事件并向终端输出可读信息
+    # =============================================================
+    def _on_button_feedback(payload):
+        print(f"[操作] 👆 按键按下 (ts={payload.get('timestamp')})")
+
+    def _on_collision_feedback(payload):
+        level = payload.get("level", "?")
+        acc = payload.get("acc_total", 0)
+        print(f"[碰撞] ⚠ 检测到碰撞! 等级={level}, 峰值={acc:.1f}m/s²")
+
+    def _on_alarm_trigger_feedback(payload):
+        atype = payload.get("alarm_type", "unknown")
+        level = payload.get("level", 0)
+        print(f"[报警] 🚨 报警触发! 类型={atype}, 等级={level}")
+
+    def _on_alarm_cancel_feedback(payload):
+        dur = payload.get("duration", 0)
+        print(f"[报警] ✓ 报警已取消 (持续 {dur}ms)")
+
+    event_bus.subscribe(EVENT_BUTTON_PRESSED, _on_button_feedback)
+    event_bus.subscribe(EVENT_COLLISION_DETECTED, _on_collision_feedback)
+    event_bus.subscribe(EVENT_ALARM_TRIGGERED, _on_alarm_trigger_feedback)
+    event_bus.subscribe(EVENT_ALARM_CANCELED, _on_alarm_cancel_feedback)
+    print("[调试] 已订阅事件反馈 — 按键/碰撞/报警将在终端实时显示")
+    # =============================================================
 
     # 5. 主循环
     print("▶ 进入主循环（事件驱动）")
