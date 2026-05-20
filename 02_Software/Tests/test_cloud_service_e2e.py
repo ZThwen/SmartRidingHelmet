@@ -16,7 +16,7 @@ from core.config import (
 )
 from Drivers.sensor.Temp_Humid import TempHumidDriver
 from Drivers.sensor.imu import IMUDriver
-from Drivers.sensor.Light import LightSensorDiver
+from Drivers.sensor.Light import LightSensorDriver
 from Modules.cloud_service import CloudService
 
 
@@ -78,7 +78,7 @@ def main():
     # ====== 3. 创建模块实例 ======
     temp_humid = TempHumidDriver(event_bus)
     imu = IMUDriver(event_bus)
-    light = LightSensorDiver(event_bus)
+    light = LightSensorDriver(event_bus)
     cloud = CloudService(event_bus)
 
     modules = [temp_humid, imu, light, cloud]

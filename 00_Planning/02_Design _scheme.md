@@ -262,7 +262,7 @@ LCD 内部维护 `display_mode` 状态（normal / alarm），用于防止 Servic
 
 ### 2.2 服务层模块（业务逻辑）
 
-#### 2.2.1 碰撞检测服务（CollisionService.py）
+#### 2.2.1 碰撞检测服务（CollisionService.py）（✅ v1 已实现）
 
 **需求对应**：F-ALM-01 碰撞自动报警
 
@@ -421,7 +421,7 @@ LCD 内部维护 `display_mode` 状态（normal / alarm），用于防止 Servic
 
 ---
 
-#### 2.2.5 显示管理服务（DisplayService.py）
+#### 2.2.5 显示管理服务（DisplayService.py）（✅ v1 已实现）
 
 **所属层次**：Service层（业务服务层）
 
@@ -492,7 +492,7 @@ LCD 内部维护 `display_mode` 状态（normal / alarm），用于防止 Servic
 服务层（依赖驱动层，部分模块间也有依赖）
 ├── CollisionService  # 依赖 IMU
 ├── PowerService      # 依赖 ADC 或 AT 指令
-├── AlarmService      # 依赖 LED、Audio、LCD、CollisionService、PowerService
+├── AlarmService      # 依赖 LED、Audio（LCD 已解耦给 DisplayService）
 ├── CloudService      # 依赖所有传感器驱动、LCD
 └── DisplayService    # 依赖 Light、LCD、Audio
 
@@ -512,8 +512,9 @@ LCD 内部维护 `display_mode` 状态（normal / alarm），用于防止 Servic
  ├── Temp_Humid.tick()  (每2000ms)
  │    └── 读取 AHT20
  │    └── [E] EVENT_TEMP_HUMID_READY {temp, humid, valid, timestamp}
- │          └──→ CloudService._on_temp_humid_ready()
- │                 ├── 打包数据 → send_queue.put()     网络线程上传
+ │          ├──→ CloudService._on_temp_humid_ready()
+ │          │      └── 打包数据 → send_queue.put()     网络线程上传
+ │          └──→ DisplayService._on_temp_humid_ready()
  │                 └── LCD.show_normal_data()          报警中会被状态锁拦截
  │
  ├── IMU.tick()  (每100ms)
@@ -526,7 +527,8 @@ LCD 内部维护 `display_mode` 状态（normal / alarm），用于防止 Servic
  ├── GNSS.tick()  (每2000ms)
  │    └── gnss.get_location()
  │    ├── 有定位 → [E] EVENT_GNSS_READY {lat, lon, alt, speed_kmh, signal_quality, valid, ts}
- │    │              └──→ CloudService._on_gnss_ready() → 上传 + LCD
+ │    │              ├──→ CloudService._on_gnss_ready() → 上传
+ │    │              └──→ DisplayService._on_gnss_ready() → LCD
  │    └── 无定位 → no_fix_count++, 超阈值后:
  │                 [E] EVENT_GPS_LOST → AlarmService._on_gps_lost() → TTS
  │
@@ -644,19 +646,19 @@ gnss.get_location() 返回有效数据
 按依赖关系确定初始化顺序：
 
 ```
-1. 温湿度驱动（Temp_Humid）           （✅ 已实现）
-2. IMU 驱动（IMU）                   （✅ 已实现）
-3. GNSS 驱动（GNSS）                 （✅ 已实现）
-4. 光照驱动（Light）                  （✅ 已实现）
-5. SOS 按键驱动（Button）             （✅ 已实现）
-6. LED 驱动（LED）                   （✅ 已实现）
-7. 音频驱动（Audio）                  （✅ 已实现）
-8. LCD 驱动（LCD）                   （✅ 已实现）
-9. 碰撞检测服务（CollisionService）
-10. 电源管理服务（PowerService）
-11. 报警联动服务（AlarmService）       （✅ v1 已实现）
-12. 云端通信服务（CloudService）       （✅ v1 已实现）
-13. 显示管理服务（DisplayService）
+1. 温湿度驱动（Temp_Humid）（✅已实现）
+2. IMU 驱动（IMU）（✅已实现）
+3. GNSS 驱动（GNSS）（✅已实现）
+4. 光照驱动（Light）（✅已实现）
+5. SOS 按键驱动（Button）（✅已实现）
+6. LED 驱动（LED）（✅已实现）
+7. 音频驱动（Audio）（✅已实现）
+8. LCD 驱动（LCD）（✅已实现）
+9. 碰撞检测服务（CollisionService）（✅ v1 已实现）
+10. 电源管理服务（PowerService）（stub，USB供电暂空壳）
+11. 报警联动服务（AlarmService）（✅ v1 已实现）
+12. 云端通信服务（CloudService）（✅ v1 已实现）
+13. 显示管理服务（DisplayService）（✅ v1 已实现）
 ```
 
 ---
@@ -708,13 +710,13 @@ gnss.get_location() 返回有效数据
 
 | 需求ID | 需求名称 | 实现内容 | 验收标准 |
 |--------|---------|---------|---------|
-| F-ALM-01 | 碰撞自动报警 | 开发 CollisionService，订阅 IMU 数据，实现碰撞检测算法 | 能从 IMU 数据中识别真实碰撞，排除颠簸误报，发布碰撞等级 |
-| F-ALM-02 | 一键SOS求助 | 开发 AlarmService，订阅 `EVENT_BUTTON_PRESSED`，实现 SOS 报警流程 | 按键按下立即触发 SOS 声光报警 |
-| F-ALM-03 | 本地声光报警 | 在 AlarmService 中实现报警联动（LED 闪烁、音频播放、发布 `EVENT_ALARM_TRIGGERED`），LCD 报警画面由 DisplayService 负责 | 报警时 LED 闪烁、播放报警音 |
-| F-NET-01 | 骑行数据远程上传 | 开发 `Drivers/interface/Network.py` + `Drivers/interface/MQTT.py` + CloudService，实现数据打包和上传 | 传感器数据能实时上传到云端 |
-| F-NET-02 | 紧急报警远程推送 | CloudService 订阅 `EVENT_ALARM_TRIGGERED`，实现报警数据推送 | 报警事件能立即推送到云端 |
+| F-ALM-01 | 碰撞自动报警 | 开发 CollisionService（✅ v1 已实现），订阅 IMU 数据，实现三级判决碰撞检测算法 | 能从 IMU 数据中识别真实碰撞，排除颠簸误报，发布碰撞等级 |
+| F-ALM-02 | 一键SOS求助 | 开发 AlarmService（✅ v1 已实现），订阅 `EVENT_BUTTON_PRESSED`，实现 SOS 报警流程 | 按键按下立即触发 SOS 声光报警 |
+| F-ALM-03 | 本地声光报警 | 在 AlarmService（✅ v1 已实现）中实现报警联动（LED 闪烁、音频播放、发布 `EVENT_ALARM_TRIGGERED`），LCD 报警画面由 DisplayService（✅ v1 已实现）负责 | 报警时 LED 闪烁、播放报警音 |
+| F-NET-01 | 骑行数据远程上传 | 开发 `Drivers/network/Network.py` + `Drivers/network/MQTT.py` + CloudService（✅ v1 已实现），实现数据打包和上传 | 传感器数据能实时上传到云端 |
+| F-NET-02 | 紧急报警远程推送 | CloudService（✅ v1 已实现）订阅 `EVENT_ALARM_TRIGGERED`，实现报警数据推送 | 报警事件能立即推送到云端 |
 | F-ALM-04 | 低电量提醒 | PowerService 暂为空壳（无电池），后续接入电池后再补 | 现阶段占位，不影响其他模块 |
-| F-SEN-04 | 环境光照应用 | 开发 DisplayService，实现开机画面（Logo + TTS）+ 背光自动调节 | 开机显示队标和语音，光照变化时自动调节背光 |
+| F-SEN-04 | 环境光照应用 | 开发 DisplayService（✅ v1 已实现），实现开机画面（Logo + TTS）+ 背光自动调节 | 开机显示队标和语音，光照变化时自动调节背光 |
 
 **说明**：
 - F-ALM-01 碰撞检测算法（阈值、窗口、滤波方式）由开发人员自行设计
@@ -894,11 +896,15 @@ M1: 起步验证 ──→ M2: 本地闭环 ──→ M3: 云端打通 ──→
 
 **里程碑目标**：全功能集成 + 实车测试
 
+**当前状态**：⏳ **未达成**
+
 **关键成果**：
-- ✅ 所有模块集成到主程序
-- ✅ 系统连续运行 30 分钟稳定不死机
-- ✅ 实车测试碰撞检测无误报、漏报
-- ✅ 异常情况（断网、传感器故障）系统能降级运行
+- ⏳ 所有模块集成到主程序（`core/main.py` 的模块 imports 尚未解封，modules 列表为空）
+- ⏳ 系统连续运行 30 分钟稳定不死机（待 M4 集成后方可验证）
+- ⏳ 实车测试碰撞检测无误报、漏报（待集成后实车测试）
+- ⏳ 异常情况（断网、传感器故障）系统能降级运行（待集成后测试）
+
+**说明**：业务层 Service v1 已全部完成，但 `core/main.py` 尚未加载任何模块，无法进行系统集成与实车测试。需解封 main.py 中所有模块 imports，按初始化顺序实例化并添加到 modules 列表后，方可开展本里程碑验证。
 
 ---
 
@@ -906,15 +912,19 @@ M1: 起步验证 ──→ M2: 本地闭环 ──→ M3: 云端打通 ──→
 
 **里程碑目标**：文档完善 + 演示准备
 
+**当前状态**：⏳ **未达成**（待 M4 达成后启动）
+
 **关键成果**：
-- ✅ 设计文档编写完成
-- ✅ 演示视频录制完成
-- ✅ 答辩 PPT 制作完成
-- ✅ 开源代码包整理完成
-- ✅ 最终演示彩排成功
+- ⏳ 设计文档编写完成（待 M4 集成完成后同步完善）
+- ⏳ 演示视频录制完成
+- ⏳ 答辩 PPT 制作完成
+- ⏳ 开源代码包整理完成
+- ⏳ 最终演示彩排成功
+
+**说明**：本里程碑依赖 M4 整体集成的完成。当前阶段建议同步推进文档框架编写，但正式验收需在 M4 达成后进行。
 
 ---
 
-**文档版本**：v5.0  
-**更新日期**：2026-05-14  
+**文档版本**：v5.1  
+**更新日期**：2026-05-20  
 **维护团队**：锦依卫队

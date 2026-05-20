@@ -10,7 +10,7 @@ from core.Base_Module import BaseModule
 from core.config import EVENT_LIGHT_READY, EVENT_SENSOR_ERROR, EVENT_CONFIG_UPDATE, POWER_STATE_ACTIVE, LIGHT_SAMPLE_MS
 
 
-class LightSensorDiver(BaseModule):
+class LightSensorDriver(BaseModule):
     
     def __init__(self, event_bus=None):
         """

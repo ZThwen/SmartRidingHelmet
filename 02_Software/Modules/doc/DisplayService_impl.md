@@ -25,7 +25,7 @@
 ## 2. 文件位置
 
 ```
-02_Software/Service/DisplayService.py
+02_Software/Modules/display_service.py
 ```
 
 测试文件：`02_Software/Tests/test_display.py`

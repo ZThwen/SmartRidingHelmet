@@ -9,7 +9,7 @@ sys.path.append("..")
 
 from core.Event_Bus import EventBus
 from core.config import EVENT_SYSTEM_READY, EVENT_SENSOR_ERROR, EVENT_CONFIG_UPDATE
-from Drivers.sensor.Light import LightSensorDiver
+from Drivers.sensor.Light import LightSensorDriver
 
 try:
     from config import EVENT_LIGHT_READY
@@ -46,7 +46,7 @@ class IntegrationTest:
         print("  ✓ 已订阅: SYSTEM_READY, LIGHT_READY, SENSOR_ERROR")
         
         print("\n[步骤 3] 创建模块实例")
-        light_sensor = LightSensorDiver(self.event_bus)
+        light_sensor = LightSensorDriver(self.event_bus)
         self.modules.append(light_sensor)
         print(f"  ✓ 已创建: {light_sensor.name}")
         

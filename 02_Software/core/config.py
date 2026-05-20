@@ -72,6 +72,9 @@ AUDIO_TTS_SPEED           = 85                     # TTS语速(0-100)
 AUDIO_TTS_VOLUME          = 50                     # TTS音量(0-100)
 AUDIO_SPEAKER_VOLUME      = 5                      # 扬声器音量(0-7)
 AUDIO_ALARM_LOOP_COUNT    = 3                      # 报警音循环次数
+TTS_BATTERY_LOW           = "当前电量不足，请及时充电"
+TTS_BATTERY_CRITICAL      = "电池电量严重不足，请立即充电"
+TTS_GPS_LOST              = "GPS信号已丢失"
 
 # ================= 碰撞检测配置（裸板适配）=================
 # 多级阈值（单位：g，1g=9.8m/s²）

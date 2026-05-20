@@ -7,7 +7,7 @@ sys.path.append("..")
 
 from core.Event_Bus import EventBus
 from core.config import EVENT_SENSOR_ERROR
-from Drivers.sensor.Light import LightSensorDiver
+from Drivers.sensor.Light import LightSensorDriver
 
 try:
     from config import EVENT_LIGHT_READY
@@ -35,7 +35,7 @@ print("=" * 50)
 print("开始测试光敏传感器驱动")
 print("=" * 50)
 
-light = LightSensorDiver(event_bus)
+light = LightSensorDriver(event_bus)
 
 print("\n[测试 1] 初始化模块")
 try:

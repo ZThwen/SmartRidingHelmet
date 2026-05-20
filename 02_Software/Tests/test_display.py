@@ -7,7 +7,7 @@ MicroPython环境，需要上传到Flash执行
 2. 每个测试步骤保持5秒让用户观察
 3. 读取真实硬件数据而非假数据
 4. 图片正确加载和显示
-5. Light.py类名拼写修正：LightSensorDiver（不是LightDriver）
+5. Light.py类名：LightSensorDriver（已修正）
 6. 不读取GNSS，不测试坐标速度（室内无信号）
 """
 import time
@@ -51,11 +51,11 @@ except ImportError as e:
     TempHumidDriver = None
 
 try:
-    from Light import LightSensorDiver
-    print("[OK] LightSensorDiver导入成功（注意：类名为Diver非Driver）")
+    from Light import LightSensorDriver
+    print("[OK] LightSensorDriver导入成功")
 except ImportError as e:
-    print("[WARN] LightSensorDiver导入失败: {}".format(e))
-    LightSensorDiver = None
+    print("[WARN] LightSensorDriver导入失败: {}".format(e))
+    LightSensorDriver = None
 
 def wait_with_pump(event_bus, ms, service=None, sensors=None):
     """等待指定毫秒，期间持续调用pump和tick"""
@@ -104,9 +104,9 @@ def test_1_init_and_boot():
         sensors.append(temp_humid)
         print("[OK] 温湿度传感器初始化完成")
     
-    if LightSensorDiver:
-        print("\n[初始化] 光照传感器...")
-        light = LightSensorDiver(event_bus)
+    if LightSensorDriver:
+        print("  LightSensorDriver初始化和导入")
+        light = LightSensorDriver(event_bus)
         light.init()
         sensors.append(light)
         print("[OK] 光照传感器初始化完成")
