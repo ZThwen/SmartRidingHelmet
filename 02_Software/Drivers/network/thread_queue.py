@@ -6,6 +6,7 @@ note 基于 _thread.allocate_lock + semaphore 实现
       满队列时丢弃最旧数据，永不阻塞主线程
 """
 import _thread
+import time
 
 
 class ThreadSafeQueue:
@@ -17,7 +18,6 @@ class ThreadSafeQueue:
         self._max_size = max_size
         self._items = []
         self._lock = _thread.allocate_lock()
-        self._sem = _thread.allocate_semaphore(0)
 
     def put(self, item):
         """
@@ -29,22 +29,19 @@ class ThreadSafeQueue:
             if len(self._items) >= self._max_size:
                 self._items.pop(0)
             self._items.append(item)
-        self._sem.release()
 
     def get(self, timeout_ms=500):
         """
-        brief 出队（线程安全，支持超时等待）
-        param timeout_ms: 最大等待时间（ms），默认 500ms
-        return 队列元素，超时返回 None
+        brief 出队（线程安全）
+        param timeout_ms: 保留参数，暂不使用
+        return 队列元素，队列为空返回 None
+        note 极简实现：有数据就取，没数据直接返回 None
+             不使用 sleep/轮询，避免 MicroPython 兼容问题
+             网络线程依赖此方法，确保不崩
         """
-        try:
-            acquired = self._sem.acquire(timeout_ms)
-        except Exception:
-            acquired = False
-        if acquired:
-            with self._lock:
-                if self._items:
-                    return self._items.pop(0)
+        with self._lock:
+            if self._items:
+                return self._items.pop(0)
         return None
 
     def size(self):

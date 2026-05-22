@@ -113,7 +113,34 @@
 
 ---
 
-#### 2.1.5 SOS 按键驱动模块（Button.py）
+#### 2.1.5 心率驱动模块（HeartRate.py）【v2 新增，待开发】
+
+**所属层次**：Device层（设备封装层）
+
+**需求对应**：F-HR-01 心率监测
+
+**当前状态**：📅 **v2 计划**（等心率带硬件到货）
+
+**数据通路**：
+
+  数据统一走 MQTT 通道，与现有传感器数据上传方式一致。
+
+**模块职责**（预留）：
+
+- 周期读取心率值（bpm）
+- 缓存最新心率，供 CloudService 拼入上传 JSON
+- 异常心率（过高/过低）发布事件
+
+**发布事件**（预留）：
+- `EVENT_HEART_RATE_READY`：心率数据就绪，携带数据 `{bpm, valid, timestamp}`
+
+**依赖**：
+
+- 外接 ANT+/BLE 心率带（已采购，待到货）
+
+---
+
+#### 2.1.6 SOS 按键驱动模块（Button.py）
 
 **所属层次**：Device层（设备封装层）
 
@@ -260,6 +287,52 @@ LCD 内部维护 `display_mode` 状态（normal / alarm），用于防止 Servic
 
 ---
 
+#### 2.1.9 灯光驱动模块（Headlight.py）【v2 新增，待硬件设计】
+
+**所属层次**：Device层（设备封装层）
+
+**需求对应**：F-LIGHT-01 大功率灯光
+
+**当前状态**：🟡 **硬件设计中**，代码暂空壳占位
+
+**模块职责**（预留）：
+- PWM 控制大功率 LED
+- 支持模式切换（高亮/低亮/关闭）
+- 自适应环境光照调节
+
+**公共接口**（预留）：
+- `set_mode(mode)`：设置灯光模式
+- `get_status()`：查询当前模式
+
+**依赖**：
+- 大功率 LED 驱动电路（硬件设计中）
+
+---
+
+#### 2.1.10 Qth 网络驱动模块（Qth.py）
+
+**所属层次**：Device 层（网络通信驱动）
+
+**当前状态**：✅ **v1 已实现**（2026-05-22 E2E 测试通过）
+
+**模块功能**：封装移远云 Qth SDK 的 `init()` / `start()` / `sendTsl()` / `state()` 接口，供 LarkCloudService 调用
+
+**公共接口**：
+- `init()`：初始化 Qth SDK → 配置产品/设备信息 → 连接移远云
+- `send_tsl(tsl_dict)`：上传物模型数据（网络 I/O，需在后台线程调用）
+- `is_connected()`：查询与移远云的 MQTT 连接状态
+- `tick()`：pass（Qth SDK 内置自动重连，无需主循环干预）
+
+**降级策略**：
+- 固件无 `Qth` 库时 `ImportError` 捕获 → `is_init=False`，所有调用静默跳过
+- `sendTsl` 返回值可能不准确（实测返回 False 时数据仍可到达平台），以平台侧为准
+
+**依赖**：
+- `Qth` 库（移远固件内置）
+- `core/config` 中的产品/设备凭证常量（`QTH_PRODUCT_ID`、`QTH_DEVICE_KEY` 等）
+
+---
+
 ### 2.2 服务层模块（业务逻辑）
 
 #### 2.2.1 碰撞检测服务（CollisionService.py）（✅ v1 已实现）
@@ -340,9 +413,8 @@ LCD 内部维护 `display_mode` 状态（normal / alarm），用于防止 Servic
 **模块功能**（业务逻辑与数据上传）：
 - 持有 NetworkDriver 和 MQTTDriver 实例，在独立网络线程中初始化和运行
 - 通过 tick() 定时拼装传感器缓存数据，经线程安全队列送入网络线程发送
-- 收到报警事件后立即拼装报警 JSON 入队，不等待 tick 周期
+- 收到报警事件后切换为报警态 payload 持续入队发送，直到报警解除
 - 接收云端 MQTT 下行配置，转发为 EVENT_CONFIG_UPDATE 事件
-- 未读到的传感器数据字段在 JSON 中输出 null（区分"未采集"与"值为 0"）
 
 **发布事件**：
 - `EVENT_DATA_UPLOAD_SUCCESS`：数据上传成功
@@ -353,7 +425,7 @@ LCD 内部维护 `display_mode` 状态（normal / alarm），用于防止 Servic
 **订阅事件**：
 - `EVENT_TEMP_HUMID_READY`：温湿度数据，缓存等待打包
 - `EVENT_IMU_READY`：加速度数据，缓存等待打包
-- `EVENT_GNSS_READY`：定位数据，缓存 GPS 并更新骑行扩展字段（不上传入队）
+- `EVENT_GNSS_READY`：定位数据（含 latitude/longitude/altitude/speed_kmh/signal_quality），缓存等待打包
 - `EVENT_ALARM_TRIGGERED`：报警触发事件，立即拼装报警 JSON 入队
 
 **依赖关系**：
@@ -376,26 +448,74 @@ LCD 内部维护 `display_mode` 状态（normal / alarm），用于防止 Servic
 - 不直接操作网络硬件，通过 Device 层模块接口实现
 - 不依赖 LCD 驱动（显示由 DisplayService 负责）
 
-**骑行数据扩展（可选）**：
+**骑行数据扩展**：
 
-若需要骑行路线记录和数据总结，CloudService 维护以下累加字段，随传感器数据一并上传：
+累计计算（总里程、累计爬升、最高速度等）移至**小程序端**实现。头盔 CloudService 仅传输原始 GNSS 点位（`latitude`、`longitude`、`altitude`、`speed_kmh`），小程序端接收后：
+- 逐点 Haversine 累加总里程
+- 逐点海拔正差值累加总爬升
+- 跟踪最高速度
+- 记录骑行时长（第一条数据到最新一条的时间差）
 
-| 字段 | 来源 | 说明 |
-|:----:|:----:|:------|
-| `total_distance` | GNSS 经纬度 | 累加相邻点 Haversine 距离，单位 km |
-| `max_speed` | GNSS 速度 | 周期内取最大值，单位 km/h |
-| `ride_duration` | 系统计时 | v2 计划（需状态机就绪） |
-| `total_ascent` | GNSS 海拔 | 累加海拔正差值，单位 m |
-| `collision_count` | CollisionService | 碰撞触发计数 |
-| `gps_track` | GNSS 点队列 | 最近 N 个 `{lat, lon}` 点（上限 `CLOUD_GPS_TRACK_MAX`），上报后清空 |
+---
 
-上传后云端可用这些数据还原骑行路线、生成骑行总结卡片。
+#### 2.2.8 移远云通信服务（LarkCloudService）
+
+**所属层次**：Service 层（业务服务层）
+
+**需求对应**：F-NET-01 骑行数据远程上传（新增移远云 Qth 通道）
+
+**当前状态**：✅ **v1 已实现**（2026-05-22 E2E 测试通过）
+
+> ⚠️ 单模块测试 11/12、集成测试因 MicroPython 线程兼容问题暂未完全通过，但不影响 E2E 真实硬件环境运行
+
+**模块功能**：
+- 使用 Qth SDK 接入移远云平台（`iot-south.quectelcn.com:1883`）
+- 与 CloudService（ConnectLab）并存，订阅相同的传感器事件
+- tick() 拼装 TSL 物模型数据 → 线程安全队列 → 网络线程调用 QthDriver.sendTsl()
+- 报警时上传 alarm_type + alarm_level（ID 6/7）
+
+**TSL 物模型**：
+
+属性列表：
+
+| 功能ID | 功能类型 | 功能名称 | 标识符 | 数据类型 | 读写类型 |
+|:------:|:--------|:---------|:-------|:--------|:--------|
+| 1 | 属性 | 温度 | temperature | float | 只读 |
+| 2 | 属性 | 湿度 | humidity | float | 只读 |
+| 3 | 属性 | 速度 | speed | float | 只读 |
+| 4 | 属性 | 纬度 | latitude | float | 只读 |
+| 5 | 属性 | 信号质量 | signal_quality | enum | 只读 |
+| 6 | 属性 | 报警类型 | alarm_type | enum | 只读 |
+| 7 | 属性 | 报警等级 | alarm_level | int | 只读 |
+| 8 | 属性 | 经度 | longitude | float | 只读 |
+| 9 | 属性 | 海拔 | altitude | float | 只读 |
+
+> **数据结构体（location）因 Qth SDK 不支持嵌套而拆为 3 个独立 float**：ID 4（纬度）、ID 8（经度）、ID 9（海拔）
+
+**报警态数据分离**：
+- 常态上传：ID 1~5, 8, 9（温湿度 + 速度 + 位置 + 信号质量）
+- 报警态上传：仅 ID 4~9（位置 + 信号质量 + 报警类型/等级），不传温湿度和速度以减少传输量
+
+**线程模型**：
+- 主线程：收事件 → 缓存 → tick() 拼装 TSL → `send_queue.put()`
+- 网络线程：`send_queue.get()` → `QthDriver.send_tsl()`（Qth SDK 自动管理 MQTT 重连）
+
+**分层设计说明**：
+- Service 层 LarkCloudService 负责数据打包和上传业务逻辑
+- 持有 Device 层 QthDriver 实例，调用其 `send_tsl()` 接口完成上传
+- QthDriver 封装 Qth SDK 的 `init()` / `sendTsl()` / `state()` 接口
+- Qth SDK 内部管理 MQTT 连接和自动重连，LarkCloudService 无需自行管理网络线程重连
+- 不依赖 NetworkDriver / MQTTDriver（Qth SDK 内置通信）
+
+**降级策略**：
+- 固件无 Qth 库时 `ImportError` 捕获 → 模块静默跳过，不影响其他模块
+- 移远云不可达时网络线程跳过发送，数据留在队列中等待恢复
 
 ---
 
 #### 2.2.4 电源管理服务（PowerService.py）
 
-**当前状态**：空壳占位（等待电池供电接入）
+**当前状态**：⏳ **v2 计划**（等待电池供电硬件就绪）
 
 当前开发阶段使用 USB 双线供电（EC200U Type-C + Nucleo Micro-USB），无法读取真实电池电量，因此 PowerService 暂不实现。
 
@@ -473,6 +593,119 @@ LCD 内部维护 `display_mode` 状态（normal / alarm），用于防止 Servic
 - Service 层负责显示策略和背光调节逻辑
 - 订阅光照事件实现自适应背光，订阅报警事件协调显示策略
 - 不直接操作硬件，通过调用 LCD 驱动接口实现
+
+---
+
+#### 2.2.6 导航引导服务（NavigationService.py）【v2 新增，待开发】
+
+**所属层次**：Service层（业务服务层）
+
+**需求对应**：F-NAV-01 导航引导
+
+**当前状态**：📅 **v2 计划**（等待微信小程序 Step B 启动后同步开发）
+
+**模块职责**（预留）：
+- 接收微信小程序下发的路线点列表（MQTT Topic `helmet/nav`）
+- 每 2 秒 GNSS 定位比对，判断是否到达下一个引导点
+- 到达引导点时触发 TTS 播报引导指令
+- 偏离路线时通过 MQTT 通知小程序重新规划
+
+**数据流**：
+  小程序（高德规划路线）→ MQTT → NavigationService → GNSS 比对 → TTS 播报
+
+**发布事件**（预留）：
+- `EVENT_NAV_WAYPOINT_REACHED`：到达引导点
+- `EVENT_NAV_OFF_ROUTE`：偏离路线
+
+**依赖**：
+- GNSS 驱动（已有）
+- Audio 驱动 TTS 播报（已有）
+- 微信小程序 Step B（待开发）
+
+---
+
+#### 2.2.7 微信小程序（WeChatMiniProgram）【v2 新增，设计中】
+
+**所属层次**：外部应用层
+
+**需求对应**：F-NAV-01 导航引导、F-VOICE-01 语音交互
+
+**当前状态**：🔵 **设计中**，三步走开发
+
+**开发计划**：
+
+| 步骤 | 内容 | 头盔端依赖 |
+|:----:|:----|:---------:|
+| Step A | MQTT 数据格式统一 + 实时数据显示 + 骑行总结 + 轨迹绘制 | CloudService 数据格式改造（蛇形命名、报警态持续发送、精简字段） |
+| Step B | 导航功能（高德 API 规划路线 → MQTT 下发） | NavigationService |
+| Step C | 语音交互（微信语音识别 → MQTT 命令 → 头盔执行） | 命令处理回调 |
+
+**通信方式**：
+  小程序 ↔ MQTT Broker（ConnectLab）↔ 头盔，所有数据走 `helmet/data` Topic（统一 topic，`type` 字段区分模式）。
+
+---
+
+#### MQTT 数据格式（`helmet/data`）
+
+**正常态（type = normal）**
+
+```json
+{
+  "type": "normal",
+  "temp": 28.5,
+  "humidity": 65.2,
+  "speed_kmh": 15.2,
+  "latitude": 22.5431,
+  "longitude": 113.9523,
+  "altitude": 10.0,
+  "signal_quality": "good",
+  "timestamp": 12345678
+}
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `type` | string | `"normal"`，小程序据此切换显示模式 |
+| `temp` | float | 温度（°C） |
+| `humidity` | float | 湿度（%） |
+| `speed_kmh` | float | 当前速度（km/h） |
+| `latitude` | float | 纬度 |
+| `longitude` | float | 经度 |
+| `altitude` | float | 海拔（m） |
+| `signal_quality` | string | 信号质量：`good`/`fair`/`poor`/`none` |
+| `timestamp` | int | 时间戳（ticks_ms） |
+
+**报警态（type = alarm）**
+
+```json
+{
+  "type": "alarm",
+  "alarm_type": "collision",
+  "level": 2,
+  "latitude": 22.5431,
+  "longitude": 113.9523,
+  "altitude": 10.0,
+  "timestamp": 12345678
+}
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `type` | string | `"alarm"`，小程序切换报警显示 |
+| `alarm_type` | string | 报警类型：`collision` / `sos` |
+| `level` | int | 严重等级 1-3 |
+| `latitude` | float | 报警时纬度 |
+| `longitude` | float | 报警时经度 |
+| `altitude` | float | 报警时海拔 |
+| `timestamp` | int | 时间戳 |
+
+**报警态行为**：报警触发后，`helmet/data` 不再发送正常数据，改为 **持续每 2 秒发送报警 payload**，直到报警解除。小程序端收到 `type: "normal"` 即代表报警结束。
+
+**信号质量**：复用 GNSS 驱动已实现的判定逻辑（基于卫星数 + HDOP），输出 `good` / `fair` / `poor` / `none`。
+
+**累计字段说明**：总里程、累计爬升、最高速度、碰撞次数等累计数据由**小程序端自行根据原始 GPS 点计算**，头盔端不再维护这些累加字段。
+
+**心率先留空**：v2 心率带硬件到货后，在正常态 JSON 中增加 `heart_rate` 字段。
 
 ---
 
@@ -654,11 +887,23 @@ gnss.get_location() 返回有效数据
 6. LED 驱动（LED）（✅已实现）
 7. 音频驱动（Audio）（✅已实现）
 8. LCD 驱动（LCD）（✅已实现）
-9. 碰撞检测服务（CollisionService）（✅ v1 已实现）
-10. 电源管理服务（PowerService）（stub，USB供电暂空壳）
-11. 报警联动服务（AlarmService）（✅ v1 已实现）
-12. 云端通信服务（CloudService）（✅ v1 已实现）
-13. 显示管理服务（DisplayService）（✅ v1 已实现）
+9. 网络驱动：Network → MQTT（✅已实现）
+10. 网络驱动：Qth（✅ v1 已实现）
+11. 碰撞检测服务（CollisionService）（✅ v1 已实现）
+12. 电源管理服务（PowerService）（⏳ v2 计划，等电池硬件）
+13. 报警联动服务（AlarmService）（✅ v1 已实现）
+14. 云端通信服务（CloudService）（✅ v1 已实现）
+15. 移远云通信服务（LarkCloudService）（✅ v1 已实现）
+16. 显示管理服务（DisplayService）（✅ v1 已实现）
+
+**v2 新增模块**：
+
+| # | 模块 | 状态 | 说明 |
+|:-|:----|:----|:------|
+| 17 | 心率驱动（HeartRate） | 📅 v2 | BLE 扫描心率带广播数据 |
+| 18 | 大功率灯光驱动（Headlight） | 📅 v2 | PWM 控制高亮 LED |
+| 19 | 导航引导服务（NavigationService） | 📅 v2 | GNSS 比对路线点 + TTS 播报 |
+| 20 | 微信小程序（WeChatMiniProgram） | 📅 v2 | 骑行伴侣，含实时数据/地图/总结 |
 ```
 
 ---
@@ -723,7 +968,7 @@ gnss.get_location() 返回有效数据
 - F-ALM-02/03 报警优先级由 AlarmService 统一仲裁（SOS > 碰撞），通过发布 `EVENT_ALARM_TRIGGERED` 通知 CloudService
 - F-NET-01 依赖 `Drivers/interface/Network.py` 和 `Drivers/interface/MQTT.py`，需在 CloudService 之前或同步完成
 - F-NET-02 CloudService 只订阅 `EVENT_ALARM_TRIGGERED`，不直接订阅碰撞/按键原始事件，避免重复推送
-- PowerService 当前阶段为空壳占位（USB 供电无法读取电池电量），不影响其他模块开发
+- PowerService **已移入 v2 计划**，等电池供电硬件就绪后开发
 - DisplayService 包含开机画面（队伍 Logo + TTS）和背光调节，依赖 LCD、Audio、Light
 - DisplayService 需要提前准备队伍 Logo 的 RGB565 取模数据，存入 `team_logo.py`
 - 每开发一个业务模块，立即在板子上测试
@@ -774,7 +1019,31 @@ gnss.get_location() 返回有效数据
 
 ---
 
-### 阶段 4：系统测试与优化
+### 阶段 4：v2 功能扩展（📅 规划中）
+
+**核心任务**：
+- 电源管理模块（依赖电池供电硬件就绪）
+- 心率监测模块（数据统一走 MQTT，BLE 为本地传输接口）
+- 大功率灯光驱动（自适应灯光，依赖硬件设计完成）
+- 导航引导服务（微信小程序规划路线 → 头盔 GNSS 比对 → TTS 播报）
+- 语音交互（微信小程序语音识别 → MQTT 命令 → 头盔执行）
+- 微信小程序三步走（通信 → 导航 → 语音）
+
+**v2 新增/变动模块一览**：
+
+| 模块 | 类型 | 状态 | 关键依赖 |
+|:----|:----|:----:|:--------|
+| PowerService | 服务 | 🟡 等硬件 | 电池供电方案就绪 |
+| HeartRate | 驱动 | 🟡 待开发 | 心率带硬件到货 |
+| Headlight | 驱动 | 🟡 等硬件 | 大功率 LED 电路设计 |
+| NavigationService | 服务 | 📅 待开发 | 小程序 Step B |
+| WeChatMiniProgram | 外部 | 📅 待开发 | 无 |
+
+**集成策略**：与 v1 相同的逐步集成原则，每个模块独立开发验证后加入 main.py。
+
+---
+
+### 阶段 5：系统测试与优化
 
 **核心任务**：
 - 完整功能测试（所有需求功能）
@@ -894,11 +1163,11 @@ M1: 起步验证 ──→ M2: 本地闭环 ──→ M3: 云端打通 ──→
 
 ---
 
-### M4: 整体集成
+### M4: v1 整体集成 ✅
 
-**里程碑目标**：全功能集成 + 实车测试
+**里程碑目标**：全功能集成（已完成）
 
-**当前状态**：⏳ **未达成**
+**当前状态**：✅ **已完成**
 
 **关键成果**：
 - ✅ **v1 系统集成完成** — `core/main.py` 加载全部 12 个模块，按序初始化，容错跳过失败模块
@@ -911,24 +1180,43 @@ M1: 起步验证 ──→ M2: 本地闭环 ──→ M3: 云端打通 ──→
 
 ---
 
-### M5: 完美收官
+### M5: v2 设计与集成 📅
 
-**里程碑目标**：文档完善 + 演示准备
+**里程碑目标**：电源管理、心率监测、灯光驱动、导航引导、语音交互、微信小程序
 
-**当前状态**：⏳ **未达成**（待 M4 达成后启动）
+**当前状态**：📅 **进行中**
 
-**关键成果**：
-- ⏳ 设计文档编写完成（待 M4 集成完成后同步完善）
-- ⏳ 演示视频录制完成
-- ⏳ 答辩 PPT 制作完成
-- ⏳ 开源代码包整理完成
-- ⏳ 最终演示彩排成功
+**子里程碑**：
 
-**说明**：本里程碑依赖 M4 整体集成的完成。当前阶段建议同步推进文档框架编写，但正式验收需在 M4 达成后进行。
+| 子里程碑 | 内容 | 状态 |
+|:--------|:----|:----:|
+| M5.1 电源管理 | PowerService（等电池硬件） | 🟡 等硬件 |
+| M5.2 灯光驱动 | Headlight（等灯光硬件） | 🟡 等硬件 |
+| M5.3 心率模块 | HeartRate 驱动（数据走 MQTT） | 🟡 等心率带到货 |
+| M5.4 微信小程序 | Step A: MQTT数据格式设计 + 实时显示 + 骑行总结 + 轨迹 | 🔵 设计中 |
+| | Step B: 导航功能（高德 API → 头盔 TTS） | 📅 第二步 |
+| | Step C: 语音交互（微信语音识别 → 头盔响应） | 📅 第三步 |
+| M5.5 导航+语音 | NavigationService，GNSS 比对 + TTS 播报 | 📅 等小程序就绪 |
+| M5.6 移远云通道 | LarkCloudService + QthDriver，Qth SDK 接入移远云 | ✅ v1 已完成 |
 
 ---
 
-**文档版本**：v5.2  
+### M6: 整体收官 📅
+
+**里程碑目标**：文档完善 + 演示准备 + 开源整理
+
+**当前状态**：📅 **待 M5 达成后启动**
+
+**关键成果**（规划）：
+- 📅 完整设计文档编写完成
+- 📅 演示视频录制完成
+- 📅 答辩 PPT 制作完成
+- 📅 开源代码包整理完成
+- 📅 最终演示彩排成功
+
+---
+
+**文档版本**：v6.0  
 **更新日期**：2026-05-21  
 **维护团队**：锦依卫队  
-**备注**：M4 v1 系统集成完成，`core/main.py` 已加载全部 12 个模块
+**备注**：v1 集成完成（M4），v2 规划进行中（M5），整体收官待启动（M6）
