@@ -2,7 +2,7 @@
 
 > **所属层次**：Service 层
 > **涉及平台**：移远云 DMP（iot-south.quectelcn.com）
-> **实现状态**：🔵 验证中
+> **实现状态**：✅ v1 已实现（2026-05-22 E2E 测试通过）
 > **负责人员**：郑皓文
 
 ---
@@ -44,21 +44,28 @@
 ### 2.2 数据上传格式
 
 ```python
-# 正常态（每 2 秒）
+# 正常态（每 2 秒）：全量字段 + 显式清除报警
 Qth.sendTsl(1, {
     1: 28.5,                               # temperature   float
     2: 65.2,                               # humidity      float
     3: 15.2,                               # speed         float
-    4: 22.54,   # latitude  float
-    8: 113.95,  # longitude float
-    9: 10.0,    # altitude  float
-    5: 3,                                   # signal_quality enum (3良好 2一般 1差 0无)
+    4: 22.54,                              # latitude      float
+    5: 3,                                  # signal_quality enum (3良好 2一般 1差 0无)
+    6: 0,                                  # alarm_type=0 显式清除（防止 API 缓存旧报警值）
+    7: 0,                                  # alarm_level=0 辅助清除
+    8: 113.95,                             # longitude     float
+    9: 10.0,                               # altitude      float
 })
 
-# 报警态（ID 6/7 作为独立属性上传）
-Qth.sendTsl(1, {6: 1, 7: 2})
-# ID 6 alarm_type: 0=正常 1=碰撞 2=SOS
-# ID 7 alarm_level: 1~3
+# 报警态（精简传输）：仅 ID 4~9，不传温湿度/速度
+Qth.sendTsl(1, {
+    4: 22.54,                              # latitude      float
+    5: 3,                                  # signal_quality enum
+    6: 1,                                  # alarm_type: 0=正常 1=碰撞 2=SOS
+    7: 2,                                  # alarm_level: 1~3
+    8: 113.95,                             # longitude     float
+    9: 10.0,                               # altitude      float
+})
 ```
 
 ### 2.3 物模型详细定义
@@ -228,109 +235,126 @@ PDF 5.2 节 `sendTsl` 原文：
 
 ---
 
-## 3. 第二段：移远云 → 小程序
+## 3. 第二段：移远云 → 小程序 ✅
 
-### 3.1 配置获取
+> **验证状态**：✅ HTTP 轮询验证通过（2026-05-22）
+> 详细开发过程、踩坑记录见 **`WeChatMiniProgram/README.md`**
 
-在 DMP 平台创建 App 后得到（来自 Android SDK `QuecPublicConfigBean`）：
+### 3.1 方案选型
 
+| 方案 | 描述 | 优缺点 |
+|:-----|:-----|:------|
+| **WebSocket 实时推送** | 小程序 `wx.connectSocket` 连移远云，login→subscribe→收推送 | ✅ 低延迟 ⚠️ 协议未文档化，需从 Android SDK 逆向 |
+| **HTTP 轮询** ✅ | 小程序 `wx.request` 每 2 秒调 REST API 拉最新属性 | ✅ 平台无关，`wx.request` 直接调 ⚠️ 2 秒延迟，有冗余请求 |
+
+> **选择 HTTP 轮询**：Step A 目标是"把数据读出来显示"，轮询延迟在可用范围内；WebSocket 协议留到 Step B/C 需要低延迟场景时接入。
+
+### 3.2 用到的 OpenAPI
+
+BaseURL：`https://iot-api.quectelcn.com`（中国数据中心）  
+API 文档：https://iot-cloud-docs.quectelcn.com
+
+**用户管理**：
+
+| API | 用途 | 认证方式 |
+|:----|:-----|:---------|
+| `POST /v2/sms/enduserapi/v2/sendPhoneSmsCode` | 发送短信验证码 | `signature`（SHA256） |
+| `POST /v2/enduser/enduserapi/v2/phonePwdRegister` | 手机号密码注册 | AES 加密密码 |
+| `POST /v2/enduser/enduserapi/phonePwdLogin` | 手机号密码登录 | AES + SHA256 → `accessToken` + `refreshToken` |
+
+**设备管理**：
+
+| API | 用途 |
+|:----|:-----|
+| `POST /v2/binding/enduserapi/bindDeviceSn` | SN 绑定设备 |
+| `GET /v2/binding/enduserapi/userDeviceList` | 查询已绑定设备列表 |
+| `GET /v2/binding/enduserapi/productTSL` | 查询物模型 TSL 定义 |
+| `GET /v2/binding/enduserapi/getDeviceBusinessAttributes` | **查询设备业务属性（核心）** |
+
+> 参数方式为 Query String（`?pk=xxx&dk=xxx`），Header 带 `Authorization: Bearer {token}`。
+
+### 3.3 数据格式与映射
+
+**API 返回结构**：
+
+```json
+{
+  "code": 200,
+  "data": {
+    "customizeTslInfo": [
+      {"abId": 1, "resourceCode": "temperature", "resourceValce": "28.5"},
+      {"abId": 4, "resourceCode": "latitude",    "resourceValce": "22.5431"}
+    ]
+  }
+}
 ```
-userDomain      = "xxx"          # 用户域
-userDomainSecret = "xxx"         # 用户域密钥
-baseUrl         = "https://xxx"  # HTTP API 地址
-webSocketV2Url  = "wss://xxx"    # WebSocket 地址（小程序用这个）
-```
 
-### 3.2 用户登录（HTTP）
+| 字段 | 实际 API 返回 | 我们预期的 | 说明 |
+|:-----|:-----|:-----|:-----|
+| ID | `abId` | `id` | API 命名不同 |
+| 值 | `resourceValce` | `value` | API 拼写错误（应为 resourceValue） |
+| 字段名 | `resourceCode` | `code` | — |
 
-Android API 参考：`IUserService.手机号密码登录()`
+**TSL ID 映射表**：
 
-```
-小程序 wx.request：
-  POST {baseUrl}/user/login
-  Body: {phone: "138xxxx", password: "xxx"}
-  Response: {code: 200, data: {token: "xxx", uid: "xxx"}}
-```
+| abId | resourceCode | 中文 | 类型 | 单位 |
+|:----:|:-------------|:-----|:-----|:-----|
+| 1 | temperature | 温度 | FLOAT | °C |
+| 2 | humidity | 湿度 | FLOAT | % |
+| 3 | speed | 速度 | FLOAT | km/h |
+| 4 | latitude | 纬度 | FLOAT | ° |
+| 5 | signal_quality | 信号质量 | ENUM(0~3) | — |
+| 6 | alarm_type | 报警类型 | ENUM(0~2) | — |
+| 7 | level | 报警等级 | INT(1~3) | — |
+| 8 | longitude | 经度 | FLOAT | ° |
+| 9 | altitude | 海拔 | FLOAT | m |
 
-保存 token，后续请求带 `Authorization: Bearer {token}`。
+> 常态下设备只传 ID 1~5,8,9（无 ID 6/7），报警态额外传 ID 6/7。小程序端每次轮询时默认 `alarm="正常"`，仅当收到 `abId=6` 且值 ≠ 0 时覆盖为报警文案。
 
-### 3.3 查询设备属性（HTTP）
+### 3.4 验证清单
 
-```
-小程序 wx.request：
-  POST {baseUrl}/device/properties
-  Header: Authorization: Bearer {token}
-  Body: {productKey: "p11yq3", deviceKey: "123600000000000"}
-  Response: {code: 200, data: [{id: 1, value: 28.5}, ...]}
-```
+- [x] DMP 平台创建 App，获取 userDomain / userDomainSecret ✅
+- [x] App 关联产品 p11yMv ✅
+- [x] curl：短信验证码 → 注册用户 → 登录获取 token ✅
+- [x] curl：SN 绑定设备 → 查询 TSL 模型 → 查询业务属性 ✅
+- [x] 小程序：`wx.request` 轮询 `getDeviceBusinessAttributes` ✅
+- [x] 小程序：数据正确解析并显示（温度/湿度/速度/位置/信号/报警） ✅
+- [x] 报警态与常态差异显示正确（常态不残留报警状态） ✅
+- [x] 小程序登录 UI（手机号+密码→crypto→QuecCloud AIP） ✅
+- [x] 骑行控制（开始/结束/确认弹窗） ✅
+- [x] 数据缓存与骑行总结（时长/速度/温度/里程/报警） ✅
+- [x] 地图轨迹（polyline 实时绘制 + 展开/收起 + 跟随/手动） ✅
+- [ ] WebSocket 实时推送（📅 后续）
+- [ ] 导航 + 语音播报（📅 v2）
 
-### 3.4 WebSocket 实时推送
-
-Android API 参考：`IWebSocketService`
-
-```
-小程序步骤：
-1. wx.connectSocket({url: webSocketV2Url})
-2. wx.onSocketOpen → 发送 login 消息（带 token）
-3. 登录成功 → 调 subscribeDevice("123600000000000", "p11yq3")
-4. wx.onSocketMessage → 收到 TSL 数据更新
-```
-
-### 3.5 TSL 数据对应关系
-
-| 数据 | ID | 设备端发送 | 小程序端收到 |
-|:-----|:--:|:-----------|:------------|
-| 温度 | 1 | `sendTsl(1, {1: 28.5})` | `{id:1, value:28.5, type:"float"}` |
-| 湿度 | 2 | `sendTsl(1, {2: 65.2})` | `{id:2, value:65.2, type:"float"}` |
-| 速度 | 3 | `sendTsl(1, {3: 15.2})` | `{id:3, value:15.2, type:"float"}` |
-| 纬度 | 4 | `sendTsl(1, {4: 22.54, 8: 113.95, 9: 10.0})` | `{id:4, value:22.54, type:"float"}` |
-| 经度 | 8 | 同上 | `{id:8, value:113.95, type:"float"}` |
-| 海拔 | 9 | 同上 | `{id:9, value:10.0, type:"float"}` |
-| 信号 | 5 | `sendTsl(1, {5: 3})` | `{id:5, value:3, type:"enum"}` |
-| 报警类型 | 6 | `sendTsl(1, {6: 1, 7: 2})` | `{id:6, value:1, type:"enum"}` |
-| 报警等级 | 7 | `sendTsl(1, {6: 1, 7: 2})` | `{id:7, value:2, type:"int"}` |
-
-### 3.6 验证清单
-
-- [ ] DMP 平台创建 App，拿到 baseUrl / webSocketV2Url
-- [ ] 小程序 wx.request() 调登录 → 拿到 token
-- [ ] 小程序调设备属性查询 → 返回 TSL 数据
-- [ ] 小程序 wx.connectSocket() 连 webSocketV2Url 成功
-- [ ] WebSocket 订阅设备后收到实时推送
-- [ ] 推送数据与头盔上传一致
+> **验证策略**：先用 curl 逐接口验证 → 确认 API 返回格式 → 再写小程序代码。避免了在小程序中盲猜 URL/参数/返回格式的低效迭代。
 
 ---
 
-## 4. 验证通过后的后续方向
+## 4. 当前状态与后续任务
 
-### 4.1 头盔端
+### 4.1 已完成 ✅
 
-| 文件 | 任务 |
-|:-----|:-----|
-| `Modules/lark_cloud.py` | **新建**，按 2.1 节 API 实现 Qth 接入 |
-| `core/config.py` | 新增产品/设备配置常量 |
-| `core/main.py` | 集成 LarkCloudService |
+| 层 | 模块 | 状态 |
+|:---|:-----|:----:|
+| Device | QthDriver (`Drivers/network/Qth.py`) | ✅ |
+| Service | LarkCloudService (`Modules/lark_cloud.py`) | ✅ |
+| E2E | 设备→移远云 DMP 数据链路 | ✅ |
+| 小程序 | 登录+实时数据+骑行控制+总结+地图（`WeChatMiniProgram/`） | ✅ |
+| 小程序 | 地图轨迹、展开/收起、跟随/手动回正 | ✅ |
 
-### 4.2 小程序端
+### 4.2 后续任务 📅
 
-| 文件 | 当前 | 改后 |
-|:-----|:-----|:-----|
-| `utils/constants.js` | `WS_URL = "ws://localhost:8765"` | `WS_URL = webSocketV2Url` |
-| `utils/mqtt-client.js` | 连 bridge.py | 连移远云 WebSocket + login + subscribe |
-| `app.js` | — | 新增用户登录和设备绑定逻辑 |
+| 优先级 | 任务 | 说明 |
+|:------|:-----|:-----|
+| 高 | 小程序登录页 | 替换硬编码 token，实现短信→注册→登录 UI |
+| 高 | token 自动刷新 | accessToken 过期后用 refreshToken 续期 |
+| 中 | WebSocket 实时推送 | 替换 HTTP 轮询，降低延迟 |
+| 中 | 报警弹窗 | 小程序收到 alarm_type≠0 时弹窗提醒 |
+| 低 | 骑行总结 + 轨迹 | 利用 `/v2/quecdatastorage/enduserapi/getLocationHistory` |
 
-### 4.3 可废弃
+### 4.3 不再需要
 
-- `bridge/bridge.py` — 不再需要，小程序直连移远云
-- ConnectLab MQTT 通道 — 可选保留或移除
-
----
-
-## 5. 待确认的问题
-
-| 问题 | 说明 |
-|:-----|:------|
-| WebSocket login 消息的 JSON 格式 | Android SDK 封装了细节，小程序侧需确认协议格式 |
-| HTTP API 的具体路径 | 需要查 DMP 端 API 文档或抓包 Android Demo |
-| WebSocket 推送的结构是否与 sendTsl ID 一致 | 需要实测确认 |
-| 小程序能否直接 WebSocket login/subscribe | 可能需先通过 HTTP 获取 ticket |
+- `bridge/bridge.py` — 小程序直连移远云，无需中间桥接
+- Android SDK Demo — 仅用于参考 URL 和 API 格式
+- ConnectLab MQTT 通道 — 与移远云并存，不是替代关系

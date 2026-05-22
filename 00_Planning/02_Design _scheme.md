@@ -624,24 +624,26 @@ LCD 内部维护 `display_mode` 状态（normal / alarm），用于防止 Servic
 
 ---
 
-#### 2.2.7 微信小程序（WeChatMiniProgram）【v2 新增，设计中】
+#### 2.2.7 微信小程序（WeChatMiniProgram）【v2 新增，Step A 已完成】
 
 **所属层次**：外部应用层
 
 **需求对应**：F-NAV-01 导航引导、F-VOICE-01 语音交互
 
-**当前状态**：🔵 **设计中**，三步走开发
+**当前状态**：🟢 **Step A 已完成**（2026-05-22 全功能上线），三步走开发
 
 **开发计划**：
 
-| 步骤 | 内容 | 头盔端依赖 |
-|:----:|:----|:---------:|
-| Step A | MQTT 数据格式统一 + 实时数据显示 + 骑行总结 + 轨迹绘制 | CloudService 数据格式改造（蛇形命名、报警态持续发送、精简字段） |
-| Step B | 导航功能（高德 API 规划路线 → MQTT 下发） | NavigationService |
-| Step C | 语音交互（微信语音识别 → MQTT 命令 → 头盔执行） | 命令处理回调 |
+| 步骤 | 内容 | 状态 |
+|:----:|:----|:----:|
+| Step A | 登录+实时数据+骑行控制+总结+地图轨迹 | ✅ 已完成 |
+| Step B | 骑行总结 + 轨迹地图 + 导航功能 | 📅 后续 |
+| Step C | 语音交互（微信语音识别 → 命令下发） | 📅 后续 |
 
 **通信方式**：
-  小程序 ↔ MQTT Broker（ConnectLab）↔ 头盔，所有数据走 `helmet/data` Topic（统一 topic，`type` 字段区分模式）。
+  小程序 → HTTP 轮询 → 移远云 OpenAPI（`iot-api.quectelcn.com`）→ 查询设备属性数据
+
+> 实际通信不走 MQTT/ConnectLab，而是通过移远云 REST API 获取设备已上报的 TSL 数据。详细开发记录见 `WeChatMiniProgram/README.md`。
 
 ---
 
@@ -903,7 +905,7 @@ gnss.get_location() 返回有效数据
 | 17 | 心率驱动（HeartRate） | 📅 v2 | BLE 扫描心率带广播数据 |
 | 18 | 大功率灯光驱动（Headlight） | 📅 v2 | PWM 控制高亮 LED |
 | 19 | 导航引导服务（NavigationService） | 📅 v2 | GNSS 比对路线点 + TTS 播报 |
-| 20 | 微信小程序（WeChatMiniProgram） | 📅 v2 | 骑行伴侣，含实时数据/地图/总结 |
+| 20 | 微信小程序（WeChatMiniProgram） | 🟢 Step A 完成 | 登录+实时数据+骑行控制+总结+地图轨迹 |
 ```
 
 ---
@@ -1120,8 +1122,28 @@ gnss.get_location() 返回有效数据
 ### 里程碑总览
 
 ```
-M1: 起步验证 ──→ M2: 本地闭环 ──→ M3: 云端打通 ──→ M4: 整体集成 ──→ M5: 完美收官
+M1: 起步验证 ──→ M2: 本地闭环 ──→ M3: 云端打通 ──→ M4: 整体集成 ──→ M5: 设计与集成 ──→ M6: 整体收官
 ```
+
+---
+
+### 时间轴
+
+✅ M1 ──→ ✅ M2 ──→ ✅ M3 ──→ ✅ M4 ──→ 🔵 M5 ──→ 📅 M6  
+起步验证　　本地闭环　　云端打通　　v1 集成　　v2 进行中　　      收官  
+05上旬　　　05-13　　　   05-19　　　 05-21　　　 待定　　　　　将来
+
+> 箭头表示开发推进方向，✅=已完成　🔵=进行中　📅=计划中
+
+| 时间 | 里程碑 | 状态 | 关键交付 |
+|:-----|:-------|:----:|:---------|
+| 05上旬 | M1 起步验证 | ✅ | 驱动封装：AHT20(温湿度)、LIS2DH12TR(IMU)、GNSS(定位)、GL5528(光照)、LED、Audio、LCD |
+| 05-13 | M2 本地闭环 | ✅ | 碰撞检测算法(CollisionService)、报警联动(AlarmService)：LED 闪烁 + 音频 + 按钮 SOS |
+| 05-19 | M3 云端打通 | ✅ | Network 驱动、MQTT 驱动、CloudService(ConnectLab) E2E 测试通过 |
+| 05-21 | M4 v1 集成 | ✅ | 12 模块 main.py 集成、EventBus 事件总线、`test_system_full_v1.py` 全系统测试 |
+| 05-22 | M4+ 移远云 | ✅ | QthDriver 驱动、LarkCloudService、移远云 DMP 数据通道 E2E 通过 |
+| 待定 | M5 v2 设计 | 🔵 | PowerService、HeartRate、Headlight、NavigationService、WeChatMiniProgram |
+| 将来 | M6 收官 | 📅 | 设计文档、演示视频、答辩 PPT、开源整理 |
 
 ---
 
@@ -1193,11 +1215,11 @@ M1: 起步验证 ──→ M2: 本地闭环 ──→ M3: 云端打通 ──→
 | M5.1 电源管理 | PowerService（等电池硬件） | 🟡 等硬件 |
 | M5.2 灯光驱动 | Headlight（等灯光硬件） | 🟡 等硬件 |
 | M5.3 心率模块 | HeartRate 驱动（数据走 MQTT） | 🟡 等心率带到货 |
-| M5.4 微信小程序 | Step A: MQTT数据格式设计 + 实时显示 + 骑行总结 + 轨迹 | 🔵 设计中 |
+| M5.4 微信小程序 | Step A: 登录+实时数据+骑行控制+总结+地图 ✅ | 🟢 完成 |
 | | Step B: 导航功能（高德 API → 头盔 TTS） | 📅 第二步 |
 | | Step C: 语音交互（微信语音识别 → 头盔响应） | 📅 第三步 |
 | M5.5 导航+语音 | NavigationService，GNSS 比对 + TTS 播报 | 📅 等小程序就绪 |
-| M5.6 移远云通道 | LarkCloudService + QthDriver，Qth SDK 接入移远云 | ✅ v1 已完成 |
+| M5.6 移远云通道 | LarkCloudService + QthDriver，Qth SDK 接入移远云 | ✅ v1 已完成（2026-5-22） |
 
 ---
 
