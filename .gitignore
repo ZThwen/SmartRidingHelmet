@@ -1,0 +1,16 @@
+# Claude Code 生成的文件
+.claude/
+.code-review-graph/
+.opencode/
+.reasonix/
+
+# Python 缓存
+__pycache__/
+*.pyc
+
+# 参考文档（工具生成，不需要提交）
+LEARN_OPencode.md
+skills-guide.md
+.ble_api_extracted.txt
+.ec200u_refdesign_extracted.txt
+.ec200u_spec_extracted.txt
