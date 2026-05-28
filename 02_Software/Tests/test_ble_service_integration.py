@@ -27,6 +27,9 @@ class FakeBLEDriver:
     def notify_data(self, json_str):
         self.notify_calls.append(json.loads(json_str))
 
+    def set_connected(self, connected):
+        self.ctx["is_connected"] = connected
+
 
 def pump(service, eb, count=5, delay_ms=50):
     for _ in range(count):
@@ -118,6 +121,7 @@ def test_disconnected_guard():
 
     from core.config import EVENT_BLE_DISCONNECTED
     eb.publish(EVENT_BLE_DISCONNECTED, {})
+    fake_ble.set_connected(False)
     pump(svc, eb)
     fake_ble.notify_calls.clear()
 
@@ -125,15 +129,34 @@ def test_disconnected_guard():
         "temp": 30.0, "humid": 50.0, "valid": True})
     pump(svc, eb, 50, 50)
 
-    if fake_ble.notify_calls:
-        has_data = any(c.get("t") == 0 for c in fake_ble.notify_calls)
-        if has_data:
-            print("  ⚠ 断连后仍有数据推送（依赖 is_connected 守卫）")
-            print("  检查 BLEDriver.ctx['is_connected'] 是否为 False")
-    else:
-        print("  ✓ 断连后未推送数据")
-
+    has_data = any(c.get("t") == 0 for c in fake_ble.notify_calls)
+    assert not has_data, "断连后不应推送数据"
+    print("  ✓ 断连后未推送数据")
     print("✓ 断连守卫测试通过")
+
+
+def test_queue_cleared_on_disconnect():
+    print("\n=== 测试 3b: 断连清空队列 ===")
+    eb = EventBus()
+    fake_ble = FakeBLEDriver()
+    svc = BLEService(eb, ble_driver=fake_ble)
+    svc.init()
+
+    eb.publish(EVENT_BLE_CONNECTED, {})
+    pump(svc, eb)
+
+    # 塞入一些数据
+    for i in range(10):
+        svc.send_queue.put('{"t":0,"d":{"tmp":%d}}' % i)
+    assert svc.send_queue.size() > 0, "队列应有数据"
+
+    from core.config import EVENT_BLE_DISCONNECTED
+    eb.publish(EVENT_BLE_DISCONNECTED, {})
+    pump(svc, eb)
+
+    assert svc.send_queue.size() == 0, "断连后队列应清空，实际: %d" % svc.send_queue.size()
+    print("  ✓ 断连后队列已清空")
+    print("✓ 断连清队列测试通过")
 
 
 def test_keepalive():
@@ -181,6 +204,7 @@ if __name__ == "__main__":
     test_sensor_data_flow()
     test_alarm_immediate_push()
     test_disconnected_guard()
+    test_queue_cleared_on_disconnect()
     test_keepalive()
     test_queue_not_block_main()
     print("\n✅ BLEService 全部测试通过")

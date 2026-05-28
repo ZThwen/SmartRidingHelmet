@@ -87,6 +87,10 @@ function _registerListeners() {
   wx.onBLEConnectionStateChange(function(res) {
     if (res.connected) return;
     _state.connected = false;
+    _state.charNotify = '';
+    _state.charNav = '';
+    _state.charCtrl = '';
+    _state.charAck = '';
     logger.log('BLE', '连接已断开');
     if (_callbacks.onDisconnected) _callbacks.onDisconnected();
     _tryReconnect();
@@ -189,6 +193,10 @@ function _write(charId, json) {
     serviceId: _state.serviceId,
     characteristicId: charId,
     value: _str2ab(json),
+    fail: function(err) {
+      logger.log('BLE', '写入失败: ' + err.errMsg);
+      if (_callbacks.onStatus) _callbacks.onStatus('BLE 写入失败');
+    },
   });
 }
 
@@ -198,6 +206,10 @@ function disconnect() {
     wx.closeBLEConnection({ deviceId: _state.deviceId });
   }
   _state.connected = false;
+  _state.charNotify = '';
+  _state.charNav = '';
+  _state.charCtrl = '';
+  _state.charAck = '';
   logger.log('BLE', '已主动断开');
 }
 
@@ -205,7 +217,23 @@ function _tryReconnect() {
   if (_reconnectCount >= protocol.RECONNECT_MAX) return;
   _reconnectCount++;
   logger.log('BLE', '重连中 (%d/%d)', _reconnectCount, protocol.RECONNECT_MAX);
-  setTimeout(scan, protocol.RECONNECT_DELAY);
+  if (_state.deviceId) {
+    // 先尝试直连上次设备
+    wx.createBLEConnection({
+      deviceId: _state.deviceId,
+      success: function() {
+        logger.log('BLE', '直连成功');
+        _discoverServices(_state.deviceId);
+      },
+      fail: function() {
+        // 直连失败，回退到扫描
+        logger.log('BLE', '直连失败，重新扫描');
+        setTimeout(scan, protocol.RECONNECT_DELAY);
+      },
+    });
+  } else {
+    setTimeout(scan, protocol.RECONNECT_DELAY);
+  }
 }
 
 function isConnected() {

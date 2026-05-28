@@ -383,8 +383,9 @@ LCD 内部维护 `display_mode` 状态（normal / alarm），用于防止 Servic
 
 **技术要点**：
 - 事件驱动：tick() 为空，所有逻辑在 BLE 硬件回调（_callback）中处理
-- MTU 回退：EC200U 可能在 EVT_CONNECTED 之前先发 EVT_MTU，驱动自动处理此竞态
-- 连接回调在 IRQ 上下文执行，不做阻塞 I/O
+- MTU 回退：EC200U 可能在 EVT_CONNECTED 之前先发 EVT_MTU，驱动通过 `_connected_published` 标志位防止重复发布 `EVENT_BLE_CONNECTED`
+- 连接回调在 modem 线程执行，`_callback()` 整体包裹 try/except 防止异常崩溃 BLE 协议栈
+- 回调中不做阻塞 I/O
 
 **分层设计说明**：
 - Device 层 BLEDriver 封装底层 BLE API，不包含业务逻辑
@@ -619,6 +620,9 @@ LCD 内部维护 `display_mode` 状态（normal / alarm），用于防止 Servic
 - 上传间隔：`BLE_UPLOAD_INTERVAL_MS`（默认 2000ms）
 - 心跳间隔：`BLE_KEEPALIVE_MS`（默认 5000ms）
 - IMU 数据缓存但暂不推送（碰撞结果由 AlarmService 通过 t:5 推送）
+- 断连时自动清空发送队列，防止重连后发送过期数据
+- 后台线程熔断机制：连续失败 10 次后暂停发送，重连时重置
+- `deinit()` 等待后台线程退出（最多 700ms），避免 use-after-free
 
 **分层设计说明**：
 - Service 层负责数据组装和推送策略

@@ -52,6 +52,7 @@ class BLEDriver(BaseModule):
         }
 
         self._ble = None
+        self._connected_published = False
 
     def init(self):
         """
@@ -151,34 +152,16 @@ class BLEDriver(BaseModule):
 
     def _callback(self, evt):
         """
-        brief BLE 事件回调
+        brief BLE 事件回调（modem 线程上下文）
         param evt: 事件字典
+        note 整体 try/except 防止异常崩溃 modem 线程
         """
-        event_id = evt.get("event")
+        try:
+            event_id = evt.get("event")
 
-        if event_id == BLE.EVT_CONNECTED:
-            self.ctx["is_connected"] = True
-            self._data["connected_time"] = time.ticks_ms()
-            print("[%s] 手机已连接" % self.name)
-            if self.event_bus:
-                self.event_bus.publish(EVENT_BLE_CONNECTED, {
-                    "addr": self._ble.get_addr() if self._ble else "",
-                    "timestamp": time.ticks_ms(),
-                })
-
-        elif event_id == BLE.EVT_DISCONNECTED:
-            self.ctx["is_connected"] = False
-            print("[%s] 手机已断开" % self.name)
-            if self.event_bus:
-                self.event_bus.publish(EVENT_BLE_DISCONNECTED, {
-                    "timestamp": time.ticks_ms(),
-                })
-
-        elif event_id == BLE.EVT_MTU:
-            self.ctx["mtu"] = evt.get("mtu", 23)
-            print("[%s] MTU = %d" % (self.name, self.ctx["mtu"]))
-            if not self.ctx["is_connected"]:
+            if event_id == BLE.EVT_CONNECTED:
                 self.ctx["is_connected"] = True
+                self._connected_published = True
                 self._data["connected_time"] = time.ticks_ms()
                 print("[%s] 手机已连接" % self.name)
                 if self.event_bus:
@@ -187,19 +170,46 @@ class BLEDriver(BaseModule):
                         "timestamp": time.ticks_ms(),
                     })
 
-        elif event_id == BLE.EVT_VAL_DATA:
-            uuid = evt.get("uuid")
-            value = evt.get("value", "")
+            elif event_id == BLE.EVT_DISCONNECTED:
+                self.ctx["is_connected"] = False
+                self._connected_published = False
+                print("[%s] 手机已断开" % self.name)
+                if self.event_bus:
+                    self.event_bus.publish(EVENT_BLE_DISCONNECTED, {
+                        "timestamp": time.ticks_ms(),
+                    })
 
-            if uuid == self.cfg["char_nav"]:
-                if self.event_bus:
-                    self.event_bus.publish(EVENT_NAV_CMD, {"raw": value})
-            elif uuid == self.cfg["char_ctrl"]:
-                if self.event_bus:
-                    self.event_bus.publish(EVENT_RIDE_CONTROL, {"raw": value})
-            elif uuid == self.cfg["char_ack"]:
-                if self.event_bus:
-                    self.event_bus.publish(EVENT_BLE_ALARM_ACK, {"raw": value})
+            elif event_id == BLE.EVT_MTU:
+                self.ctx["mtu"] = evt.get("mtu", 23)
+                print("[%s] MTU = %d" % (self.name, self.ctx["mtu"]))
+                if not self._connected_published:
+                    self.ctx["is_connected"] = True
+                    self._connected_published = True
+                    self._data["connected_time"] = time.ticks_ms()
+                    print("[%s] 手机已连接 (via MTU)" % self.name)
+                    if self.event_bus:
+                        self.event_bus.publish(EVENT_BLE_CONNECTED, {
+                            "addr": self._ble.get_addr() if self._ble else "",
+                            "timestamp": time.ticks_ms(),
+                        })
+
+            elif event_id == BLE.EVT_VAL_DATA:
+                uuid = evt.get("uuid")
+                value = evt.get("value", "")
+
+                if uuid == self.cfg["char_nav"]:
+                    if self.event_bus:
+                        self.event_bus.publish(EVENT_NAV_CMD, {"raw": value})
+                elif uuid == self.cfg["char_ctrl"]:
+                    if self.event_bus:
+                        self.event_bus.publish(EVENT_RIDE_CONTROL, {"raw": value})
+                elif uuid == self.cfg["char_ack"]:
+                    if self.event_bus:
+                        self.event_bus.publish(EVENT_BLE_ALARM_ACK, {"raw": value})
+
+        except Exception as e:
+            self.ctx["err_count"] += 1
+            print("[%s] _callback 异常: %s" % (self.name, e))
 
     def _on_config_update(self, payload):
         """

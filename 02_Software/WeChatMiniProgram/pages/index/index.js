@@ -1,7 +1,6 @@
 /**
  * 首页 — 薄调度器
  */
-var DataService = require('../../services/data-service');
 var AlarmService = require('../../services/alarm-service');
 var RideService = require('../../services/ride-service');
 var MapService = require('../../services/map-service');
@@ -18,7 +17,7 @@ Page({
     showBlePicker: false,
     temp: '--', humid: '--', speed: '--',
     lat: '--', lon: '--', alt: '--',
-    signal: '--', alarm: '正常', time: '',
+    lux: '--', alarm: '正常', time: '',
     riding: false,
     btnText: '开始骑行',
     btnClass: 'btn-start',
@@ -68,7 +67,7 @@ Page({
   },
 
   onUnload: function() {
-    DataService.stopPoll();
+    BleService.disconnect();
     wx.stopLocationUpdate({ success: function(){}, fail: function(){} });
   },
 
@@ -103,7 +102,6 @@ Page({
       success: function(res) {
         if (res.confirm) {
           RideService.clear();
-          DataService.stopPoll();
           wx.reLaunch({ url: '/pages/login/login' });
         }
       },
@@ -113,31 +111,22 @@ Page({
   _startRide: function() {
     logger.log('PAGE', '=== 开始骑行 ===');
     RideService.start();
-    var that = this;
 
     this.setData({
       riding: true, status: '骑行中...', isOnline: true,
       btnText: '结束骑行', btnClass: 'btn-end',
       temp: '--', humid: '--', speed: '--',
       lat: '--', lon: '--', alt: '--',
-      signal: '--', alarm: '正常', time: '',
+      lux: '--', alarm: '正常', time: '',
       trackPoints: [], trackPolylines: [], trackMarkers: [],
       mapFollowing: true, showSummary: false, showAlarmPopup: false,
     });
 
     this._rideStartTime = Date.now();
-    DataService.startPoll(
-      function(items, meta) { that._onData(items, meta); },
-      function(status) {
-        var isOnline = status.indexOf('在线') >= 0 || status === '骑行中...' || status === '连接中...';
-        that.setData({ status: status, isOnline: isOnline });
-      },
-    );
   },
 
   _endRide: function() {
     logger.log('PAGE', '=== 结束骑行 ===');
-    DataService.stopPoll();
 
     var summary = RideService.end();
     RideService.clear();
@@ -155,7 +144,7 @@ Page({
       btnText: '开始骑行', btnClass: 'btn-start',
       temp: '--', humid: '--', speed: '--',
       lat: '--', lon: '--', alt: '--',
-      signal: '--', alarm: '--', time: '',
+      lux: '--', alarm: '--', time: '',
       trackPoints: [], trackPolylines: [], trackMarkers: [],
     };
 
@@ -209,8 +198,29 @@ Page({
           if (d.lat != null) u.lat = d.lat.toFixed(4);
           if (d.lon != null) u.lon = d.lon.toFixed(4);
           if (d.alt != null) u.alt = d.alt.toFixed(1) + 'm';
+          if (d.lux != null) u.lux = d.lux;
           u.time = new Date().toLocaleTimeString();
+          u.isOnline = true;
           that.setData(u);
+
+          // 骑行记录 + 地图轨迹
+          if (RideService.isActive()) {
+            RideService.addRecord({
+              temp: d.tmp, humid: d.hum, speed: d.spd,
+              lat: d.lat, lon: d.lon, alt: d.alt,
+            });
+            if (d.lat != null && d.lon != null) {
+              var points = MapService.pushPoint(that.data.trackPoints, d.lat, d.lon);
+              that.setData({
+                trackPoints: points,
+                trackPolylines: MapService.buildPolyline(points),
+                trackMarkers: MapService.buildMarker(points, '头盔'),
+              });
+              if (that.data.mapFollowing) {
+                that.setData({ mapLat: d.lat, mapLon: d.lon });
+              }
+            }
+          }
         } else if (data.t === 5 && data.d) {
           var alarmResult = AlarmService.analyze(data.d.type === 'collision' ? 1 : 2, data.d.lvl || 1);
           that.setData({ alarm: alarmResult.displayText });
@@ -260,70 +270,6 @@ Page({
   },
 
   _onData: function(items, meta) {
-    if (meta && meta.stale) {
-      this.setData({
-        temp: '--', humid: '--', speed: '--',
-        lat: '--', lon: '--', alt: '--',
-        signal: '--', alarm: '离线', time: '',
-        isOnline: false,
-      });
-      if (this.data.showAlarmPopup) { this.setData({ showAlarmPopup: false }); }
-      return;
-    }
-
-    if (this._rideStartTime && meta && meta.updateTime && meta.updateTime < this._rideStartTime) {
-      return;
-    }
-
-    if (!items) return;
-    var isAlarm = false;
-    for (var i = 0; i < items.length; i++) {
-      if (items[i].abId === 6 && Number(items[i].resourceValce) !== 0) {
-        isAlarm = true;
-        break;
-      }
-    }
-
-    var result = DataService.parseItems(items, isAlarm);
-    var u = result.u;
-    var raw = result.raw;
-
-    var alarmResult = AlarmService.analyze(raw.alarmType, raw.alarmLevel);
-    u.alarm = alarmResult.displayText;
-
-    if (alarmResult.shouldPopup) {
-      this.setData({
-        showAlarmPopup: true,
-        alarmPopupClass: alarmResult.popupClass,
-        alarmPopupData: {
-          icon: alarmResult.icon,
-          type: (raw.alarmType || '') + ' 报警',
-          level: 'Lv' + (raw.alarmLevel || ''),
-          lat: u.lat,
-          lon: u.lon,
-          time: u.time,
-        },
-      });
-    } else if (this.data.showAlarmPopup) {
-      this.setData({ showAlarmPopup: false });
-    }
-
-    this.setData(u);
-
-    if (RideService.isActive()) {
-      RideService.addRecord(raw);
-      if (raw.lat != null && raw.lon != null) {
-        var points = MapService.pushPoint(this.data.trackPoints, raw.lat, raw.lon);
-        this.setData({
-          trackPoints: points,
-          trackPolylines: MapService.buildPolyline(points),
-          trackMarkers: MapService.buildMarker(points, '头盔'),
-        });
-        if (this.data.mapFollowing) {
-          this.setData({ mapLat: raw.lat, mapLon: raw.lon });
-        }
-      }
-    }
   },
 
   onMapRegionChange: function(e) {

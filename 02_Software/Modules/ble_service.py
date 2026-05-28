@@ -42,6 +42,7 @@ class BLEService(BaseModule):
             "ble_connected": False,
             "err_count": 0,
             "force_push": False,
+            "consecutive_errors": 0,
         }
 
         self._data = {
@@ -130,6 +131,7 @@ class BLEService(BaseModule):
         self.send_queue.put(json.dumps({"t": 0, "d": d}))
 
     def _notify_thread(self):
+        CIRCUIT_BREAKER_THRESHOLD = 10
         while self.ctx["thread_running"]:
             try:
                 data = self.send_queue.get()
@@ -138,18 +140,26 @@ class BLEService(BaseModule):
                     continue
                 if not self._ble or not self._ble.ctx["is_connected"]:
                     continue
+                if self.ctx["consecutive_errors"] >= CIRCUIT_BREAKER_THRESHOLD:
+                    time.sleep_ms(500)
+                    continue
                 self._ble.notify_data(data)
                 self.ctx["err_count"] = 0
+                self.ctx["consecutive_errors"] = 0
             except Exception as e:
                 self.ctx["err_count"] += 1
+                self.ctx["consecutive_errors"] += 1
                 print("[%s] 后台线程异常: %s" % (self.name, e))
 
     def _on_connected(self, payload):
         self.ctx["ble_connected"] = True
         self.ctx["force_push"] = True
+        self.ctx["consecutive_errors"] = 0
 
     def _on_disconnected(self, payload):
         self.ctx["ble_connected"] = False
+        if self.send_queue:
+            self.send_queue.clear()
 
     def _on_temp_humid(self, payload):
         if not payload.get("valid", False):
@@ -201,7 +211,11 @@ class BLEService(BaseModule):
             "ble_connected": self.ctx["ble_connected"],
             "thread_running": self.ctx["thread_running"],
             "err_count": self.ctx["err_count"],
+            "consecutive_errors": self.ctx["consecutive_errors"],
         }
 
     def deinit(self):
         self.ctx["thread_running"] = False
+        # 等待后台线程退出：线程 idle 睡眠 100ms + 熔断睡眠 500ms
+        time.sleep_ms(700)
+        self.ctx["is_init"] = False

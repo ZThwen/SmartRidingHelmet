@@ -8,6 +8,5 @@ App({
     isRiding: false,
     rideCache: [],
     rideStartTime: 0,
-    bleConnected: false,
   },
 });
