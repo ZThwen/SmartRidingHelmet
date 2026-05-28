@@ -1,0 +1,55 @@
+<!-- 登录页 — Tactical Cyan 克制版 -->
+<view class="stage-container">
+  <view class="content-wrap">
+
+    <!-- 标题 -->
+    <view class="title-block">
+      <text class="deco-wave">≋</text>
+      <text class="title">智能骑行头盔</text>
+      <text class="deco-wave">≋</text>
+    </view>
+    <view class="divider"></view>
+
+    <!-- 输入区 -->
+    <view class="input-wrap">
+      <view class="cyan-input">
+        <text class="input-icon">∞</text>
+        <input
+          type="number"
+          maxlength="11"
+          placeholder="手机号"
+          placeholder-class="ph"
+          value="{{phone}}"
+          bindinput="onPhoneInput"
+        />
+      </view>
+      <view class="cyan-input">
+        <text class="input-icon">♪</text>
+        <input
+          password
+          maxlength="20"
+          placeholder="密码"
+          placeholder-class="ph"
+          value="{{pwd}}"
+          bindinput="onPwdInput"
+        />
+      </view>
+    </view>
+
+    <!-- 青蓝光刃按钮 -->
+    <button
+      class="btn-cyan {{loading ? 'loading' : ''}}"
+      bindtap="onLogin"
+      disabled="{{loading}}"
+    >
+      <text class="btn-text">{{loading ? '登录中...' : '登 录'}}</text>
+      <view class="blade-fill"></view>
+    </button>
+
+    <!-- 错误提示 -->
+    <view class="error-bar" wx:if="{{error}}">
+      <text class="error-text">{{error}}</text>
+    </view>
+
+  </view>
+</view>

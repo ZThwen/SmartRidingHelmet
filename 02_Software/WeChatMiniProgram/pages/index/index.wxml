@@ -1,0 +1,172 @@
+<!-- 智能骑行头盔 — 首页 (Tactical Cyan) -->
+<view class="page">
+
+  <!-- 自定义导航栏 -->
+  <view class="nav-bar">
+    <view class="nav-back" catchtap="onBackPress" hover-class="nav-back-hover">‹ 返回</view>
+    <view class="nav-title">
+      <text class="deco">≋</text>
+      <text>智能骑行头盔</text>
+      <text class="deco">≋</text>
+    </view>
+    <view class="nav-spacer"></view>
+  </view>
+
+  <!-- 地图区域 -->
+  <view class="map-section">
+    <view class="holo-frame">
+      <map style="width:100%;height:{{mapHeight}}rpx;transition:height 0.3s"
+        latitude="{{mapLat}}" longitude="{{mapLon}}"
+        scale="{{mapExpanded ? 16 : 15}}" show-location="{{!riding}}"
+        polyline="{{trackPolylines}}"
+        markers="{{trackMarkers}}"
+        bindregionchange="onMapRegionChange"
+        bindtap="onMapTap">
+      </map>
+    </view>
+    <view class="map-handle" bindtap="onToggleMap">
+      <text>{{mapExpanded ? '▲ 收起' : '▼ 展开'}}</text>
+    </view>
+    <view class="map-reset {{mapFollowing ? 'hidden' : ''}}" catchtap="onMapReset">
+      <text>⊙</text>
+    </view>
+  </view>
+
+  <!-- 数据卡片区 -->
+  <scroll-view class="content-scroll" scroll-y="{{true}}" enhanced="{{true}}" show-scrollbar="{{false}}">
+
+    <!-- BLE 连接状态 -->
+    <view class="ble-status {{bleConnected ? 'connected' : ''}}">
+      <view class="ble-dot {{bleConnected ? 'on' : 'off'}}"></view>
+      <text class="ble-label">BLE: {{bleStatus}}</text>
+      <button class="ble-btn" bindtap="onToggleBle">{{bleConnected ? '断开' : '连接'}}</button>
+    </view>
+
+    <!-- BLE 设备选择弹窗 -->
+    <view class="ble-picker" wx:if="{{showBlePicker}}">
+      <view class="picker-title">选择设备</view>
+      <view class="picker-item" wx:for="{{bleDevices}}" wx:key="deviceId"
+            data-device-id="{{item.deviceId}}" bindtap="onBleDevicePick">
+        <text class="picker-name">{{item.name}}</text>
+        <text class="picker-rssi">{{item.rssi}}dBm</text>
+      </view>
+      <button class="picker-cancel" bindtap="onBlePickerCancel">取消</button>
+    </view>
+
+    <!-- 玻璃状态栏 -->
+    <view class="glass-status">
+      <view class="status-left">
+        <view class="status-dot {{isOnline ? 'online' : 'offline'}}"></view>
+        <text class="status-text">{{status}}</text>
+      </view>
+      <text class="time-text" wx:if="{{time}}">更新 {{time}}</text>
+    </view>
+
+    <!-- 环境卡片 -->
+    <view class="tac-card">
+      <view class="card-header">
+        <text class="card-title">环境</text>
+        <view class="deco-line"></view>
+      </view>
+      <view class="card-body">
+        <view class="data-row"><text class="d-label">温度</text><text class="d-value">{{temp}}</text></view>
+        <view class="data-row"><text class="d-label">湿度</text><text class="d-value">{{humid}}</text></view>
+        <view class="data-row"><text class="d-label">速度</text><text class="d-value">{{speed}}</text></view>
+      </view>
+      <view class="corner tl"></view><view class="corner tr"></view>
+      <view class="corner bl"></view><view class="corner br"></view>
+    </view>
+
+    <!-- 定位卡片 -->
+    <view class="tac-card">
+      <view class="card-header">
+        <text class="card-title">定位</text>
+        <view class="deco-line"></view>
+      </view>
+      <view class="card-body">
+        <view class="data-row"><text class="d-label">纬度</text><text class="d-value">{{lat}}</text></view>
+        <view class="data-row"><text class="d-label">经度</text><text class="d-value">{{lon}}</text></view>
+        <view class="data-row"><text class="d-label">海拔</text><text class="d-value">{{alt}}</text></view>
+      </view>
+      <view class="corner tl"></view><view class="corner tr"></view>
+      <view class="corner bl"></view><view class="corner br"></view>
+    </view>
+
+    <!-- 状态卡片 -->
+    <view class="tac-card">
+      <view class="card-header">
+        <text class="card-title">状态</text>
+        <view class="deco-line"></view>
+      </view>
+      <view class="card-body">
+        <view class="data-row"><text class="d-label">信号</text><text class="d-value">{{signal}}</text></view>
+        <view class="data-row">
+          <text class="d-label">报警</text>
+          <view class="alarm-wrap">
+            <view class="alarm-bar {{alarm !== '正常' && alarm !== '离线' && alarm !== '--' ? 'active' : ''}}"></view>
+            <text class="d-value {{alarm !== '正常' && alarm !== '离线' && alarm !== '--' ? 'alarm-on' : ''}}">{{alarm}}</text>
+          </view>
+        </view>
+      </view>
+      <view class="corner tl"></view><view class="corner tr"></view>
+      <view class="corner bl"></view><view class="corner br"></view>
+    </view>
+
+    <view style="height:180rpx"></view>
+  </scroll-view>
+
+  <!-- 报警全屏弹窗 (保持原样，不修改) -->
+  <view class="alarm-popup {{alarmPopupClass}}" wx:if="{{showAlarmPopup}}">
+    <view class="alarm-icon">{{alarmPopupData.icon}}</view>
+    <view class="alarm-type">{{alarmPopupData.type}}</view>
+    <view class="alarm-level">{{alarmPopupData.level}}</view>
+    <view class="alarm-detail">
+      <text>位置: {{alarmPopupData.lat}}, {{alarmPopupData.lon}}</text>
+    </view>
+    <view class="alarm-detail">
+      <text>时间: {{alarmPopupData.time}}</text>
+    </view>
+    <view class="alarm-hint">设备已自动上传报警信息</view>
+  </view>
+
+  <!-- 底部按钮 -->
+  <view class="bottom-bar">
+    <button class="ride-btn {{btnClass}}" bindtap="onToggleRide">
+      <text>{{btnText}}</text>
+      <view class="btn-glow"></view>
+    </button>
+  </view>
+
+  <!-- 总结弹窗 -->
+  <view class="modal-overlay" hidden="{{!showSummary}}">
+    <view class="modal-content">
+      <view class="modal-header">
+        <view class="modal-deco"></view>
+        <text class="modal-title">骑行总结</text>
+      </view>
+      <map
+        latitude="{{_summaryMapLat}}"
+        longitude="{{_summaryMapLon}}"
+        scale="14"
+        markers="{{_summaryMarkers}}"
+        polylines="{{_summaryPolyline}}"
+        style="width:100%;height:360rpx;border-radius:16rpx;overflow:hidden"
+      ></map>
+      <view class="summary-table">
+        <view class="row"><text class="lbl">总时长</text><text class="val">{{summary.duration}}</text></view>
+        <view class="row"><text class="lbl">平均速度</text><text class="val">{{summary.avgSpeed}}</text></view>
+        <view class="row"><text class="lbl">最高速度</text><text class="val">{{summary.maxSpeed}}</text></view>
+        <view class="row"><text class="lbl">平均温度</text><text class="val">{{summary.avgTemp}}</text></view>
+        <view class="row"><text class="lbl">最高温度</text><text class="val">{{summary.maxTemp}}</text></view>
+        <view class="row"><text class="lbl">总里程</text><text class="val">{{summary.distance}}</text></view>
+        <view class="row"><text class="lbl">报警次数</text><text class="val">{{summary.alarmCount}}</text></view>
+        <view class="row"><text class="lbl">采集点数</text><text class="val">{{summary.points}}</text></view>
+      </view>
+      <button class="close-btn" bindtap="onCloseSummary">
+        <text>关闭</text>
+        <view class="btn-fill"></view>
+      </button>
+    </view>
+  </view>
+
+</view>

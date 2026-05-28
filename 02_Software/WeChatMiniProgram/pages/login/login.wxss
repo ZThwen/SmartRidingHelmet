@@ -1,0 +1,202 @@
+/* login.wxss — Tactical Cyan 登录页 */
+
+page {
+  background: #080d17;
+  height: 100%;
+}
+
+.stage-container {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0 60rpx;
+  box-sizing: border-box;
+  position: relative;
+}
+
+/* 极微弱顶部渐变，消除死黑 */
+.stage-container::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 40vh;
+  background: radial-gradient(ellipse at 50% 0%, rgba(102, 204, 255, 0.04) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.content-wrap {
+  width: 100%;
+  max-width: 600rpx;
+  position: relative;
+  z-index: 1;
+}
+
+/* 标题 */
+.title-block {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16rpx;
+  margin-bottom: 16rpx;
+}
+
+.title {
+  font-size: 40rpx;
+  font-weight: 600;
+  color: #e0f0ff;
+  letter-spacing: 4rpx;
+}
+
+.deco-wave {
+  font-size: 28rpx;
+  color: rgba(102, 204, 255, 0.5);
+  line-height: 1;
+}
+
+/* 分隔线 */
+.divider {
+  width: 120rpx;
+  height: 2rpx;
+  background: linear-gradient(90deg, transparent, #66ccff, transparent);
+  margin: 0 auto 80rpx;
+  opacity: 0.5;
+}
+
+/* 输入框 */
+.input-wrap {
+  margin-bottom: 60rpx;
+}
+
+.cyan-input {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  padding: 20rpx 0;
+  border-bottom: 2rpx solid rgba(102, 204, 255, 0.15);
+  margin-bottom: 24rpx;
+  transition: border-color 0.3s ease;
+  position: relative;
+}
+
+.cyan-input:focus-within {
+  border-bottom-color: #66ccff;
+}
+
+/* 聚焦时底部发光条 */
+.cyan-input::after {
+  content: '';
+  position: absolute;
+  bottom: -2rpx;
+  left: 50%;
+  width: 0;
+  height: 2rpx;
+  background: #66ccff;
+  box-shadow: 0 0 8rpx rgba(102, 204, 255, 0.4);
+  transition: all 0.3s ease;
+  transform: translateX(-50%);
+}
+
+.cyan-input:focus-within::after {
+  width: 100%;
+}
+
+.input-icon {
+  font-size: 28rpx;
+  color: rgba(102, 204, 255, 0.6);
+  width: 40rpx;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.cyan-input input {
+  flex: 1;
+  height: 48rpx;
+  font-size: 30rpx;
+  color: #e0f0ff;
+  background: transparent;
+  caret-color: #66ccff;
+}
+
+.ph {
+  color: #3a5068;
+  font-size: 30rpx;
+}
+
+/* 青蓝光刃按钮 */
+.btn-cyan {
+  width: 100%;
+  height: 96rpx;
+  border-radius: 48rpx;
+  border: 2rpx solid #66ccff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+  background: transparent;
+}
+
+.btn-cyan .btn-text {
+  position: relative;
+  z-index: 2;
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #66ccff;
+  letter-spacing: 8rpx;
+  transition: color 0.3s ease;
+}
+
+.btn-cyan .blade-fill {
+  position: absolute;
+  top: 0; left: -100%;
+  width: 100%; height: 100%;
+  background: linear-gradient(90deg, #66ccff, #00ffff);
+  z-index: 1;
+  transition: left 0.3s ease;
+}
+
+/* 按下状态：光刃滑入 */
+.btn-cyan:active .blade-fill {
+  left: 0;
+}
+
+.btn-cyan:active .btn-text {
+  color: #080d17;
+}
+
+/* 加载态 */
+.btn-cyan.loading {
+  opacity: 0.5;
+  border-color: rgba(102, 204, 255, 0.4);
+}
+
+.btn-cyan.loading .blade-fill {
+  display: none;
+}
+
+/* 错误提示 */
+.error-bar {
+  margin-top: 32rpx;
+  text-align: center;
+}
+
+.error-text {
+  font-size: 26rpx;
+  color: #ff2a4d;
+  display: inline-block;
+  position: relative;
+  padding-bottom: 8rpx;
+}
+
+.error-text::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 2rpx;
+  background: #ff2a4d;
+  opacity: 0.6;
+}
