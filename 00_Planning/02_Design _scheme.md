@@ -759,9 +759,11 @@ LCD 内部维护 `display_mode` 状态（normal / alarm），用于防止 Servic
 | Step C | 语音交互（微信语音识别 → 命令下发） | 📅 后续 |
 
 **通信方式**：
-  小程序 → HTTP 轮询 → 移远云 OpenAPI（`iot-api.quectelcn.com`）→ 查询设备属性数据
+  头盔 → BLE GATT Notify (FFF1) → 微信小程序（BLE Central）→ 实时接收传感器数据推送
 
-> 实际通信不走 MQTT/ConnectLab，而是通过移远云 REST API 获取设备已上报的 TSL 数据。详细开发记录见 `WeChatMiniProgram/README.md`。
+> BLE 为主要近场数据通道，每 2 秒推送合并传感器 JSON（t=0），报警事件立即推送（t=5/t=6）。
+>
+> **历史方案备注**：v1 初期（5/17-5/22）曾采用 HTTP 轮询方案（小程序 → 移远云 OpenAPI → 查询 TSL 数据），后于 5/28 改为 BLE 直连以降低延迟、减少云端依赖。`services/data-service.js` 和 `utils/ws-client.js` 保留作为历史参考，当前未被 `index.js` 引用。
 
 ---
 
@@ -840,13 +842,19 @@ LCD 内部维护 `display_mode` 状态（normal / alarm），用于防止 Servic
 ├── Button            # SOS 按键
 ├── LED               # LED 控制
 ├── Audio             # 音频播放
-└── LCD               # LCD 显示
+├── LCD               # LCD 显示
+├── Network           # 4G 网络模组
+├── MQTT              # MQTT 协议封装
+├── BLEDriver         # BLE GATT Server（EC200U 内置 BLE 4.2）
+└── Qth               # 移远云 Qth SDK 封装
 
 服务层（依赖驱动层，部分模块间也有依赖）
 ├── CollisionService  # 依赖 IMU
 ├── PowerService      # 依赖 ADC 或 AT 指令
 ├── AlarmService      # 依赖 LED、Audio（LCD 已解耦给 DisplayService）
-├── CloudService      # 依赖所有传感器驱动、LCD
+├── CloudService      # 依赖 Network、MQTT、所有传感器驱动
+├── LarkCloudService  # 依赖 Qth、所有传感器驱动
+├── BLEService        # 依赖 BLEDriver、ThreadSafeQueue、EventBus
 └── DisplayService    # 依赖 Light、LCD、Audio
 
 注：服务层模块间依赖关系在开发时进一步细化
@@ -867,6 +875,8 @@ LCD 内部维护 `display_mode` 状态（normal / alarm），用于防止 Servic
  │    └── [E] EVENT_TEMP_HUMID_READY {temp, humid, valid, timestamp}
  │          ├──→ CloudService._on_temp_humid_ready()
  │          │      └── 打包数据 → send_queue.put()     网络线程上传
+ │          ├──→ BLEService._on_temp_humid()
+ │          │      └── 缓存温湿度 → tick() 合并 JSON → BLE Notify (FFF1)
  │          └──→ DisplayService._on_temp_humid_ready()
  │                 └── LCD.show_normal_data()          报警中会被状态锁拦截
  │
@@ -881,12 +891,14 @@ LCD 内部维护 `display_mode` 状态（normal / alarm），用于防止 Servic
  │    └── gnss.get_location()
  │    ├── 有定位 → [E] EVENT_GNSS_READY {lat, lon, alt, speed_kmh, signal_quality, valid, ts}
  │    │              ├──→ CloudService._on_gnss_ready() → 上传
+ │    │              ├──→ BLEService._on_gnss() → 缓存 GPS → 合并推送
  │    │              └──→ DisplayService._on_gnss_ready() → LCD
  │    └── 无定位 → no_fix_count++, 超阈值后:
  │                 [E] EVENT_GPS_LOST → AlarmService._on_gps_lost() → TTS
  │
  ├── Light.tick()  (每2000ms)
  │    └── [E] EVENT_LIGHT_READY {light_intensity, valid, timestamp}
+ │          ├──→ BLEService._on_light() → 缓存光照 → 合并推送
  │          └──→ DisplayService._on_light_ready() → LCD.set_backlight()
  │
  ├── PowerService.tick()  (每10000ms)
@@ -911,15 +923,17 @@ CollisionService 判定碰撞 (Level 1/2/3)
                ├── [S] Audio.play_file(file)           // 等级对应的报警音
                ├── 启动报警超时计时器 (30s)
                └── [E] EVENT_ALARM_TRIGGERED {alarm_type="collision", level, ts}
-                     └──→ CloudService._on_alarm() → 紧急推送云端
+                     ├──→ CloudService._on_alarm() → 紧急推送云端
+                     └──→ BLEService._on_alarm() → 立即推送 {"t":5,"d":{"lvl":level,"type":"collision"}} 到小程序
 
 30s 后超时:
 alarm_timer 到期
   └── [E] EVENT_ALARM_CANCELED {duration, timestamp}
-        └──→ AlarmService._cancel_alarm()
-               ├── LED.off()
-               ├── Audio.stop()
-               └── 重置报警状态
+        ├──→ AlarmService._cancel_alarm()
+        │      ├── LED.off()
+        │      ├── Audio.stop()
+        │      └── 重置报警状态
+        └──→ BLEService._on_alarm_canceled() → 立即推送 {"t":6,"d":{}} 到小程序
 ```
 
 ---
@@ -938,7 +952,8 @@ Button 外部中断 (GPIO + 200ms消抖)
                ├── [S] Audio.play_file(sos.mp3)
                ├── 启动 30s 超时
                └── [E] EVENT_ALARM_TRIGGERED {alarm_type="sos", level=3, ts}
-                     └──→ CloudService._on_alarm() → 紧急推送（含GPS位置）
+                     ├──→ CloudService._on_alarm() → 紧急推送（含GPS位置）
+                     └──→ BLEService._on_alarm() → 立即推送 {"t":5,"d":{"lvl":3,"type":"sos"}} 到小程序
 ```
 
 ---
@@ -984,9 +999,10 @@ gnss.get_location() 返回有效数据
 |:----:|:----|:----:|:-----|:-------|
 | 10ms | 主循环 | 固定 | — | 遍历所有 tick() → pump() → sleep |
 | 100ms | IMU | 固定 | → EVENT_IMU_READY | CollisionService + CloudService |
-| 2000ms | Temp_Humid | 固定 | → EVENT_TEMP_HUMID_READY | CloudService |
-| 2000ms | GNSS | 固定 | → EVENT_GNSS_READY / EVENT_GPS_LOST | CloudService / AlarmService |
-| 2000ms | Light | 固定 | → EVENT_LIGHT_READY | DisplayService |
+| 2000ms | Temp_Humid | 固定 | → EVENT_TEMP_HUMID_READY | CloudService + BLEService |
+| 2000ms | GNSS | 固定 | → EVENT_GNSS_READY / EVENT_GPS_LOST | CloudService + BLEService / AlarmService |
+| 2000ms | Light | 固定 | → EVENT_LIGHT_READY | DisplayService + BLEService |
+| 2000ms | BLEService | 固定 | → BLE Notify (FFF1) 合并 JSON | 小程序（BLE Central） |
 | 10000ms | PowerService | 固定 | → EVENT_BATTERY_LOW / CRITICAL | AlarmService（预留） |
 | 中断 | Button | 按需 | → EVENT_BUTTON_PRESSED | AlarmService |
 | 云端 | CloudService | 按需 | → EVENT_CONFIG_UPDATE | 所有模块 |
@@ -1009,12 +1025,14 @@ gnss.get_location() 返回有效数据
 8. LCD 驱动（LCD）（✅已实现）
 9. 网络驱动：Network → MQTT（✅已实现）
 10. 网络驱动：Qth（✅ v1 已实现）
-11. 碰撞检测服务（CollisionService）（✅ v1 已实现）
-12. 电源管理服务（PowerService）（⏳ v2 计划，等电池硬件）
-13. 报警联动服务（AlarmService）（✅ v1 已实现）
-14. 云端通信服务（CloudService）（✅ v1 已实现）
-15. 移远云通信服务（LarkCloudService）（✅ v1 已实现）
-16. 显示管理服务（DisplayService）（✅ v1 已实现）
+11. BLE 驱动（BLEDriver）（✅ v1 已实现，待集成到 main.py）
+12. 碰撞检测服务（CollisionService）（✅ v1 已实现）
+13. 电源管理服务（PowerService）（⏳ v2 计划，等电池硬件）
+14. 报警联动服务（AlarmService）（✅ v1 已实现）
+15. 云端通信服务（CloudService）（✅ v1 已实现）
+16. 移远云通信服务（LarkCloudService）（✅ v1 已实现）
+17. 显示管理服务（DisplayService）（✅ v1 已实现）
+18. BLE 推送服务（BLEService）（✅ v1 已实现，待集成到 main.py）
 
 **v2 新增模块**：
 
@@ -1023,7 +1041,7 @@ gnss.get_location() 返回有效数据
 | 17 | 心率驱动（HeartRate） | 📅 v2 | BLE 扫描心率带广播数据 |
 | 18 | 大功率灯光驱动（Headlight） | 📅 v2 | PWM 控制高亮 LED |
 | 19 | 导航引导服务（NavigationService） | 📅 v2 | GNSS 比对路线点 + TTS 播报 |
-| 20 | 微信小程序（WeChatMiniProgram） | 🟢 Step A 完成 | 登录+实时数据+骑行控制+总结+地图轨迹 |
+| 20 | 微信小程序（WeChatMiniProgram） | 🟢 Step A 完成 | 登录+BLE 实时数据+骑行控制+总结+地图轨迹 |
 ```
 
 ---
@@ -1080,6 +1098,7 @@ gnss.get_location() 返回有效数据
 | F-ALM-03 | 本地声光报警 | 在 AlarmService（✅ v1 已实现）中实现报警联动（LED 闪烁、音频播放、发布 `EVENT_ALARM_TRIGGERED`），LCD 报警画面由 DisplayService（✅ v1 已实现）负责 | 报警时 LED 闪烁、播放报警音 |
 | F-NET-01 | 骑行数据远程上传 | 开发 `Drivers/network/Network.py` + `Drivers/network/MQTT.py` + CloudService（✅ v1 已实现），实现数据打包和上传 | 传感器数据能实时上传到云端 |
 | F-NET-02 | 紧急报警远程推送 | CloudService（✅ v1 已实现）订阅 `EVENT_ALARM_TRIGGERED`，实现报警数据推送 | 报警事件能立即推送到云端 |
+| F-NET-04 | BLE 近场通信 | 开发 `Drivers/network/BLE.py` + BLEService（✅ v1 已实现），BLE GATT Server + Notify 推送，替代 HTTP 轮询 | 手机 BLE 连接后实时接收传感器数据和报警推送 |
 | F-ALM-04 | 低电量提醒 | PowerService 暂为空壳（无电池），后续接入电池后再补 | 现阶段占位，不影响其他模块 |
 | F-SEN-04 | 环境光照应用 | 开发 DisplayService（✅ v1 已实现），实现开机画面（Logo + TTS）+ 背光自动调节 | 开机显示队标和语音，光照变化时自动调节背光 |
 
@@ -1127,6 +1146,7 @@ gnss.get_location() 返回有效数据
 | F-NET-01 | 骑行数据远程上传 | ✅ | MQTT 每 2 秒上传 |
 | F-NET-02 | 紧急报警远程推送 | ✅ | 报警立即 MQTT 推送 |
 | F-NET-03 | 远程参数配置 | ✅ | 云端下发 → EVENT_CONFIG_UPDATE |
+| F-NET-04 | BLE 近场通信 | ✅ | BLE GATT Server + BLEService 推送，替代 HTTP 轮询 |
 | F-ALM-04 | 低电量提醒 | ⏳ v2 计划 | 需 PowerService + 电池硬件 |
 | - | 系统状态机 | ⏳ v2 计划 | 当前为扁平主循环 |
 
@@ -1136,6 +1156,19 @@ gnss.get_location() 返回有效数据
 - 生产版本 `core/main.py` 为去除调试订阅的正式版
 - v2 待办：PowerService、系统状态机、SD 卡缓存
 - 系统能连续运行 30 分钟不死机
+
+**开发时间轴**：
+
+| 日期 | 里程碑 | 说明 |
+|:----:|:-------|:-----|
+| 5/5 - 5/13 | Phase 1 驱动层开发 | 传感器 + 执行器 + Button，第一阶段验收通过 |
+| 5/14 - 5/16 | 驶动层验收 + 文档同步 | GNSS、LCD、config 等细节完善 |
+| 5/17 | CloudService + Network/MQTT | 云端通信方案实现（MQTT → ConnectLab） |
+| 5/18 - 5/19 | AlarmService + CollisionService + DisplayService | 业务服务层核心模块 |
+| 5/20 | v1 系统集成完成 | 12 模块全部集成到 main.py，5 步渐进验证通过 |
+| 5/22 | Qth + LarkCloudService | 移远云通信方案实现（Qth SDK → 移远云 DMP） |
+| 5/28 | BLE 模块开发 | BLEDriver + BLEService + 3 个测试文件 |
+| 5/28 | 小程序 BLE 连通 | 微信小程序通过 BLE 连接头盔，实时数据显示 + 骑行控制 + 报警弹窗 |
 
 ---
 

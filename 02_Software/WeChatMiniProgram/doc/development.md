@@ -386,11 +386,13 @@ LogComponent
 | 组件 | 当前 | 重构目标 |
 |:-----|:-----|:--------|
 | AuthComponent | `pages/login/login.js` | 不变 |
-| DataComponent | `utils/ws-client.js` | `services/data-service.js` |
-| AlarmComponent | `index.js._onData()` 内嵌 | `services/alarm-service.js` |
-| RideComponent | `index.js` 骑行函数 | `services/ride-service.js` |
-| MapComponent | `index.js` 地图函数 | `services/map-service.js` |
+| BleComponent | `services/ble-service.js` | BLE Central 客户端（替代 DataComponent） |
+| AlarmComponent | `services/alarm-service.js` | 不变 |
+| RideComponent | `services/ride-service.js` | 不变 |
+| MapComponent | `services/map-service.js` | 不变 |
 | LogComponent | `utils/logger.js` | 不变 |
+
+> **历史方案备注**：`DataComponent`（`utils/ws-client.js` → `services/data-service.js`）为 HTTP 轮询方案，已被 `BleComponent` 替代。
 
 ---
 
@@ -592,7 +594,7 @@ WXML 渲染  → 框架转义 → 无 XSS
 | 轨迹点 | ≤ 500 | ✅ |
 | 日志行数 | ≤ 1000 | ✅ |
 | npm 依赖 | 0 | ✅ |
-| 数据写权限 | 单 owner | ⚠️ rideCache 双写 |
+| 数据写权限 | 单 owner | ✅ rideCache 单写（BLE onData） |
 
 ---
 
@@ -627,15 +629,18 @@ WeChatMiniProgram/
 ├── app.js          globalData (token, isRiding, rideCache)
 ├── app.json        窗口 + 定位权限
 ├── services/
-│   ├── data-service.js    HTTP 轮询 + TSL 解析
+│   ├── ble-service.js     BLE Central 客户端（主数据通道）
 │   ├── alarm-service.js   报警检测 + 弹窗规则
 │   ├── ride-service.js    骑行状态 + Haversine 总结
-│   └── map-service.js     轨迹 polyline + marker
+│   ├── map-service.js     轨迹 polyline + marker
+│   ├── data-service.js    [历史] HTTP 轮询 + TSL 解析（已弃用）
+│   └── ble-service.js     BLE Central 客户端
 ├── utils/
 │   ├── config.js      凭据
 │   ├── crypto.js      SHA256+MD5+AES
 │   ├── logger.js      日志
-│   └── ws-client.js   兼容层 (→ data-service)
+│   ├── ble-protocol.js    BLE 协议常量 + 类型映射
+│   └── ws-client.js   [历史] 兼容层 (→ data-service，已弃用)
 ├── pages/login/       登录页 (4 文件)
 ├── pages/index/       首页 (4 文件)
 └── doc/               文档 4 篇
@@ -715,6 +720,9 @@ WeChatMiniProgram/
 | 2026-05-24 | 主题换色 + 离线清除 | 全页面 #66ccff 浅蓝主题、登录页适配、导航栏颜色、结束骑行清空所有字段 |
 | 2026-05-24 | 总结弹窗内嵌地图 + 过滤缓存 | 总结弹窗显示轨迹地图（include-points 全轨迹）、开始骑行只接受 rideStartTime 之后的数据 |
 | 2026-05-24 | ES5 兼容 | index.js 全部函数写法改为 ES5（解决微信 enhance 插件解析报错） |
+| 2026-05-28 | BLE 通道开发 | BLEDriver + BLEService 开发完成，GATT Server FFF1-FFF4，双线程推送架构 |
+| 2026-05-28 | 小程序 BLE 连通 | ble-service.js BLE Central 客户端，index.js 数据通道从 HTTP 轮询切换为 BLE Notify，骑行记录+地图轨迹从 BLE 数据写入 |
+| 2026-05-28 | BLE 稳定性修复 | BLEDriver 回调 try/except、MTU 去重；BLEService 断连清队列、deinit 等待线程、熔断机制；小程序断连清理+直连重连+write fail 回调 |
 | 📅 Step B | 导航+心率+头灯+电量 | 云端导航 R7~R9、心率 R10、头灯 R11、电量 R12 |
 | 📅 Step C | 语音交互 | 语音指令 R13 |
 

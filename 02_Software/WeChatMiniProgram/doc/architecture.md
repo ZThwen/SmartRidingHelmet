@@ -27,7 +27,8 @@
 
 | 外部系统 | 协议 | 数据方向 |
 |:---------|:-----|:--------|
-| 移远云 `iot-api.quectelcn.com` | HTTPS REST | ↔ 双向 |
+| 头盔 BLE (`SmartHelmet-66ccff`) | BLE GATT Notify/Write | ↔ 双向（主数据通道） |
+| 移远云 `iot-api.quectelcn.com` | HTTPS REST | ↔ 双向（历史方案，当前未使用） |
 | 腾讯地图 CDN | HTTPS | ← 入站 |
 | 微信定位 `wx.getLocation` | 微信 API | ← 入站 |
 
@@ -55,25 +56,27 @@
 参考 `development.md` §3 的完整组件定义，这里仅列核心组件：
 
 ```
-AuthComponent ──token──→ DataComponent
+AuthComponent ──token──→ BleComponent
                               │
-                    items[] (原始数据)    NavComponent
+                    data.t (BLE JSON)    NavComponent (FFF2 write)
                               │               │
-              ┌───────────────┼───────────────┤ writeDevice
+              ┌───────────────┼───────────────┤ BLE write
               ▼               ▼               ▼
-       AlarmComponent    RideComponent    MapComponent   移远云
-       (纯函数·无状态)   (状态机·缓存)   (轨迹·跟随)   REST API
+       AlarmComponent    RideComponent    MapComponent   头盔
+       (纯函数·无状态)   (状态机·缓存)   (轨迹·跟随)   BLE GATT
 ```
 
 | 组件 | 职责 | 文件 |
 |:-----|:-----|:-----|
 | AuthComponent | 登录、token 管理 | `login.js` + `crypto.js` |
-| DataComponent | HTTP 轮询、TSL 解析、writeData 下行 | `services/data-service.js` |
+| BleComponent | BLE 扫描/连接/收发数据/自动重连 | `services/ble-service.js` |
 | AlarmComponent | 报警检测、弹窗规则 | `services/alarm-service.js` |
 | RideComponent | 骑行状态机、Haversine 总结 | `services/ride-service.js` |
 | MapComponent | 轨迹 polyline、marker 生成 | `services/map-service.js` |
-| NavComponent | 路线规划、逐条推流 | `services/navigation-service.js` |
+| NavComponent | 路线规划、BLE 写入导航指令 | `services/navigation-service.js` |
 | LogComponent | 日志双写 | `utils/logger.js` |
+
+> **历史方案备注**：`DataComponent`（`services/data-service.js`）为 v1 初期的 HTTP 轮询方案，当前未被 `index.js` 引用。数据采集已由 `BleComponent` 通过 BLE Notify 接管。
 
 ---
 
@@ -84,14 +87,21 @@ AuthComponent
   login(phone: string, pwd: string) → token
   getToken() → string
 
-DataComponent
-  startPoll(onData: (items: TslItem[]) → void) → void
-  stopPoll() → void
+BleComponent
+  init(callbacks) → Promise
+  scan() → void
+  stopScan() → void
+  connectById(deviceId) → void
+  sendNav(dir, dist, road) → void
+  sendCtrl(cmd) → void
+  sendAck(id) → void
+  disconnect() → void
+  isConnected() → bool
 
 AlarmComponent
-  analyze(items: TslItem[]) → {
-    isAlarm: bool, alarmType: string, level: number,
-    displayText: string, shouldPopup: bool
+  analyze(alarmType, level) → {
+    displayText: string, shouldPopup: bool,
+    popupClass: string, icon: string
   }
 
 RideComponent
@@ -118,7 +128,7 @@ NavComponent
 |:-----|:------|:--------|
 | token | AuthComponent | 单写多读 |
 | isRiding | RideComponent | 单写多读 |
-| rideCache[] | RideComponent | ⚠️ 当前 DataComponent 也追加 (待修) |
+| rideCache[] | RideComponent | 单写多读（BLE onData 回调写入） |
 | trackPoints[] | MapComponent | 单写单读 |
 | showAlarmPopup | AlarmComponent | 单写多读 |
 
@@ -145,7 +155,7 @@ NavComponent
 | ID | 决策 | 理由 |
 |:---|:-----|:-----|
 | ADR-1 | 模块化单体 | 单用户、无并发 |
-| ADR-2 | HTTP 轮询 | WS 协议未文档化 |
+| ADR-2 | BLE GATT Notify（主通道） | 低延迟、无云端依赖。HTTP 轮询为历史方案，已弃用 |
 | ADR-3 | 零 npm | `require()` 即可 |
 | ADR-4 | globalData 共享 | 5 个状态不需 Redux |
 | ADR-5 | 导航指令经 writeData REST API 下行 | 协议已文档化，30/秒 QPS 够用。1-3s 延迟非安全关键，可接受 |
