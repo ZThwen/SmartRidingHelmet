@@ -46,6 +46,13 @@ EVENT_NETWORK_DISCONNECTED  = "NETWORK_DISCONNECTED"  # 网络断开
 EVENT_DATA_UPLOAD_SUCCESS   = "DATA_UPLOAD_SUCCESS"   # 数据上传成功
 EVENT_DATA_UPLOAD_FAILED    = "DATA_UPLOAD_FAILED"    # 数据上传失败
 
+# 蓝牙(BLE)相关事件
+EVENT_BLE_CONNECTED         = "BLE_CONNECTED"          # BLE 连接成功
+EVENT_BLE_DISCONNECTED      = "BLE_DISCONNECTED"       # BLE 断开连接
+EVENT_NAV_CMD               = "NAV_CMD"                # 导航指令（手机→头盔）
+EVENT_RIDE_CONTROL          = "RIDE_CONTROL"           # 骑行控制指令
+EVENT_BLE_ALARM_ACK         = "BLE_ALARM_ACK"          # 报警确认（手机取消）
+
 # ================= 默认参数配置 =================
 # 传感器采样间隔
 TEMP_HUMID_SAMPLE_MS   = 2000    # 温湿度传感器采样间隔 (ms)
@@ -123,8 +130,8 @@ POWER_STATE_DEEP_SLEEP    = "DEEP_SLEEP"    # 深度休眠状态
 NETWORK_CONNECT_TIMEOUT_MS = 60000    # 4G网络连接超时时间 (ms)
 
 # ================= MQTT通信配置 =================
-MQTT_BROKER             = "172.188.83.251"    # ConnectLab 服务器地址
-MQTT_PORT               = 48513               # ConnectLab 端口（每次创建会话不同）
+MQTT_BROKER             = "101.37.104.185"    # ConnectLab 服务器地址
+MQTT_PORT               = 46233               # ConnectLab 端口（每次创建会话不同）
 MQTT_USERNAME           = "quectel"           # MQTT 用户名
 MQTT_PASSWORD           = "12345678"          # MQTT 密码
 MQTT_CLIENT_ID          = "66ccff"            # MQTT 客户端 ID
@@ -152,6 +159,17 @@ MQTT_WILL_RETAIN        = True
 CLOUD_UPLOAD_INTERVAL_MS = 2000    # 数据上传间隔 (ms)
 CLOUD_GPS_TRACK_MAX      = 50      # GPS 轨迹点缓存上限
 
+# ================= 移远云 Qth 配置 =================
+QTH_PRODUCT_ID     = "p11yMv"                           # 产品 ID
+QTH_PRODUCT_KEY    = "Vk9WUXFZZENkV00w"                 # 产品密钥
+QTH_DEVICE_KEY     = "66ccff"                           # 设备 Key
+QTH_SERVER         = "mqtt://iot-south.quectelcn.com:1883"  # 移远云服务器
+QTH_APP_VERSION    = "v2.0.0"                           # 应用版本号（OTA 用）
+
+# ================= LarkCloudService 配置 =================
+LARK_UPLOAD_INTERVAL_MS = 2000    # 移远云数据上传间隔 (ms)
+LARK_QUEUE_MAX_SIZE     = 50      # 发送队列最大长度
+
 # ================= 显示配置 =================
 LCD_BACKLIGHT_HIGH        = 100    # 高背光亮度(%)
 LCD_BACKLIGHT_MEDIUM      = 60     # 中背光亮度(%)
@@ -165,3 +183,14 @@ LED_BLINK_INTERVAL_MS     = 500
 LED_BLINK_MIN_MS          = 100
 LED_BLINK_MAX_MS          = 5000
 TIMER_ID_LED              = 1
+
+# ================= BLE 蓝牙配置 =================
+BLE_DEVICE_NAME           = "SmartHelmet-66ccff"    # BLE 广播设备名
+BLE_SERVICE_UUID          = 0xFFF0                  # GATT 主服务 UUID
+BLE_CHAR_DATA             = 0xFFF1                  # 头盔数据通道 (NOTIFY)
+BLE_CHAR_NAV              = 0xFFF2                  # 导航指令通道 (WRITE)
+BLE_CHAR_CTRL             = 0xFFF3                  # 骑行控制通道 (WRITE)
+BLE_CHAR_ACK              = 0xFFF4                  # 报警确认通道 (WRITE)
+BLE_MTU                   = 247                     # 最大传输单元
+BLE_UPLOAD_INTERVAL_MS    = 2000                    # BLE 通知推送间隔 (ms)
+BLE_KEEPALIVE_MS          = 5000                    # 心跳间隔 (ms)

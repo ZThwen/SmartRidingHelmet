@@ -329,31 +329,6 @@ while True:
     time.sleep_ms(10)
 ```
 
-### 3.3 项目事件定义
-
-**传感器事件**：
-
-| 事件名 | 触发时机 | 携带数据 |
-|--------|----------|----------|
-| `TEMP_HUMID_READY` | 温湿度采集完成 | temp, humid, valid |
-| `IMU_DATA_READY` | 加速度数据就绪 | acc_x, acc_y, acc_z |
-| `SENSOR_ERROR` | 传感器故障 | source, error |
-
-**业务事件**：
-
-| 事件名 | 触发时机 | 携带数据 |
-|--------|----------|----------|
-| `COLLISION_DETECTED` | 检测到碰撞 | acc_data, confidence |
-| `SOS_BUTTON_PRESSED` | SOS按键按下 | timestamp |
-| `ALARM_TRIGGERED` | 报警启动 | alarm_type |
-
-**系统事件**：
-
-| 事件名 | 触发时机 | 携带数据 |
-|--------|----------|----------|
-| `SYSTEM_READY` | 系统启动完成 | modules_count |
-| `CONFIG_UPDATE` | 配置更新 | target, params |
-
 ---
 
 ## 4. 目录结构
@@ -376,22 +351,30 @@ SmartRidingHelmet-TeamX/
 │   │   ├── sensor/
 │   │   │   ├── Temp_Humid.py    # 温湿度（AHT20）
 │   │   │   ├── imu.py           # 加速度/陀螺仪
-│   │   │   └── gnss.py          # GNSS定位
+│   │   │   ├── gnss.py          # GNSS定位
+│   │   │   └── Light.py         # 光照（GL5528 ADC）
 │   │   ├── actuator/
 │   │   │   ├── buzzer.py        # 蜂鸣器
-│   │   │   └── led.py           # LED指示灯
-│   │   │   └── LCD.py           # LCD屏幕
+│   │   │   ├── led.py           # LED指示灯
+│   │   │   └── Headlight.py     # 【v2】大功率灯光驱动
 │   │   ├── interface/
 │   │   │   └── button.py        # SOS按键
 │   │   └── network/
-│   │       ├── cellular.py      # 4G网络模组
-│   │       └── mqtt_client.py   # MQTT协议封装
+│   │       ├── Network.py       # 4G网络模组
+│   │       ├── MQTT.py          # MQTT协议封装
+│   │       ├── BLE.py           # BLE蓝牙GATT Server
+│   │       ├── Qth.py           # 移远云Qth SDK封装
+│   │       └── thread_queue.py  # 线程安全队列
 │   │
 │   ├── Modules/                 # 业务服务层（Service层）
 │   │   ├── collision_service.py # 碰撞检测算法
 │   │   ├── alarm_service.py     # 报警联动逻辑
-│   │   ├── cloud_service.py     # 云端通信与数据上报
-│   │   └── power_service.py     # 电源管理与功耗调度
+│   │   ├── cloud_service.py     # 云端通信与数据上报（MQTT）
+│   │   ├── lark_cloud.py        # 移远云通信（Qth SDK）
+│   │   ├── ble_service.py       # BLE推送服务
+│   │   ├── display_service.py   # 显示管理服务
+│   │   ├── power_service.py     # 【v2】电源管理（等电池硬件）
+│   │   └── navigation_service.py# 【v2】导航引导服务
 │   │
 │   └── Tests/                   # 单元测试与Mock
 │       ├── test_drivers/        # 驱动层独立测试
@@ -504,6 +487,7 @@ def tick(self):
 
 ---
 
-**文档版本**：v6.0  
-**更新日期**：2026-05-05  
-**维护团队**：锦依卫队
+**文档版本**：v6.1  
+**更新日期**：2026-05-21  
+**维护团队**：锦依卫队  
+**备注**：v1 完成，v2 新增心率/导航/灯光占位

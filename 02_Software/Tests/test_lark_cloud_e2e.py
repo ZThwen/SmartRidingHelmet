@@ -1,7 +1,7 @@
 """
 brief LarkCloudService 端到端测试（真机）
-note 连接真实硬件模块（Temp_Humid），通过 EventBus 走完整事件链路
-     仅 GNSS 因室内无信号而模拟
+note 连接真实硬件（Temp_Humid），EventBus 完整事件链路，仅 GNSS 因室内无信号而模拟
+     每阶段打印明确标记，对照小程序验证显示逻辑
 执行: 上传到板子运行 python Tests/test_lark_cloud_e2e.py
 """
 import sys
@@ -20,17 +20,38 @@ from Modules.lark_cloud import LarkCloudService
 PASS = 0
 FAIL = 0
 
-# ==================== 模拟 GNSS ====================
+# ==================== 模拟 GNSS（支持可变信号质量） ====================
+
+_SIG_SEQ = ["good", "fair", "poor", "none"]  # 信号质量循环
+_SIG_IDX = 0
 
 def _sim_gnss(event_bus, tick):
-    """定期发布模拟 GNSS 数据（室内无真实 GPS 信号）"""
+    """定期发布模拟 GNSS 数据（室内无真实 GPS 信号），坐标和速度微变模拟真实骑行"""
+    global _SIG_IDX
     if tick % 2 != 0:
         return
+    # 坐标微变模拟移动，速度随机波动
+    lat = 22.5431 + (tick % 100) * 0.0001
+    lon = 113.9523 + (tick % 100) * 0.0001
+    spd = 15.2 + (tick % 10) * 1.5
+    alt = 10.0 + (tick % 20) * 0.5
     event_bus.publish(EVENT_GNSS_READY, {
-        "latitude": 22.5431, "longitude": 113.9523,
-        "altitude": 10.0, "speed_kmh": 15.2,
-        "signal_quality": "good", "valid": True,
+        "latitude": lat, "longitude": lon,
+        "altitude": alt, "speed_kmh": spd,
+        "signal_quality": _sig_quality(), "valid": True,
     })
+
+def _sig_quality():
+    """返回当前模拟信号质量，每次 GNSS 上报轮换"""
+    global _SIG_IDX
+    q = _SIG_SEQ[_SIG_IDX % 4]
+    _SIG_IDX += 1
+    return q
+
+def _reset_sig():
+    global _SIG_IDX
+    _SIG_IDX = 0
+
 
 # ==================== 主循环 ====================
 
@@ -61,7 +82,6 @@ def pump_loop(bus, temp_humid, lark, duration_s, simulate_gnss=True, alarm_mode=
 
 def pump_loop_normal(bus, temp_humid, lark, duration_s):
     """常态循环：取消报警"""
-    # 先发一次取消
     bus.publish(EVENT_ALARM_CANCELED, {})
     pump_loop(bus, temp_humid, lark, duration_s, simulate_gnss=True, alarm_mode=False)
 
@@ -105,79 +125,110 @@ def test_init_all():
         time.sleep(1)
     else:
         print("  ~ 30 秒内未连上，跳过等待")
-        # 不标记失败——sendTsl 可能仍然可用
 
     PASS += 1
     return bus, temp, lark
 
 
-def test_upload_normal():
-    """常态：真实温湿度 + 模拟 GNSS → 上传"""
+def test_normal():
+    """测试 1：常态上传 — 小程序应显示温度/湿度/速度/位置/信号(变化)/报警=正常"""
     global PASS, FAIL
-    print("\n--- 测试 1: 常态上传 ---")
+    _reset_sig()
+    print("\n" + "=" * 44)
+    print(" 测试 1: 常态数据上传")
+    print("=" * 44)
+    print("  小程序预期: 温湿度+速度+位置正常, alarm=正常(不是碰撞!), 信号轮换")
+    print("  现在 -> 先看小程序当前显示什么, 5秒后开始传常态数据")
+
     bus, temp, lark = test_init_all()
     if not lark:
         return
 
-    print("  运行主循环 5 秒（等待 Temp_Humid 采集 + 上传）...")
-    pump_loop_normal(bus, temp, lark, 5)
+    # 暂停 5 秒 — 用户观察小程序当前状态
+    for i in range(5, 0, -1):
+        print("  ... %d 秒后开始" % i, end="\r")
+        time.sleep(1)
+    print("")
 
-    print("  ✓ 常态上传完成（平台应收到 ID 1~5,8,9）")
+    print("  >>> 阶段: 常态上传 (10 秒) <<<")
+    pump_loop_normal(bus, temp, lark, 10)
+
+    print("  ✓ 常态上传完成 — 关注小程序 alarm 是否显示 '正常'")
     PASS += 1
 
 
-def test_upload_alarm():
-    """报警态：真实温湿度 + 模拟 GNSS + 模拟报警"""
+def test_alarm():
+    """测试 2：报警上传 — 小程序应显示 alarm=碰撞 Lv2(红色), 无温湿度/速度"""
     global PASS, FAIL
-    print("\n--- 测试 2: 报警上传 ---")
+    _reset_sig()
+    print("\n" + "=" * 44)
+    print(" 测试 2: 报警数据上传")
+    print("=" * 44)
+    print("  小程序预期: alarm=碰撞 Lv2 红色, 无温度/湿度/速度更新")
+    print("  现在 -> 先看小程序 alarm 是不是 '正常', 5秒后触发报警")
+
     bus, temp, lark = test_init_all()
     if not lark:
         return
 
-    # 先让常态数据走一次
-    pump_loop_normal(bus, temp, lark, 2)
+    # 先常态 5 秒
+    print("  >>> 阶段: 常态(确认 alarm=正常) <<<")
+    pump_loop_normal(bus, temp, lark, 5)
 
     # 触发报警
-    print("  触发报警...")
+    print("  >>> 阶段: 触发报警！<<<")
     bus.publish(EVENT_ALARM_TRIGGERED, {"alarm_type": "collision", "level": 2})
     time.sleep(1)
     lark.tick()
     bus.pump()
 
-    # 报警态运行 5 秒
-    pump_loop(bus, temp, lark, 5, simulate_gnss=True, alarm_mode=True)
+    print("  >>> 阶段: 报警持续 (10 秒，看小程序 alarm 变红) <<<")
+    pump_loop(bus, temp, lark, 10, simulate_gnss=True, alarm_mode=True)
 
-    print("  ✓ 报警上传完成（平台应只收到 ID 4~9，无温湿度/速度）")
+    print("  ✓ 报警上传完成 — 确认小程序 alarm='碰撞 Lv2' 红色")
     PASS += 1
 
 
-def test_upload_alarm_cancel():
-    """报警解除 → 恢复正常"""
+def test_alarm_cancel():
+    """测试 3：报警解除 — 小程序应恢复 alarm=正常, 重新显示温湿度"""
     global PASS, FAIL
-    print("\n--- 测试 3: 报警解除 ---")
+    _reset_sig()
+    print("\n" + "=" * 44)
+    print(" 测试 3: 报警解除验证")
+    print("=" * 44)
+    print("  小程序预期: 先 SOS Lv3 红色 → 解除 → alarm 回到 '正常', 温湿度恢复")
+    print("  现在 -> 5秒后触发 SOS 报警")
+
     bus, temp, lark = test_init_all()
     if not lark:
         return
 
-    # 先触发报警
+    # 暂停 5 秒
+    for i in range(5, 0, -1):
+        print("  ... %d 秒后触发" % i, end="\r")
+        time.sleep(1)
+    print("")
+
+    # 触发报警 → 持续 10 秒
+    print("  >>> 阶段: SOS 报警中 (10 秒) <<<")
     bus.publish(EVENT_ALARM_TRIGGERED, {"alarm_type": "sos", "level": 3})
     time.sleep(1)
     lark.tick()
     bus.pump()
-
-    pump_loop(bus, temp, lark, 3, simulate_gnss=True, alarm_mode=True)
+    pump_loop(bus, temp, lark, 10, simulate_gnss=True, alarm_mode=True)
 
     # 解除报警
-    print("  解除报警...")
+    print("  >>> 阶段: 解除！看小程序 alarm 变回 '正常' <<<")
     bus.publish(EVENT_ALARM_CANCELED, {})
     time.sleep(1)
     lark.tick()
     bus.pump()
 
     # 恢复正常模式
-    pump_loop_normal(bus, temp, lark, 5)
+    print("  >>> 阶段: 常态恢复 (10 秒) <<<")
+    pump_loop_normal(bus, temp, lark, 10)
 
-    print("  ✓ 报警解除完成（平台应恢复收到温湿度数据）")
+    print("  ✓ 报警解除完成 — 确认小程序 alarm = '正常'（不是 SOS）")
     PASS += 1
 
 
@@ -188,14 +239,20 @@ if __name__ == "__main__":
     print("        GNSS 数据（模拟，室内无信号）")
     print("")
 
-    test_upload_normal()
-    test_upload_alarm()
-    test_upload_alarm_cancel()
+    test_normal()
+    test_alarm()
+    test_alarm_cancel()
 
-    print("\n========================")
+    print("\n" + "=" * 44)
     print("  通过: %d  失败: %d" % (PASS, FAIL))
-    print("========================")
+    print("=" * 44)
     if FAIL > 0:
         print("⚠️  部分测试未通过")
     else:
         print("✅ 全部通过")
+
+    print("\n--- 小程序对照验证 ---")
+    print("  测试 1 → 检查: 温度/湿度/速度/位置正常, alarm='正常', 信号轮换(良好→一般→差→无)")
+    print("  测试 2 → 检查: alarm='碰撞 Lv2' 红字, 温湿度/速度保持上阶段旧值或 --")
+    print("  测试 3 → 检查: 报警 5s → 解除 → alarm='正常', 温湿度/速度重新出现")
+    print("  ★ 重点: 解除后 alarm 不能残留 '碰撞' 或 'SOS'")

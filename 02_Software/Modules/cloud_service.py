@@ -7,17 +7,16 @@ note 负责传感器数据打包上传、紧急报警推送、云端配置下发
 import time
 import ujson
 import _thread
-import math
 
 from core.Base_Module import BaseModule
 from core.config import (
     EVENT_TEMP_HUMID_READY, EVENT_IMU_READY, EVENT_GNSS_READY,
-    EVENT_ALARM_TRIGGERED, EVENT_CONFIG_UPDATE,
+    EVENT_ALARM_TRIGGERED, EVENT_ALARM_CANCELED, EVENT_CONFIG_UPDATE,
     EVENT_NETWORK_CONNECTED, EVENT_NETWORK_DISCONNECTED,
     EVENT_DATA_UPLOAD_SUCCESS, EVENT_DATA_UPLOAD_FAILED,
-    MQTT_TOPIC_DATA, MQTT_TOPIC_ALARM, MQTT_TOPIC_CONFIG,
-    MQTT_QOS_DATA, MQTT_QOS_ALARM, MQTT_QOS_CONFIG,
-    CLOUD_UPLOAD_INTERVAL_MS, CLOUD_GPS_TRACK_MAX,
+    MQTT_TOPIC_DATA, MQTT_TOPIC_CONFIG,
+    MQTT_QOS_DATA, MQTT_QOS_CONFIG,
+    CLOUD_UPLOAD_INTERVAL_MS,
 )
 from Drivers.network.Network import NetworkDriver
 from Drivers.network.MQTT import MQTTDriver
@@ -37,7 +36,6 @@ class CloudService(BaseModule):
         # ======================= cfg：静态配置 =======================
         self.cfg = {
             "upload_interval_ms": CLOUD_UPLOAD_INTERVAL_MS,
-            "gps_track_max": CLOUD_GPS_TRACK_MAX,
             "max_retry": 3,
         }
 
@@ -49,22 +47,16 @@ class CloudService(BaseModule):
             "thread_running": False,
             "err_count": 0,
             "last_upload": 0,
+            "alarm_active": False,
+            "alarm_info": {},
         }
 
-        # ======================= _data：缓存与扩展字段 =======================
-        # 传感器缓存（初始 None，未读到数据时 JSON 输出 null）
+        # ======================= _data：传感器缓存 =======================
         self._data = {
             "latest_temp": None,
             "latest_humid": None,
             "latest_imu": None,
             "latest_gnss": None,
-            "_prev_gnss": None,
-            # 骑行扩展
-            "total_distance": 0.0,
-            "max_speed": 0.0,
-            "total_ascent": 0.0,
-            "collision_count": 0,
-            "gps_track": [],
         }
 
         # Device 层对象（Service 持有 Device）
@@ -97,6 +89,7 @@ class CloudService(BaseModule):
                 self.event_bus.subscribe(EVENT_IMU_READY, self._on_imu)
                 self.event_bus.subscribe(EVENT_GNSS_READY, self._on_gnss)
                 self.event_bus.subscribe(EVENT_ALARM_TRIGGERED, self._on_alarm)
+                self.event_bus.subscribe(EVENT_ALARM_CANCELED, self._on_alarm_canceled)
                 self.event_bus.subscribe(EVENT_CONFIG_UPDATE, self._on_config_update)
 
             # ====== 5. 主线程完成连接（AT 指令，栈充足）======
@@ -155,17 +148,34 @@ class CloudService(BaseModule):
 
         # ====== 3. 拼装 JSON 入队 ======
         try:
-            payload = {
-                "Temp": self._data["latest_temp"],
-                "Humi": self._data["latest_humid"],
-                "G-Sensor": self._data["latest_imu"],
-                "GNSS": self._data["latest_gnss"],
-                "total_distance": round(self._data["total_distance"], 3),
-                "max_speed": self._data["max_speed"],
-                "total_ascent": round(self._data["total_ascent"], 1),
-                "collision_count": self._data["collision_count"],
-                "timestamp": time.ticks_ms(),
-            }
+            gnss = self._data["latest_gnss"]
+
+            if self.ctx["alarm_active"]:
+                # ----- 报警态：持续发送报警 payload -----
+                alarm = self.ctx["alarm_info"]
+                payload = {
+                    "type": "alarm",
+                    "alarm_type": alarm.get("alarm_type", "unknown"),
+                    "level": alarm.get("level", 1),
+                    "latitude": alarm.get("lat"),
+                    "longitude": alarm.get("lon"),
+                    "altitude": alarm.get("alt"),
+                    "timestamp": time.ticks_ms(),
+                }
+            else:
+                # ----- 正常态：蛇形命名新格式 -----
+                payload = {
+                    "type": "normal",
+                    "temp": self._data["latest_temp"],
+                    "humidity": self._data["latest_humid"],
+                    "speed_kmh": gnss["speed_kmh"] if gnss else None,
+                    "latitude": gnss["lat"] if gnss else None,
+                    "longitude": gnss["lon"] if gnss else None,
+                    "altitude": gnss["alt"] if gnss else None,
+                    "signal_quality": gnss["signal_quality"] if gnss else None,
+                    "timestamp": time.ticks_ms(),
+                }
+
             json_str = ujson.dumps(payload)
             self.send_queue.put(json_str)
 
@@ -195,77 +205,46 @@ class CloudService(BaseModule):
 
     def _on_gnss(self, payload):
         """
-        brief 缓存 GNSS 定位数据 + 更新骑行扩展字段
+        brief 缓存 GNSS 定位数据（含 signal_quality）
         note 不上传入队——上传由 tick() 定时触发
         """
         if not payload.get("valid", False):
             return
 
-        # ====== 1. 缓存当前定位 ======
-        curr = {
+        self._data["latest_gnss"] = {
             "lat": payload["latitude"],
             "lon": payload["longitude"],
             "alt": payload["altitude"],
             "speed_kmh": payload["speed_kmh"],
+            "signal_quality": payload.get("signal_quality", "none"),
         }
-        self._data["latest_gnss"] = curr
-
-        # ====== 2. 更新骑行扩展数据 ======
-        prev = self._data["_prev_gnss"]
-        if prev:
-            # 累加 Haversine 距离
-            self._data["total_distance"] += self._haversine(
-                prev["lat"], prev["lon"],
-                payload["latitude"], payload["longitude"],
-            )
-            # 累加爬升
-            ascent = payload["altitude"] - prev["alt"]
-            if ascent > 0:
-                self._data["total_ascent"] += ascent
-
-        self._data["_prev_gnss"] = {
-            "lat": payload["latitude"],
-            "lon": payload["longitude"],
-            "alt": payload["altitude"],
-        }
-
-        # 最大速度
-        if payload["speed_kmh"] > self._data["max_speed"]:
-            self._data["max_speed"] = payload["speed_kmh"]
-
-        # GPS 轨迹
-        self._data["gps_track"].append({
-            "lat": payload["latitude"],
-            "lon": payload["longitude"],
-        })
-        if len(self._data["gps_track"]) > self.cfg["gps_track_max"]:
-            self._data["gps_track"].pop(0)
 
     def _on_alarm(self, payload):
         """
-        brief 报警事件回调：立即拼装报警 JSON 入队
-        note 不依赖上传周期，收到后立即入队让网络线程发送
+        brief 报警事件回调：标记报警态激活，缓存报警信息
+        note 由 tick() 持续发送报警 payload 直到解除
         """
-        alarm_type = payload.get("alarm_type", "unknown")
-        level = payload.get("level", 1)
-
-        # ====== 1. 统计碰撞次数 ======
-        if alarm_type == "collision":
-            self._data["collision_count"] += 1
-
-        # ====== 2. 拼装报警 JSON ======
         gnss = self._data["latest_gnss"]
-        payload_data = {
-            "alarm_type": alarm_type,
-            "level": level,
-            "location": {
-                "lat": gnss["lat"],
-                "lon": gnss["lon"],
-            } if gnss else None,
-            "timestamp": time.ticks_ms(),
+        self.ctx["alarm_active"] = True
+        self.ctx["alarm_info"] = {
+            "alarm_type": payload.get("alarm_type", "unknown"),
+            "level": payload.get("level", 1),
+            "lat": gnss["lat"] if gnss else None,
+            "lon": gnss["lon"] if gnss else None,
+            "alt": gnss["alt"] if gnss else None,
         }
-        json_str = ujson.dumps(payload_data)
-        self.send_queue.put(json_str)
+        print("[%s] 报警态激活: %s 等级%s" % (self.name,
+              self.ctx["alarm_info"]["alarm_type"],
+              self.ctx["alarm_info"]["level"]))
+
+    def _on_alarm_canceled(self, payload):
+        """
+        brief 报警取消回调：恢复正常数据上传
+        """
+        self.ctx["alarm_active"] = False
+        self.ctx["alarm_info"] = {}
+        print("[%s] 报警态解除，恢复数据上传" % self.name)
+
 
     # ==================== 网络线程（后台）====================
 
@@ -320,23 +299,7 @@ class CloudService(BaseModule):
 
     # ==================== 辅助方法 ====================
 
-    def _haversine(self, lat1, lon1, lat2, lon2):
-        """
-        brief 计算两点间球面距离（Haversine 公式）
-        param lat1: 起点纬度
-        param lon1: 起点经度
-        param lat2: 终点纬度
-        param lon2: 终点经度
-        return float 距离（km）
-        """
-        R = 6371.0
-        dlat = math.radians(lat2 - lat1)
-        dlon = math.radians(lon2 - lon1)
-        a = (math.sin(dlat / 2) ** 2 +
-             math.cos(math.radians(lat1)) *
-             math.cos(math.radians(lat2)) *
-             math.sin(dlon / 2) ** 2)
-        return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
 
     def get_data(self):
         """
@@ -345,10 +308,7 @@ class CloudService(BaseModule):
         """
         return {
             "latest_gnss": self._data["latest_gnss"],
-            "total_distance": round(self._data["total_distance"], 3),
-            "max_speed": self._data["max_speed"],
-            "total_ascent": round(self._data["total_ascent"], 1),
-            "collision_count": self._data["collision_count"],
+            "alarm_active": self.ctx["alarm_active"],
             "queue_size": self.send_queue.size() if self.send_queue else 0,
             "timestamp": time.ticks_ms(),
         }
@@ -375,5 +335,4 @@ class CloudService(BaseModule):
             if "upload_interval_ms" in payload:
                 self.cfg["upload_interval_ms"] = int(payload["upload_interval_ms"])
                 print("[%s] 上传间隔更新为 %sms" % (self.name, self.cfg["upload_interval_ms"]))
-            if "gps_track_max" in payload:
-                self.cfg["gps_track_max"] = int(payload["gps_track_max"])
+

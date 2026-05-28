@@ -122,7 +122,9 @@ class LarkCloudService(BaseModule):
                 tsl[6] = self.ctx["alarm_type"]
                 tsl[7] = self.ctx["alarm_level"]
             else:
-                # --- 常态：额外传温湿度 + 速度 ---
+                # --- 常态：额外传温湿度 + 速度，并显式清除报警（防止 API 残留旧值） ---
+                tsl[6] = 0   # 显式发送 alarm_type=0，覆盖 API 缓存的旧报警值
+                tsl[7] = 0   # alarm_level=0 辅助清除
                 if self._data["latest_temp"] is not None:
                     tsl[1] = self._data["latest_temp"]
                 if self._data["latest_humid"] is not None:

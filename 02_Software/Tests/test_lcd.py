@@ -110,7 +110,7 @@ def test_lcd():
     print("  [4.5] 清屏测试...")
     lcd.clear()
     data = lcd.get_data()
-    if data["display_mode"] == "blank" and data["temp"] == 0.0:
+    if data["display_mode"] == "normal" and data["temp"] == 0.0:
         print("    ✓ 清屏成功，数据已重置")
     else:
         print("    ✗ 清屏失败")
@@ -159,6 +159,19 @@ def test_lcd():
         time.sleep_ms(200)
 
     print("  有效操作: {}/10".format(success_count))
+
+    # 锁状态验证：报警中调用 show_normal_data() 应被拦截
+    print("\n[步骤5.1] 状态锁验证...")
+    lcd.show_alarm("collision")
+    event_bus.pump()
+    data = lcd.get_data()
+    lock_mode = data["display_mode"]
+    lcd.show_normal_data(30.0, 60.0, 31.23, 121.47)
+    data = lcd.get_data()
+    if data["display_mode"] == lock_mode:
+        print("    ✓ 状态锁生效：报警中 normal 画面被拦截")
+    else:
+        print("    ✗ 状态锁失效：报警画面被覆盖")
 
     # ====== [步骤6] 翻转（rotation）测试 ======
     print("\n[步骤6] 翻转（rotation）测试...")

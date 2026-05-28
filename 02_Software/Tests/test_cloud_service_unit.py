@@ -1,7 +1,7 @@
 """
 brief CloudService 单模块测试（纯 fake 数据）
 note 不依赖真实传感器、不启动网络线程
-     只验证事件回调逻辑 + JSON 拼装 + 骑行扩展计算
+     只验证事件回调逻辑 + JSON 拼装 + 报警态切换
 执行: 上传到板子运行 python test_cloud_service.py
 """
 import sys
@@ -51,7 +51,7 @@ def test_cache_imu_valid():
 
 
 def test_gnss_caches_data():
-    """_on_gnss 有效定位 → latest_gnss 更新"""
+    """_on_gnss 有效定位 → latest_gnss 更新含 signal_quality"""
     svc, _ = make_service()
     svc._on_gnss({"latitude": 22.5431, "longitude": 113.9523,
                   "altitude": 15.0, "speed_kmh": 25.0,
@@ -60,7 +60,8 @@ def test_gnss_caches_data():
     assert g["lat"] == 22.5431
     assert g["lon"] == 113.9523
     assert g["speed_kmh"] == 25.0
-    print("  OK GNSS 缓存")
+    assert g["signal_quality"] == "good"
+    print("  OK GNSS 缓存含 signal_quality")
 
 
 def test_gnss_invalid():
@@ -98,98 +99,127 @@ def test_tick_all_nulls():
     svc.tick()
     import ujson
     data = ujson.loads(svc.send_queue.get(timeout_ms=100))
-    assert data["Temp"] is None
-    assert data["Humi"] is None
-    assert data["G-Sensor"] is None
-    assert data["GNSS"] is None
-    print("  OK 初始 null")
+    assert data["type"] == "normal"
+    assert data["temp"] is None
+    assert data["humidity"] is None
+    assert data["speed_kmh"] is None
+    assert data["latitude"] is None
+    assert data["longitude"] is None
+    assert data["altitude"] is None
+    assert data["signal_quality"] is None
+    print("  OK 初始 null 字段 + type=normal")
 
 
-def test_alarm_collision():
-    """_on_alarm collision → collision_count++ + JSON 入队"""
+def test_tick_normal_payload():
+    """tick() 正常态 → JSON 含 type=normal + 蛇形字段"""
     svc, _ = make_service()
+    svc._data["latest_temp"] = 26.5
+    svc._data["latest_humid"] = 60.0
+    svc._data["latest_gnss"] = {
+        "lat": 22.54, "lon": 113.95, "alt": 10.0,
+        "speed_kmh": 15.0, "signal_quality": "good",
+    }
+    svc.ctx["last_upload"] = 0
+    svc.tick()
+    import ujson
+    data = ujson.loads(svc.send_queue.get(timeout_ms=100))
+    assert data["type"] == "normal"
+    assert data["temp"] == 26.5
+    assert data["humidity"] == 60.0
+    assert data["speed_kmh"] == 15.0
+    assert data["latitude"] == 22.54
+    assert data["longitude"] == 113.95
+    assert data["altitude"] == 10.0
+    assert data["signal_quality"] == "good"
+    print("  OK 正常态 payload 格式正确")
+
+
+def test_alarm_sets_flag():
+    """_on_alarm → alarm_active=True + 缓存报警信息"""
+    svc, _ = make_service()
+    svc._data["latest_gnss"] = {"lat": 22.54, "lon": 113.95, "alt": 10.0}
     svc._on_alarm({"alarm_type": "collision", "level": 2})
-    assert svc._data["collision_count"] == 1
-    assert svc.send_queue.size() == 1
-    print("  OK 碰撞报警入队")
+    assert svc.ctx["alarm_active"] is True
+    assert svc.ctx["alarm_info"]["alarm_type"] == "collision"
+    assert svc.ctx["alarm_info"]["level"] == 2
+    assert svc.ctx["alarm_info"]["lat"] == 22.54
+    # 不直接入队
+    assert svc.send_queue.size() == 0
+    print("  OK 报警设标志 + 缓存 (不入队)")
 
 
 def test_alarm_sos():
-    """_on_alarm sos → collision_count 不变"""
+    """_on_alarm sos → alarm_type=sos"""
     svc, _ = make_service()
     svc._on_alarm({"alarm_type": "sos", "level": 3})
-    assert svc._data["collision_count"] == 0
-    assert svc.send_queue.size() == 1
-    print("  OK SOS 报警入队")
+    assert svc.ctx["alarm_active"] is True
+    assert svc.ctx["alarm_info"]["alarm_type"] == "sos"
+    print("  OK SOS 报警标志")
 
 
-def test_alarm_with_gnss():
-    """报警时附加上次 GPS 位置"""
+def test_alarm_canceled():
+    """_on_alarm_canceled → alarm_active=False"""
     svc, _ = make_service()
-    svc._data["latest_gnss"] = {"lat": 22.54, "lon": 113.95}
-    svc._on_alarm({"alarm_type": "collision", "level": 2})
+    svc.ctx["alarm_active"] = True
+    svc.ctx["alarm_info"] = {"alarm_type": "collision", "level": 2}
+    svc._on_alarm_canceled(None)
+    assert svc.ctx["alarm_active"] is False
+    assert svc.ctx["alarm_info"] == {}
+    print("  OK 报警解除")
+
+
+def test_tick_alarm_payload():
+    """报警态下 tick() → 发 type=alarm 的 payload"""
+    svc, _ = make_service()
+    svc.ctx["alarm_active"] = True
+    svc.ctx["alarm_info"] = {
+        "alarm_type": "collision", "level": 2,
+        "lat": 22.54, "lon": 113.95, "alt": 10.0,
+    }
+    svc.ctx["last_upload"] = 0
+    svc.tick()
     import ujson
     data = ujson.loads(svc.send_queue.get(timeout_ms=100))
-    assert data["location"]["lat"] == 22.54
-    assert data["location"]["lon"] == 113.95
-    print("  OK 报警附带 GPS")
+    assert data["type"] == "alarm"
+    assert data["alarm_type"] == "collision"
+    assert data["level"] == 2
+    assert data["latitude"] == 22.54
+    assert data["longitude"] == 113.95
+    assert data["altitude"] == 10.0
+    print("  OK 报警态 payload（持续发送格式）")
 
 
 def test_alarm_without_gnss():
-    """报警时无 GPS → location 为 null"""
+    """报警时无 GPS → lat/lon 为 None"""
     svc, _ = make_service()
     svc._on_alarm({"alarm_type": "sos", "level": 3})
+    assert svc.ctx["alarm_info"]["lat"] is None
+    assert svc.ctx["alarm_info"]["lon"] is None
+    print("  OK 无 GPS 时报警 lat/lon=None")
+
+
+def test_alarm_cancel_resumes_normal():
+    """报警解除后 tick() → 恢复 type=normal"""
+    svc, _ = make_service()
+    svc._data["latest_temp"] = 26.5
+    svc.ctx["last_upload"] = 0
+
+    # 报警态
+    svc.ctx["alarm_active"] = True
+    svc.ctx["alarm_info"] = {"alarm_type": "collision", "level": 2}
+    svc.tick()
     import ujson
     data = ujson.loads(svc.send_queue.get(timeout_ms=100))
-    assert data["location"] is None
-    print("  OK 无 GPS 时报警 location=null")
+    assert data["type"] == "alarm"
 
-
-def test_haversine():
-    """Haversine 距离计算正确（赤道 1 度 ≈ 111km）"""
-    svc, _ = make_service()
-    d = svc._haversine(0, 0, 1, 0)
-    assert abs(d - 111.19) < 1.0, "Haversine 误差过大: %s" % d
-    print("  OK Haversine 距离")
-
-
-def test_gps_track_max():
-    """gps_track 超上限自动丢弃最旧"""
-    svc, _ = make_service()
-    svc.cfg["gps_track_max"] = 3
-    for i in range(5):
-        svc._on_gnss({"latitude": float(i), "longitude": float(i),
-                      "altitude": 0.0, "speed_kmh": 0.0,
-                      "signal_quality": "good", "valid": True})
-    assert len(svc._data["gps_track"]) == 3, "应保留 3 个点"
-    assert svc._data["gps_track"][0]["lat"] == 2.0, "应丢弃点 0 和 1"
-    print("  OK GPS 轨迹上限")
-
-
-def test_distance_accumulation():
-    """连续两次 _on_gnss → total_distance 累加"""
-    svc, _ = make_service()
-    svc._on_gnss({"latitude": 0, "longitude": 0,
-                  "altitude": 0, "speed_kmh": 0,
-                  "signal_quality": "good", "valid": True})
-    svc._on_gnss({"latitude": 1, "longitude": 0,
-                  "altitude": 0, "speed_kmh": 0,
-                  "signal_quality": "good", "valid": True})
-    assert svc._data["total_distance"] > 110, "距离应约 111km"
-    print("  OK 距离累加")
-
-
-def test_max_speed():
-    """连续两次 _on_gnss → max_speed 取最大值"""
-    svc, _ = make_service()
-    svc._on_gnss({"latitude": 0, "longitude": 0,
-                  "altitude": 0, "speed_kmh": 15.0,
-                  "signal_quality": "good", "valid": True})
-    svc._on_gnss({"latitude": 1, "longitude": 0,
-                  "altitude": 0, "speed_kmh": 35.0,
-                  "signal_quality": "good", "valid": True})
-    assert svc._data["max_speed"] == 35.0
-    print("  OK 最大速度")
+    # 解除后
+    svc._on_alarm_canceled(None)
+    svc.ctx["last_upload"] = 0
+    svc.tick()
+    data2 = ujson.loads(svc.send_queue.get(timeout_ms=100))
+    assert data2["type"] == "normal"
+    assert data2["temp"] == 26.5
+    print("  OK 报警解除后恢复 normal")
 
 
 def main():
@@ -203,14 +233,13 @@ def main():
         ("tick produce JSON", test_tick_produces_json),
         ("tick interval guard", test_tick_interval_guard),
         ("all nulls", test_tick_all_nulls),
-        ("alarm collision", test_alarm_collision),
+        ("normal payload format", test_tick_normal_payload),
+        ("alarm sets flag", test_alarm_sets_flag),
         ("alarm SOS", test_alarm_sos),
-        ("alarm with GPS", test_alarm_with_gnss),
+        ("alarm canceled", test_alarm_canceled),
+        ("alarm payload", test_tick_alarm_payload),
         ("alarm no GPS", test_alarm_without_gnss),
-        ("Haversine", test_haversine),
-        ("GPS track max", test_gps_track_max),
-        ("distance accumulation", test_distance_accumulation),
-        ("max speed", test_max_speed),
+        ("alarm cancel resume normal", test_alarm_cancel_resumes_normal),
     ]
     passed = 0
     for name, fn in tests:

@@ -6,8 +6,8 @@ note 直接调用 umqtt.robust，不经过 MQTTDriver 封装
 from umqtt.robust import MQTTClient
 import time
 
-BROKER = "172.188.83.251"
-PORT = 41183
+BROKER = "101.37.104.185"
+PORT = 49687
 CLIENT_ID = "66ccff"
 USER = "quectel"
 PASSWORD = "12345678"

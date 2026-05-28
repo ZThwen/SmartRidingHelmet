@@ -333,6 +333,66 @@ LCD 内部维护 `display_mode` 状态（normal / alarm），用于防止 Servic
 
 ---
 
+#### 2.1.11 BLE 蓝牙驱动模块（BLE.py）
+
+**所属层次**：Device层（网络通信驱动）
+
+**需求对应**：F-NET-04 BLE 近场通信（新增需求）
+
+**当前状态**：✅ **v1 已实现**（2026-05-27 小程序端验证通过）
+
+**模块功能**：
+- 封装 quectel.BLE()，仅 GATT Server 角色（不扫描不连接其他设备）
+- 注册 BLE GATT 服务（0xFFF0）及四个特征值（FFF1~FFF4）
+- 事件驱动：通过 BLE 硬件回调处理连接/断开/MTU/数据写入事件
+- 支持 BLE Notify 推送（FFF1 数据通道）
+- 接收手机端写入数据（FFF2 导航、FFF3 控制、FFF4 报警确认）
+
+**发布事件**：
+- `EVENT_BLE_CONNECTED`：手机连接成功，携带数据 `{addr, timestamp}`
+- `EVENT_BLE_DISCONNECTED`：手机断开连接，携带数据 `{timestamp}`
+- `EVENT_NAV_CMD`：收到导航指令（FFF2 写入），携带数据 `{raw}`
+- `EVENT_RIDE_CONTROL`：收到骑行控制指令（FFF3 写入），携带数据 `{raw}`
+- `EVENT_BLE_ALARM_ACK`：收到报警确认（FFF4 写入），携带数据 `{raw}`
+
+**订阅事件**：
+- `EVENT_CONFIG_UPDATE`：远程配置更新（MTU、功耗状态）
+
+**公共接口**：
+- `init()`：初始化 BLE → 注册 GATT 服务 → 开始广播
+- `notify_data(json_str)`：通过 FFF1 发送 BLE Notify
+- `exchange_mtu(mtu)`：请求 MTU 协商
+- `stop()`：停止 BLE 并释放资源
+- `tick()`：pass（BLE 为事件驱动，无需轮询）
+
+**GATT 服务结构**：
+
+| 特征值 | UUID | 属性 | 用途 |
+|:------:|:----:|:----:|:-----|
+| FFF1 | 0xFFF1 | Read/Write/Notify/Indicate | 数据推送通道（头盔→手机） |
+| FFF2 | 0xFFF2 | Read/Write | 导航指令通道（手机→头盔） |
+| FFF3 | 0xFFF3 | Read/Write | 骑行控制通道（手机→头盔） |
+| FFF4 | 0xFFF4 | Read/Write | 报警确认通道（手机→头盔） |
+
+所有特征值均有 CCCD 描述符（0x2902），最大长度 244 字节。
+
+**硬件说明**：
+- 模组：EC200U 内置 BLE 4.2
+- 广播名：`SmartHelmet-66ccff`（config.py 中配置）
+- 参考示例：`examples/ble.py`
+
+**技术要点**：
+- 事件驱动：tick() 为空，所有逻辑在 BLE 硬件回调（_callback）中处理
+- MTU 回退：EC200U 可能在 EVT_CONNECTED 之前先发 EVT_MTU，驱动自动处理此竞态
+- 连接回调在 IRQ 上下文执行，不做阻塞 I/O
+
+**分层设计说明**：
+- Device 层 BLEDriver 封装底层 BLE API，不包含业务逻辑
+- 不订阅传感器事件，由 Service 层 BLEService 负责数据组装
+- Service 层通过调用 `notify_data()` 发送数据
+
+---
+
 ### 2.2 服务层模块（业务逻辑）
 
 #### 2.2.1 碰撞检测服务（CollisionService.py）（✅ v1 已实现）
@@ -510,6 +570,60 @@ LCD 内部维护 `display_mode` 状态（normal / alarm），用于防止 Servic
 **降级策略**：
 - 固件无 Qth 库时 `ImportError` 捕获 → 模块静默跳过，不影响其他模块
 - 移远云不可达时网络线程跳过发送，数据留在队列中等待恢复
+
+---
+
+#### 2.2.9 BLE 推送服务（BLEService）（✅ v1 已实现）
+
+**所属层次**：Service层（业务服务层）
+
+**需求对应**：F-NET-04 BLE 近场通信
+
+**当前状态**：✅ **v1 已实现**（2026-05-27 小程序端验证通过）
+
+**模块功能**：
+- 订阅传感器事件，缓存最新数据
+- tick() 定时组装合并 JSON → 线程安全队列 → 后台线程调用 BLEDriver.notify_data()
+- 报警事件立即入队推送（不等 tick 周期）
+- 连接后立即推送一次最新数据（force_push）
+- 心跳保活（5 秒间隔）
+
+**发布事件**：无（纯消费/转发）
+
+**订阅事件**：
+- `EVENT_BLE_CONNECTED`：连接成功，设置 force_push
+- `EVENT_BLE_DISCONNECTED`：断开连接，停止推送
+- `EVENT_TEMP_HUMID_READY`：缓存温湿度
+- `EVENT_IMU_READY`：缓存加速度（暂不推送）
+- `EVENT_GNSS_READY`：缓存定位数据
+- `EVENT_LIGHT_READY`：缓存光照数据
+- `EVENT_ALARM_TRIGGERED`：立即推送报警 JSON
+- `EVENT_ALARM_CANCELED`：立即推送报警取消 JSON
+
+**BLE JSON 协议**（手机端接收）：
+
+| type (t) | 含义 | 数据字段 (d) |
+|:--------:|:-----|:-------------|
+| 0 | 合并传感器数据 | `{tmp, hum, lat, lon, spd, alt, lux}` |
+| 5 | 报警触发 | `{lvl, type}` |
+| 6 | 报警取消 | `{}` |
+| 99 | 心跳 | `{s: "ok"}` |
+
+**依赖关系**：
+- 依赖 BLEDriver（调用 `notify_data()` 接口）
+- 依赖 ThreadSafeQueue（线程安全队列）
+- 依赖 EventBus（订阅传感器和报警事件）
+
+**技术要点**：
+- 双线程架构：主线程（事件回调 → 缓存 → tick() 组装 JSON → 入队）与通知线程（出队 → BLE notify）通过线程安全队列解耦
+- 上传间隔：`BLE_UPLOAD_INTERVAL_MS`（默认 2000ms）
+- 心跳间隔：`BLE_KEEPALIVE_MS`（默认 5000ms）
+- IMU 数据缓存但暂不推送（碰撞结果由 AlarmService 通过 t:5 推送）
+
+**分层设计说明**：
+- Service 层负责数据组装和推送策略
+- 持有 Device 层 BLEDriver 实例，调用其 `notify_data()` 接口
+- 不直接操作 BLE 硬件，通过 Device 层模块接口实现
 
 ---
 

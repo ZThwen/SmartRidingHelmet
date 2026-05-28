@@ -3,7 +3,7 @@ from machine import Pin
 import time
 
 from core.Base_Module import BaseModule
-from core.config import EVENT_BUTTON_PRESSED, EVENT_BUTTON_ERROR, POWER_STATE_ACTIVE, DEBOUNCE_MS
+from core.config import EVENT_BUTTON_PRESSED, EVENT_BUTTON_ERROR, POWER_STATE_ACTIVE, BUTTON_DEBOUNCE_MS
 
 
 class Button(BaseModule):
@@ -25,7 +25,7 @@ class Button(BaseModule):
             "pull": Pin.PULL_DOWN,
             
             # 采样参数
-            "debounce_ms": DEBOUNCE_MS, # 防抖动窗口（ms）
+            "debounce_ms": BUTTON_DEBOUNCE_MS, # 防抖动窗口（ms）
             "max_retry": 3,             # 最大重试次数
         }
 
