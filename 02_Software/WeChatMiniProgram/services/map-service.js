@@ -33,23 +33,20 @@ function buildPolyline(points) {
  * @param {string} label - 标记文字
  * @returns {Array} markers
  */
-function buildMarker(points, label) {
+function buildMarker(points, iconPath) {
   if (!points || points.length === 0) return [];
   var last = points[points.length - 1];
-  return [{
+  var marker = {
     id: 1,
     latitude: last.latitude,
     longitude: last.longitude,
-    width: 16,
-    height: 16,
-    callout: {
-      content: label || '头盔',
-      fontSize: 11,
-      borderRadius: 4,
-      padding: 4,
-      display: 'ALWAYS',
-    },
-  }];
+    width: 20,
+    height: 20,
+  };
+  if (iconPath) {
+    marker.iconPath = iconPath;
+  }
+  return [marker];
 }
 
 /**
@@ -62,4 +59,51 @@ function pushPoint(points, lat, lon) {
   return newPoints;
 }
 
-module.exports = { buildPolyline: buildPolyline, buildMarker: buildMarker, pushPoint: pushPoint, MAX_POINTS: MAX_POINTS };
+/**
+ * 构建规划路线 polyline（绿色，与蓝色轨迹区分）
+ * @param {Array} points - [{latitude, longitude}, ...]
+ * @returns {Array} polylines
+ */
+function buildRoutePolyline(points) {
+  if (!points || points.length < 2) return [];
+  return [{
+    points: points,
+    color: '#00e676',
+    width: 5,
+  }];
+}
+
+/**
+ * 构建目的地 marker
+ * @param {number} lat
+ * @param {number} lon
+ * @param {string} name
+ * @returns {Array} markers
+ */
+function buildDestMarker(lat, lon, name) {
+  return [{
+    id: 999,
+    latitude: lat,
+    longitude: lon,
+    width: 24,
+    height: 24,
+    callout: {
+      content: name || '目的地',
+      color: '#ffffff',
+      bgColor: '#00e676',
+      borderRadius: 8,
+      padding: 6,
+      fontSize: 12,
+      display: 'ALWAYS',
+    },
+  }];
+}
+
+module.exports = {
+  buildPolyline: buildPolyline,
+  buildMarker: buildMarker,
+  pushPoint: pushPoint,
+  buildRoutePolyline: buildRoutePolyline,
+  buildDestMarker: buildDestMarker,
+  MAX_POINTS: MAX_POINTS,
+};

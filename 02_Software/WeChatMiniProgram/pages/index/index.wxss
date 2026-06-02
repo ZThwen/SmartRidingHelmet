@@ -404,7 +404,7 @@ page {
   color: #fff;
 }
 
-/* ===== 报警全屏弹窗 (保持原样) ===== */
+/* ===== 报警全屏弹窗 ===== */
 .alarm-popup {
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
@@ -413,7 +413,8 @@ page {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: rgba(180, 0, 0, 0.92);
+  background: linear-gradient(180deg, rgba(180, 0, 0, 0.95) 0%, rgba(120, 0, 0, 0.98) 100%);
+  overflow: hidden;
 }
 
 .alarm-popup.sos {
@@ -421,39 +422,152 @@ page {
 }
 
 @keyframes sos-blink {
-  0%, 100% { background: rgba(180, 0, 0, 0.92); }
-  50%      { background: rgba(220, 20, 20, 0.95); }
+  0%, 100% { background: linear-gradient(180deg, rgba(180, 0, 0, 0.95) 0%, rgba(120, 0, 0, 0.98) 100%); }
+  50% { background: linear-gradient(180deg, rgba(220, 20, 20, 0.97) 0%, rgba(160, 0, 0, 1) 100%); }
+}
+
+/* 脉冲边框 */
+.alarm-pulse-border {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  border: 4rpx solid rgba(255, 61, 0, 0.6);
+  animation: alarmPulseBorder 1.2s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes alarmPulseBorder {
+  0%, 100% { border-color: rgba(255, 61, 0, 0.6); box-shadow: inset 0 0 40rpx rgba(255, 61, 0, 0.1); }
+  50% { border-color: rgba(255, 61, 0, 1); box-shadow: inset 0 0 80rpx rgba(255, 61, 0, 0.2); }
+}
+
+.alarm-popup-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 48rpx;
+  position: relative;
+  z-index: 10;
+}
+
+/* 图标容器 */
+.alarm-icon-wrap {
+  width: 180rpx; height: 180rpx;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 32rpx;
 }
 
 .alarm-icon {
-  font-size: 120rpx;
-  margin-bottom: 16rpx;
+  font-size: 100rpx;
+  position: relative;
+  z-index: 2;
+}
+
+.alarm-icon-ring {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  border: 3rpx solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  animation: iconRingPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes iconRingPulse {
+  0%, 100% { transform: scale(1); opacity: 0.3; }
+  50% { transform: scale(1.15); opacity: 0.1; }
 }
 
 .alarm-type {
-  font-size: 56rpx;
+  font-size: 52rpx;
   font-weight: 900;
   color: #fff;
-  margin-bottom: 8rpx;
+  letter-spacing: 4rpx;
+  margin-bottom: 12rpx;
+  text-shadow: 0 0 40rpx rgba(255, 255, 255, 0.3);
 }
 
 .alarm-level {
-  font-size: 40rpx;
+  font-size: 36rpx;
   font-weight: 700;
   color: #ffd700;
+  letter-spacing: 8rpx;
+  margin-bottom: 40rpx;
+  text-shadow: 0 0 30rpx rgba(255, 215, 0, 0.4);
+}
+
+/* 分隔线 */
+.alarm-divider {
+  width: 200rpx;
+  height: 2rpx;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
   margin-bottom: 40rpx;
 }
 
-.alarm-detail {
-  font-size: 26rpx;
-  color: rgba(255,255,255,0.7);
-  margin-bottom: 8rpx;
+/* 数据网格 */
+.alarm-data-grid {
+  display: flex;
+  align-items: center;
+  gap: 32rpx;
+  padding: 24rpx 40rpx;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 16rpx;
+  border: 1rpx solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 40rpx;
+}
+
+.alarm-data-item {
+  text-align: center;
+}
+
+.alarm-data-value {
+  display: block;
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #fff;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+
+.alarm-data-label {
+  display: block;
+  font-size: 20rpx;
+  color: rgba(255, 255, 255, 0.4);
+  letter-spacing: 1rpx;
+  margin-top: 6rpx;
+}
+
+.alarm-data-sep {
+  width: 2rpx;
+  height: 56rpx;
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .alarm-hint {
-  margin-top: 48rpx;
-  font-size: 24rpx;
-  color: rgba(255,255,255,0.5);
+  font-size: 22rpx;
+  color: rgba(255, 255, 255, 0.25);
+  letter-spacing: 1rpx;
+}
+
+/* 取消报警按钮 */
+.alarm-cancel-btn {
+  margin-top: 40rpx;
+  padding: 20rpx 48rpx;
+  border: 2rpx solid rgba(255, 255, 255, 0.3);
+  border-radius: 12rpx;
+  text-align: center;
+}
+
+.alarm-cancel-btn text {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.8);
+  letter-spacing: 2rpx;
+}
+
+.alarm-cancel-btn:active {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.5);
 }
 
 /* ===== 总结弹窗 ===== */
@@ -558,4 +672,435 @@ page {
 
 .close-btn:active text {
   color: #080d17;
+}
+
+/* ===== 目的地选择弹窗 ===== */
+.nav-picker-mask {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(4, 8, 16, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+
+.nav-picker {
+  width: 620rpx;
+  background: rgba(12, 20, 36, 0.95);
+  border: 1rpx solid rgba(102, 204, 255, 0.35);
+  border-radius: 32rpx;
+  padding: 48rpx 40rpx 40rpx;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+/* 弹窗顶部渐变线 */
+.nav-picker::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3rpx;
+  background: linear-gradient(90deg, transparent, #66ccff, #00e676, transparent);
+}
+
+.nav-picker-icon {
+  width: 112rpx; height: 112rpx;
+  margin: 0 auto 28rpx;
+  background: rgba(102, 204, 255, 0.12);
+  border: 1rpx solid rgba(102, 204, 255, 0.18);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.nav-picker-icon-ring {
+  position: absolute;
+  top: -8rpx; left: -8rpx; right: -8rpx; bottom: -8rpx;
+  border: 2rpx solid rgba(102, 204, 255, 0.12);
+  border-radius: 50%;
+  animation: pickerIconPulse 2.5s ease-in-out infinite;
+}
+
+@keyframes pickerIconPulse {
+  0%, 100% { transform: scale(1); opacity: 0.3; }
+  50% { transform: scale(1.12); opacity: 0.08; }
+}
+
+.nav-picker-icon-text {
+  font-size: 44rpx;
+  color: #66ccff;
+  position: relative;
+  z-index: 2;
+}
+
+.nav-picker-title {
+  display: block;
+  font-size: 36rpx;
+  font-weight: 700;
+  color: #e0f0ff;
+  margin-bottom: 12rpx;
+}
+
+.nav-picker-desc {
+  display: block;
+  font-size: 26rpx;
+  color: #5a7a98;
+  margin-bottom: 36rpx;
+}
+
+.nav-picker-btns {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+.nav-picker-btn {
+  height: 88rpx;
+  border-radius: 16rpx;
+  font-size: 28rpx;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12rpx;
+  border: none;
+  line-height: 1;
+}
+
+.nav-picker-btn.pick {
+  background: linear-gradient(135deg, rgba(102, 204, 255, 0.15), rgba(0, 230, 118, 0.1));
+  border: 1rpx solid rgba(102, 204, 255, 0.35);
+  color: #66ccff;
+}
+
+.nav-picker-btn.pick:active {
+  background: linear-gradient(135deg, rgba(102, 204, 255, 0.25), rgba(0, 230, 118, 0.18));
+}
+
+.nav-picker-btn-icon {
+  font-size: 28rpx;
+}
+
+.nav-picker-or {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  margin: -4rpx 0;
+}
+
+.nav-picker-or text {
+  font-size: 22rpx;
+  color: #3a5068;
+  letter-spacing: 1rpx;
+  white-space: nowrap;
+}
+
+.nav-picker-or::before,
+.nav-picker-or::after {
+  content: '';
+  flex: 1;
+  height: 1rpx;
+  background: rgba(102, 204, 255, 0.1);
+}
+
+.nav-picker-btn.skip {
+  background: transparent;
+  border: 1rpx solid rgba(102, 204, 255, 0.12);
+  color: #5a7a98;
+}
+
+.nav-picker-btn.skip:active {
+  background: rgba(102, 204, 255, 0.05);
+  color: #7a9a98;
+}
+
+/* ===== 导航指令浮层 ===== */
+.nav-card {
+  position: fixed;
+  bottom: 180rpx;
+  left: 24rpx; right: 24rpx;
+  background: rgba(8, 13, 23, 0.92);
+  border: 1rpx solid rgba(102, 204, 255, 0.35);
+  border-radius: 24rpx;
+  overflow: hidden;
+  z-index: 100;
+  backdrop-filter: blur(20px);
+}
+
+/* 顶部发光线条 */
+.nav-card-top-line {
+  height: 3rpx;
+  background: linear-gradient(90deg, transparent, #66ccff, transparent);
+  opacity: 0.6;
+}
+
+.nav-card-body {
+  display: flex;
+  align-items: center;
+  padding: 28rpx 32rpx;
+  gap: 24rpx;
+}
+
+.nav-direction {
+  width: 80rpx; height: 80rpx;
+  background: rgba(102, 204, 255, 0.12);
+  border: 1rpx solid rgba(102, 204, 255, 0.2);
+  border-radius: 16rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.nav-direction-text {
+  font-size: 36rpx;
+  color: #66ccff;
+}
+
+.nav-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.nav-instruction {
+  display: block;
+  font-size: 30rpx;
+  font-weight: 500;
+  color: #e0f0ff;
+  margin-bottom: 8rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 路名（带小圆点） */
+.nav-remain-text {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  font-size: 22rpx;
+  color: #5a7a98;
+}
+
+.nav-road-dot {
+  width: 8rpx; height: 8rpx;
+  background: rgba(102, 204, 255, 0.5);
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.nav-distance {
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.nav-distance-value {
+  display: block;
+  font-size: 40rpx;
+  font-weight: 700;
+  color: #66ccff;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 30rpx rgba(102, 204, 255, 0.4);
+}
+
+.nav-distance-unit {
+  display: block;
+  font-size: 20rpx;
+  color: #3a5068;
+  letter-spacing: 1rpx;
+  margin-top: 4rpx;
+}
+
+.nav-card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16rpx 32rpx;
+  border-top: 1rpx solid rgba(102, 204, 255, 0.08);
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.nav-remain-detail {
+  font-size: 22rpx;
+  color: #5a7a98;
+}
+
+.nav-cancel {
+  font-size: 24rpx;
+  color: #ff3d00;
+  padding: 10rpx 28rpx;
+  border-radius: 8rpx;
+  border: 1rpx solid rgba(255, 61, 0, 0.25);
+  background: rgba(255, 61, 0, 0.06);
+}
+
+.nav-cancel:active {
+  background: rgba(255, 61, 0, 0.15);
+  border-color: rgba(255, 61, 0, 0.5);
+}
+
+/* ================================================================
+   洛天依元素 — 纯 CSS 图案 + 天依蓝动效
+   ================================================================ */
+
+/* ===== 祥云纹卡片背景 ===== */
+/* 在 tactical 卡片上叠加淡淡的云纹 */
+.tac-card {
+  background:
+    radial-gradient(ellipse 120rpx 60rpx at 15% 25%, rgba(102, 204, 255, 0.03) 0%, transparent 100%),
+    radial-gradient(ellipse 80rpx 40rpx at 75% 60%, rgba(102, 204, 255, 0.02) 0%, transparent 100%),
+    radial-gradient(ellipse 100rpx 50rpx at 50% 80%, rgba(102, 204, 255, 0.025) 0%, transparent 100%),
+    rgba(12, 20, 36, 0.85);
+}
+
+/* ===== 波浪分隔线 ===== */
+/* 用于卡片之间或区域之间的装饰分隔 */
+.wave-divider {
+  height: 20rpx;
+  margin: 8rpx 0;
+  background:
+    radial-gradient(circle 10rpx at 10rpx 10rpx, rgba(102, 204, 255, 0.08) 50%, transparent 51%),
+    radial-gradient(circle 10rpx at 30rpx 10rpx, rgba(102, 204, 255, 0.06) 50%, transparent 51%),
+    radial-gradient(circle 10rpx at 50rpx 10rpx, rgba(102, 204, 255, 0.08) 50%, transparent 51%),
+    radial-gradient(circle 10rpx at 70rpx 10rpx, rgba(102, 204, 255, 0.06) 50%, transparent 51%),
+    radial-gradient(circle 10rpx at 90rpx 10rpx, rgba(102, 204, 255, 0.08) 50%, transparent 51%);
+  background-size: 100rpx 20rpx;
+  opacity: 0.5;
+}
+
+/* ===== BLE 天依蓝呼吸灯 ===== */
+.ble-dot.on {
+  background: #66ccff;
+  box-shadow: 0 0 8rpx #66ccff;
+  animation: tianyi-breathe 2s ease-in-out infinite;
+}
+
+@keyframes tianyi-breathe {
+  0%, 100% {
+    box-shadow: 0 0 8rpx rgba(102, 204, 255, 0.6);
+    background: #66ccff;
+  }
+  50% {
+    box-shadow: 0 0 20rpx rgba(102, 204, 255, 0.9), 0 0 40rpx rgba(102, 204, 255, 0.3);
+    background: #80d4ff;
+  }
+}
+
+/* ===== 导航指南针脉冲 ===== */
+/* 地图上的重置按钮 ⊙ 加入天依蓝脉冲 */
+.map-reset {
+  animation: compass-pulse 3s ease-in-out infinite;
+}
+
+@keyframes compass-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(102, 204, 255, 0);
+    border-color: rgba(102, 204, 255, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 0 12rpx rgba(102, 204, 255, 0.08);
+    border-color: rgba(102, 204, 255, 0.5);
+  }
+}
+
+/* ===== 开始骑行按钮波纹 ===== */
+/* 天依蓝水波扩散效果 */
+.btn-start {
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-start::after {
+  content: '';
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 0; height: 0;
+  background: radial-gradient(circle, rgba(102, 204, 255, 0.3) 0%, transparent 70%);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  opacity: 0;
+}
+
+.btn-start:active::after {
+  animation: water-ripple 0.6s ease-out;
+}
+
+@keyframes water-ripple {
+  0% { width: 0; height: 0; opacity: 1; }
+  100% { width: 400rpx; height: 400rpx; opacity: 0; }
+}
+
+/* ===== 在线状态呼吸 ===== */
+.status-dot.online {
+  background: #00d4aa;
+  box-shadow: 0 0 6rpx rgba(0, 212, 170, 0.4);
+  animation: status-breathe 2.5s ease-in-out infinite;
+}
+
+@keyframes status-breathe {
+  0%, 100% { box-shadow: 0 0 6rpx rgba(0, 212, 170, 0.4); }
+  50% { box-shadow: 0 0 14rpx rgba(0, 212, 170, 0.7), 0 0 28rpx rgba(0, 212, 170, 0.2); }
+}
+
+/* ===== 音符装饰符 ===== */
+/* 用于导航卡片标题装饰（需在 WXML 中使用 ♪ 字符） */
+.nav-instruction::before {
+  content: '♪';
+  font-size: 20rpx;
+  color: rgba(102, 204, 255, 0.3);
+  margin-right: 8rpx;
+}
+
+/* ===== 导航卡片浮动光效 ===== */
+.nav-card {
+  animation: card-float 4s ease-in-out infinite;
+}
+
+@keyframes card-float {
+  0%, 100% {
+    box-shadow: 0 4rpx 20rpx rgba(102, 204, 255, 0.06);
+  }
+  50% {
+    box-shadow: 0 8rpx 32rpx rgba(102, 204, 255, 0.12), 0 0 60rpx rgba(102, 204, 255, 0.04);
+  }
+}
+
+/* ===== 地图区域天依蓝辉光 ===== */
+.holo-frame {
+  box-shadow:
+    0 0 20rpx rgba(102, 204, 255, 0.06),
+    0 0 60rpx rgba(102, 204, 255, 0.02);
+  animation: holo-glow 5s ease-in-out infinite;
+}
+
+@keyframes holo-glow {
+  0%, 100% {
+    box-shadow:
+      0 0 20rpx rgba(102, 204, 255, 0.06),
+      0 0 60rpx rgba(102, 204, 255, 0.02);
+  }
+  50% {
+    box-shadow:
+      0 0 30rpx rgba(102, 204, 255, 0.1),
+      0 0 80rpx rgba(102, 204, 255, 0.04);
+  }
+}
+
+/* ===== 标题天依蓝装饰线 ===== */
+.nav-title .deco {
+  font-size: 22rpx;
+  color: rgba(102, 204, 255, 0.4);
+  line-height: 1;
+  animation: deco-shimmer 3s ease-in-out infinite;
+}
+
+@keyframes deco-shimmer {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.8; color: rgba(102, 204, 255, 0.7); }
 }

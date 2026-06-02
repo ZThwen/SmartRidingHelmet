@@ -15,6 +15,9 @@
     }
   },
   "requiredPrivateInfos": [
-    "getLocation"
+    "getLocation",
+    "chooseLocation",
+    "startLocationUpdate",
+    "onLocationChange"
   ]
 }

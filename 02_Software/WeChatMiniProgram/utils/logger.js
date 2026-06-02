@@ -1,10 +1,11 @@
 /**
  * 日志 — console + 本地文件（最多 1000 条）
- * 文件: app.log（小程序数据目录）
+ * 文件: app.log（小程序 USER_DATA_PATH 目录）
  */
 var _start = Date.now();
 var _queue = [];
 var _fileOk = false;
+var _logPath = '';
 
 function _ts() {
   return ((Date.now() - _start) / 1000).toFixed(2) + 's';
@@ -12,12 +13,17 @@ function _ts() {
 
 function init() {
   _start = Date.now();
+  _logPath = (wx.env && wx.env.USER_DATA_PATH || '') + '/app.log';
+  if (!_logPath || _logPath === '/app.log') {
+    _fileOk = false;
+    console.log('[LOG] 文件日志不可用: USER_DATA_PATH 不存在');
+    return;
+  }
   try {
     var fs = wx.getFileSystemManager();
-    // 直接写文件名，自动存到小程序数据目录
-    fs.writeFileSync('app.log', '', 'utf8');
+    fs.writeFileSync(_logPath, '', 'utf8');
     _fileOk = true;
-    console.log('[LOG] 文件日志已启动');
+    console.log('[LOG] 文件日志已启动: ' + _logPath);
   } catch (e) {
     _fileOk = false;
     console.log('[LOG] 文件日志不可用: ' + e.message);
@@ -39,13 +45,13 @@ function _flush() {
     var fs = wx.getFileSystemManager();
     var text = _queue.join('\n') + '\n';
     _queue = [];
-    fs.appendFileSync('app.log', text, 'utf8');
+    fs.appendFileSync(_logPath, text, 'utf8');
 
     // 限制 1000 行
-    var content = fs.readFileSync('app.log', 'utf8');
+    var content = fs.readFileSync(_logPath, 'utf8');
     var lines = content.split('\n').filter(function(l) { return l.length > 0; });
     if (lines.length > 1000) {
-      fs.writeFileSync('app.log', lines.slice(-1000).join('\n') + '\n', 'utf8');
+      fs.writeFileSync(_logPath, lines.slice(-1000).join('\n') + '\n', 'utf8');
     }
   } catch (e) {}
 }

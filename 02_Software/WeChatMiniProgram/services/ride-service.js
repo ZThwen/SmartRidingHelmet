@@ -24,6 +24,8 @@ function start() {
 
 function addRecord(parsed) {
   if (!isActive()) return;
+  // 过滤无 GPS 数据的记录（避免膨胀采集点数）
+  if (parsed.lat == null || parsed.lon == null) return;
   var app = APP();
   app.globalData.rideCache.push(parsed);
 }

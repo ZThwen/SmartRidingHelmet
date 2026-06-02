@@ -1,4 +1,5 @@
 <!-- 智能骑行头盔 — 首页 (Tactical Cyan) -->
+<canvas type="2d" id="dotCanvas" style="width:20px;height:20px;position:fixed;top:-100px;"></canvas>
 <view class="page">
 
   <!-- 自定义导航栏 -->
@@ -77,6 +78,8 @@
       <view class="corner bl"></view><view class="corner br"></view>
     </view>
 
+    <view class="wave-divider"></view>
+
     <!-- 定位卡片 -->
     <view class="tac-card">
       <view class="card-header">
@@ -91,6 +94,8 @@
       <view class="corner tl"></view><view class="corner tr"></view>
       <view class="corner bl"></view><view class="corner br"></view>
     </view>
+
+    <view class="wave-divider"></view>
 
     <!-- 状态卡片 -->
     <view class="tac-card">
@@ -115,18 +120,96 @@
     <view style="height:180rpx"></view>
   </scroll-view>
 
-  <!-- 报警全屏弹窗 (保持原样，不修改) -->
+  <!-- 报警全屏弹窗 -->
   <view class="alarm-popup {{alarmPopupClass}}" wx:if="{{showAlarmPopup}}">
-    <view class="alarm-icon">{{alarmPopupData.icon}}</view>
-    <view class="alarm-type">{{alarmPopupData.type}}</view>
-    <view class="alarm-level">{{alarmPopupData.level}}</view>
-    <view class="alarm-detail">
-      <text>位置: {{alarmPopupData.lat}}, {{alarmPopupData.lon}}</text>
+    <!-- 脉冲边框 -->
+    <view class="alarm-pulse-border"></view>
+
+    <!-- 主报警内容 -->
+    <view class="alarm-popup-body">
+      <!-- 碰撞图标 -->
+      <view class="alarm-icon-wrap">
+        <view class="alarm-icon-ring"></view>
+        <text class="alarm-icon">{{alarmPopupData.icon}}</text>
+      </view>
+
+      <!-- 报警类型 -->
+      <text class="alarm-type">{{alarmPopupData.type}}</text>
+      <text class="alarm-level">{{alarmPopupData.level}}</text>
+
+      <!-- 分隔线 -->
+      <view class="alarm-divider"></view>
+
+      <!-- 关键数据 -->
+      <view class="alarm-data-grid">
+        <view class="alarm-data-item">
+          <text class="alarm-data-value">{{speed}}</text>
+          <text class="alarm-data-label">km/h</text>
+        </view>
+        <view class="alarm-data-sep"></view>
+        <view class="alarm-data-item">
+          <text class="alarm-data-value">{{lat}}</text>
+          <text class="alarm-data-label">纬度</text>
+        </view>
+        <view class="alarm-data-sep"></view>
+        <view class="alarm-data-item">
+          <text class="alarm-data-value">{{lon}}</text>
+          <text class="alarm-data-label">经度</text>
+        </view>
+      </view>
+
+      <!-- 提示 -->
+      <text class="alarm-hint">报警信息已自动上传至云端</text>
+
+      <!-- 取消报警按钮 -->
+      <view class="alarm-cancel-btn" bindtap="onCancelAlarm">
+        <text>取消报警</text>
+      </view>
     </view>
-    <view class="alarm-detail">
-      <text>时间: {{alarmPopupData.time}}</text>
+  </view>
+
+  <!-- 目的地选择弹窗 -->
+  <view class="nav-picker-mask" wx:if="{{showNavPicker}}">
+    <view class="nav-picker">
+      <view class="nav-picker-icon">
+        <view class="nav-picker-icon-ring"></view>
+        <text class="nav-picker-icon-text">⬡</text>
+      </view>
+      <text class="nav-picker-title">导航设置</text>
+      <text class="nav-picker-desc">选择目的地后将自动规划骑行路线</text>
+      <view class="nav-picker-btns">
+        <button class="nav-picker-btn pick" bindtap="onPickDestination">
+          <text class="nav-picker-btn-icon">◎</text> 设置目的地
+        </button>
+        <view class="nav-picker-or"><text>or</text></view>
+        <button class="nav-picker-btn skip" bindtap="onSkipNavigation">直接出发</button>
+      </view>
     </view>
-    <view class="alarm-hint">设备已自动上传报警信息</view>
+  </view>
+
+  <!-- 导航指令浮层 -->
+  <view class="nav-card" wx:if="{{showNavCard}}">
+    <view class="nav-card-top-line"></view>
+    <view class="nav-card-body">
+      <view class="nav-direction">
+        <text class="nav-direction-text">{{navState === 'paused' ? '⚠' : '→'}}</text>
+      </view>
+      <view class="nav-info">
+        <text class="nav-instruction">{{navInstruction}}</text>
+        <view class="nav-remain-text">
+          <view class="nav-road-dot"></view>
+          <text>剩余 {{navRemainDistance}}m</text>
+        </view>
+      </view>
+      <view class="nav-distance">
+        <text class="nav-distance-value">{{navCurDistance}}</text>
+        <text class="nav-distance-unit">m</text>
+      </view>
+    </view>
+    <view class="nav-card-footer">
+      <text class="nav-remain-detail">全程 {{navRemainDistance}}m</text>
+      <text class="nav-cancel" bindtap="onCancelNavigation">取消导航</text>
+    </view>
   </view>
 
   <!-- 底部按钮 -->
@@ -149,7 +232,7 @@
         longitude="{{_summaryMapLon}}"
         scale="14"
         markers="{{_summaryMarkers}}"
-        polylines="{{_summaryPolyline}}"
+        polyline="{{_summaryPolyline}}"
         style="width:100%;height:360rpx;border-radius:16rpx;overflow:hidden"
       ></map>
       <view class="summary-table">
