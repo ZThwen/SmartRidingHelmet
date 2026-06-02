@@ -4,6 +4,7 @@
 .opencode/
 .reasonix/
 CLAUDE.md
+.superpowers/
 
 # Python 缓存
 __pycache__/
@@ -15,3 +16,14 @@ skills-guide.md
 .ble_api_extracted.txt
 .ec200u_refdesign_extracted.txt
 .ec200u_spec_extracted.txt
+
+# 小程序参考项目和文档（体积大，不需要提交）
+02_Software/WeChatMiniProgram/doc/example
+02_Software/WeChatMiniProgram/doc/.brainstorms
+02_Software/WeChatMiniProgram/android_iot_sdk_1.12.0/
+
+# 敏感配置（含 API 密钥）
+02_Software/WeChatMiniProgram/utils/config.js
+
+# 微信开发者工具本地配置
+02_Software/WeChatMiniProgram/project.private.config.json

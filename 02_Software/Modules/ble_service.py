@@ -153,8 +153,8 @@ class BLEService(BaseModule):
 
     def _on_connected(self, payload):
         self.ctx["ble_connected"] = True
-        self.ctx["force_push"] = True
         self.ctx["consecutive_errors"] = 0
+        self.ctx["force_push"] = True
 
     def _on_disconnected(self, payload):
         self.ctx["ble_connected"] = False
@@ -190,7 +190,9 @@ class BLEService(BaseModule):
     def _on_alarm(self, payload):
         alarm_type = payload.get("alarm_type", "collision")
         level = payload.get("level", 1)
-        msg = json.dumps({"t": 5, "d": {"lvl": level, "type": alarm_type}})
+        # 压缩载荷：15 字节（原 46 字节），避免超出 ATT_MTU 导致 +CME ERROR: 53
+        type_code = 1 if alarm_type == "collision" else 2
+        msg = json.dumps({"t": 5, "a": type_code, "l": level})
         self.send_queue.put(msg)
         self.ctx["force_push"] = False
 
