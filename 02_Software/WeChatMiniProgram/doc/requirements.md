@@ -30,8 +30,10 @@
 **R2.1 数据显示**
 - 温度（°C）、湿度（%）、速度（km/h）
 - 纬度、经度、海拔（m）
-- 信号质量（良好/一般/差/无）
+- 光照（lux）— BLE t=0 数据含 lux 字段
 - 报警状态（正常 / 碰撞 LvX / SOS LvX）
+
+> **注**：信号质量字段仅在历史 HTTP 轮询方案中可用（TSL abId=5），当前 BLE 直连数据不含此字段。
 
 **R2.2 刷新频率**
 - 每 2 秒 BLE Notify 推送一次合并传感器 JSON
@@ -141,83 +143,78 @@
 
 ---
 
-## R8 导航 *(开发中)*
+## R8 导航 *(框架已搭建 🔜)*
 
-**R8.1 导航数据模型（TSL 属性）**
+> ⚠️ **数据通道已变更**：原设计通过移远云 `writeData` REST API 下行（R8.1-R8.2），已于 2026-05-28 决策改为 **BLE FFF2 直连 sendNav**（低延迟、无云端依赖）。旧方案保留为历史参考。
 
-小程序通过移远云 `writeData` API 写入以下 TSL 属性，STM32 通过 MQTT 接收：
+### 当前方案：BLE FFF2 直连
 
-| abId | 字段名 | 类型 | 说明 | 写入方 |
-|:----:|:-------|:----:|:-----|:------|
-| 10 | `nav_status` | int | 0=空闲 1=导航中 2=已到达 3=已取消 | 小程序→云 |
-| 11 | `nav_dest_lat` | float | 目的地纬度 | 小程序→云 |
-| 12 | `nav_dest_lon` | float | 目的地经度 | 小程序→云 |
-| 13 | `nav_cur_instruction` | string | 当前转弯指令文本（如"前方200米右转"）| 小程序→云 |
-| 14 | `nav_cur_distance` | int | 距下一拐弯距离（米）| 小程序→云 |
-| 15 | `nav_remain_distance` | int | 距目的地剩余距离（米）| 小程序→云 |
+**R8.1 导航数据模型（BLE FFF2）**
 
-> 这些属性需先在移远云 DMP 平台 → 产品 → 物模型中添加。
+小程序通过 `BleService.sendNav()` 写入 JSON 到 FFF2 特征值，STM32 通过 BLE GATT Write 接收：
 
-**R8.2 writeData 接口**
+```json
+// 导航指令
+{"a":"nav","d":{"dir":"right","dist":200,"road":"中山路"}}
 
-```
-POST /v2/deviceshadow/r3/openapi/dm/writeData
-Content-Type: application/json
-Authorization: Bearer {accessToken}
+// 到达目的地
+{"a":"nav","d":{"dir":"arrive","dist":0,"road":""}}
 
-{
-  "pk": "p11yMv",
-  "dk": "66ccff",
-  "items": [
-    {"abId": 10, "value": 1},
-    {"abId": 11, "value": 22.5431}
-  ]
-}
+// 取消导航
+{"a":"nav","d":{"dir":"cancel","dist":0,"road":""}}
 ```
 
-- 接口 QPS 限制：30/秒，导航 5 秒一次完全足够
-- 需要终端用户 token（与轮询 `getDeviceBusinessAttributes` 同源）
-- 响应 `code=200` 表示写入成功，设备离线时可能延迟到达
+| 字段 | 类型 | 说明 |
+|:-----|:----:|:-----|
+| `a` | string | 固定 "nav" |
+| `d.dir` | string | 方向指令（right/left/straight/arrive/cancel） |
+| `d.dist` | int | 距下一拐弯距离（米） |
+| `d.road` | string | 路名 |
 
-**R8.3 导航流程**
+**R8.2 导航流程**
 
 ```
 1. 骑行者点击"导航" → wx.chooseLocation() 选目的地
 2. 调用腾讯地图 WebService API 算路
 3. navigation-service.js 解析路线为逐条拐弯指令队列
-4. 每 5 秒推送当前指令到云（writeData: nav_cur_instruction + nav_cur_distance）
-5. 每次推送同时更新 nav_remain_distance + nav_status（保持导航中）
-6. 到达目的地 → writeData nav_status=2
-7. 用户取消导航 → writeData nav_status=3
+4. 每 5 秒推送当前指令到头盔（BLE FFF2 sendNav）
+5. 到达目的地 → sendNav(arrive, 0, "")
+6. 用户取消导航 → sendNav(cancel, 0, "")
 ```
 
-**R8.4 5 秒推流策略**
+**R8.3 5 秒推流策略**
 
 - 路线拐弯步数：通常 5-20 步
-- 每步推送时机：上一条指令写入后 5 秒，或到达前一步的拐弯点
-- 简化实现：直接按时间间隔推送（每 5 秒推队列中的下一步），不考虑实际 GNSS 比对
+- 每步推送时机：每 5 秒推队列中的下一步
 - 头盔端（后续开发）由 STM32 自行比对 GNSS 位置判断是否到达拐弯点
+- 报警时暂停推送，解除后恢复
 
-**R8.5 状态机**
+**R8.4 状态机**
 
 ```
 idle ──用户选目的地──→ planning ──算路完成──→ navigating ──到达──→ arrived
                                                         │
-                                                        └──用户取消──→ cancelled
-
-navigating 期间每 5 秒: updateStep() → writeData(instruction, distance, remain)
-arrived: writeData(status=2) → 骑行正常结束
-cancelled: writeData(status=3) → 终止推流
+                                          ┌──用户取消──→ cancelled
+                                          └──报警──→ paused ──报警解除──→ navigating
 ```
 
-**R8.6 延迟与可靠性**
+**R8.5 延迟与可靠性**
 
 | 阶段 | 延迟 | 可接受 |
 |:-----|:----:|:------:|
-| 小程序→写入云 | 200-500ms | ✅ |
-| 云→MQTT→STM32 | 500-2000ms | ✅ |
-| 总计 | 1-3s | ✅ 导航非安全关键 |
+| 小程序→BLE FFF2→STM32 | <100ms | ✅ |
+| 总计 | <100ms | ✅ 远优于云端方案 |
 | 头盔落后步数 | ≤1 步（5秒/步）| ✅ |
+
+### 历史方案：云端 writeData（已弃用）
+
+> 以下为 2026-05-22 至 2026-05-28 期间的设计方案，已切换为 BLE FFF2 直连。
+
+**旧 R8.1 TSL 数据模型** — 通过移远云 writeData API 写入 TSL 属性（abId 10-15），STM32 通过 MQTT 接收。延迟 1-3s，需云端 token。
+
+**旧 R8.2 writeData 接口** — `POST /v2/deviceshadow/r3/openapi/dm/writeData`，QPS 30/秒。
+
+**切换原因**：BLE 直连延迟 <100ms（vs 云端 1-3s），无云端依赖，无需 DMP TSL 配置。
 
 ---
 
@@ -251,37 +248,44 @@ cancelled: writeData(status=3) → 终止推流
 │  依赖: crypto.js, config.js                     │
 │  接口: login(phone, pwd) → success/fail         │
 ├────────────────────────────────────────────────┤
-│                  DataModule                     │
-│  职责: 设备数据获取、解析、缓存                   │
-│  输入: 无（轮询自动触发）                          │
-│  输出: parsedData {temp,humid,speed,...}        │
-│  依赖: ws-client.js                             │
-│  接口: startPolling(), stopPolling(),           │
-│        onData(callback), getCache()              │
+│                  BleModule (主数据通道)           │
+│  职责: BLE 扫描/连接/收发数据/自动重连            │
+│  输入: BLE GATT Notify (FFF1)                   │
+│  输出: parsedData {t, tmp, hum, spd, lat,...}   │
+│  依赖: ble-protocol.js, logger.js               │
+│  接口: init(cb), scan(), connectById(),         │
+│        sendNav(), sendCtrl(), disconnect()       │
 ├────────────────────────────────────────────────┤
 │                  RideModule                     │
 │  职责: 骑行状态机 + 总结计算                      │
 │  状态: idle → riding → ended                    │
-│  输入: 用户操作(开始/结束)                        │
+│  输入: 用户操作(开始/结束) + BLE onData 回调      │
 │  输出: ridingState, rideSummary                 │
-│  依赖: DataModule                               │
-│  接口: startRide(), endRide(), getSummary()      │
+│  依赖: BleModule (onData 回调写入 rideCache)     │
+│  接口: start(), end(), addRecord(), isActive()  │
 ├────────────────────────────────────────────────┤
 │                  MapModule                      │
-│  职责: 地图定位、轨迹、跟随/手动                   │
-│  状态: 手机定位 / 设备定位                        │
-│  输入: phoneGps | deviceGps                     │
-│  输出: trackPoints[], mapCenter                 │
+│  职责: 地图定位、轨迹 polyline、marker            │
+│  输入: phoneGps (wx.onLocationChange)           │
+│  输出: trackPoints[], polylines, markers        │
 │  依赖: wx.getLocation                           │
-│  接口: trackPoint(lat,lon), toggleFollow(),     │
-│        expand(), collapse()                     │
+│  接口: pushPoint(lat,lon), buildPolyline(),     │
+│        buildMarker(), buildRoutePolyline()       │
 ├────────────────────────────────────────────────┤
 │                  AlarmModule                    │
-│  职责: 报警状态解析与显示规则                     │
-│  输入: rawItems[] (abId=6,7)                    │
-│  输出: alarmText, isAlarm, blockedFields        │
+│  职责: 报警状态解析与弹窗规则（纯函数）            │
+│  输入: alarmType(1=碰撞,2=SOS), alarmLevel      │
+│  输出: displayText, shouldPopup, icon           │
 │  依赖: 无                                       │
-│  接口: parse(items) → {text, isAlarm}           │
+│  接口: analyze(alarmType, level) → result       │
+├────────────────────────────────────────────────┤
+│                  NavModule                      │
+│  职责: 导航路线规划 + BLE FFF2 指令推送           │
+│  输入: 目的地坐标                                │
+│  输出: 导航指令队列 → BLE FFF2 sendNav           │
+│  依赖: config.js(TENCENT_MAP_KEY), ble-service  │
+│  接口: selectDestination(), startNavigation(),  │
+│        stopNavigation(), pause(), resume()       │
 ├────────────────────────────────────────────────┤
 │                  LogModule                      │
 │  职责: 运行日志记录                              │
@@ -290,6 +294,8 @@ cancelled: writeData(status=3) → 终止推流
 │  依赖: wx.getFileSystemManager                  │
 │  接口: init(), log(tag,msg), flush()            │
 └────────────────────────────────────────────────┘
+
+> **历史备注**：`DataModule`（HTTP 轮询）已被 `BleModule`（BLE 直连）替代，`services/data-service.js` 保留作为历史参考。
 ```
 
 ### 二、业务组件（UI 层）
@@ -309,10 +315,11 @@ cancelled: writeData(status=3) → 终止推流
 
 ```
 AuthModule  →  login 页
-DataModule  →  index.DataCard + ws-client
+BleModule   →  index.DataCard + ble-service.js
 RideModule  →  index.RideButton + SummaryModal
 MapModule   →  index.MapView
 AlarmModule →  index.AlarmBadge + DataCard 条件显示
+NavModule   →  index.NavCard + navigation-service.js
 LogModule   →  全局 logger.js
 ```
 
@@ -326,5 +333,5 @@ LogModule   →  全局 logger.js
 | 兼容 | 微信基础库 ≥ 2.20（实际 3.16.1） |
 | 依赖 | 无 npm 包，纯微信原生 API + CommonJS |
 | 安全 | Token 存储在 globalData，不硬编码 |
-| 主题 | 浅蓝 #66ccff 背景 + 白色卡片，适合户外使用 |
+| 主题 | Tactical Cyan 暗色主题：深色基底 #080d17 + 天依蓝强调 #66ccff，适合户外使用 |
 | 简单优先 | 不做过度架构，模块数 = 实际需要数 |

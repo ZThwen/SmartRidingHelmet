@@ -1,7 +1,7 @@
 # 智能骑行头盔 — 微信小程序开发文档
 
-> **当前状态**：🟢 Step A 完成（实时数据显示）
-> **更新日期**：2026-05-22
+> **当前状态**：🟢 Step A 完成（实时数据显示 + BLE 直连） · Step B 导航框架已搭建
+> **更新日期**：2026-06-01
 
 ---
 
@@ -21,24 +21,27 @@
 
 ## 2. 通信架构
 
+### 当前方案：BLE GATT 直连（Step A 已完成）
+
 ```
 STM32F413 (MicroPython)
-  │ QthDriver.send_tsl({1:28.5, 2:48.7, ...})
+  │ BLE GATT Notify (FFF1)
+  │ JSON: {"t":0,"d":{tmp,hum,spd,lat,lon,...}}
   ▼
-移远云 DMP (MQTT: iot-south.quectelcn.com:1883)
-  │ 数据存储
-  ▼
-移远云 OpenAPI (HTTP: iot-api.quectelcn.com)
-  │ GET /v2/binding/enduserapi/getDeviceBusinessAttributes
-  │ Authorization: Bearer {token}
-  ▼
-微信小程序
-  │ 每 2 秒轮询 → JSON 解析 → setData → WXML 渲染
+微信小程序 (ble-service.js BLE Central)
+  │ wx.onBLECharacteristicValueChange → JSON.parse → setData → WXML
   ▼
 用户手机屏幕
 ```
 
-> 不是 MQTT/WebSocket 直连设备，而是 **HTTP 轮询移远云平台**。Qth SDK 已经把数据推到平台了，小程序从平台拉即可。
+- **数据下行**（小程序→头盔）：BLE GATT Write FFF2（导航指令 sendNav）、FFF3（控制 sendCtrl）
+- **延迟**：<100ms，无云端依赖
+- **消息类型**：t=0 传感器合并数据、t=5 报警触发、t=6 报警解除、t=99 心跳
+
+### 历史方案：移远云 HTTP 轮询（已弃用）
+
+> 2026-05-17 ~ 2026-05-28 期间使用。已切换为 BLE 直连（低延迟、无云端依赖）。
+> `services/data-service.js` 和 `utils/ws-client.js` 保留作为历史参考，当前未被任何页面引用。
 
 ---
 
@@ -54,32 +57,19 @@ STM32F413 (MicroPython)
 
 ### 3.2 用户注册与登录
 
-由于小程序登录 UI 未开发，当前用 **curl 命令行** 完成注册并获取 token：
-
-**① 发短信验证码**
+**注册**（首次使用，通过 curl 命令行完成）：
 
 ```
-POST /v2/sms/enduserapi/v2/sendPhoneSmsCode
-参数: codeType=3, internationalCode=86, phone, random(16位), ts(毫秒), userDomain, signature
-签名: SHA256(phone + codeType + random + ts + userDomainSecret) → 小写 hex
+POST /v2/sms/enduserapi/v2/sendPhoneSmsCode  ← 发短信验证码
+POST /v2/enduser/enduserapi/v2/phonePwdRegister  ← 注册
 ```
 
 | ⚠️ 坑 | userDomain 末尾字符不要多写（我们曾误写 `.1N` 实际是 `.1`） |
-
-**② 注册用户**
-
-```
-POST /v2/enduser/enduserapi/v2/phonePwdRegister
-Body: phone, pwd(AES加密), random, smsCode, userDomain, agreementList
-密码加密: AES-128-CBC/PKCS5Padding
-  key = MD5(random).upper()[8:24]
-  iv  = key[8:] + key[:8]
-```
-
-| ⚠️ 坑 | PC 需 `pip install pycryptodome` |
 | ⚠️ 坑 | pwd 和 random 每次重新生成，不复用 |
 
-**③ 登录拿 token**
+**登录**（小程序内完成，已有登录 UI）：
+
+小程序 `pages/login/` 提供手机号+密码登录界面。密码经 `crypto.js`（纯 JS SHA256+MD5+AES-128-CBC）加密后调用 QuecCloud `phonePwdLogin` API，成功后 token 存入 `globalData`。
 
 ```
 POST /v2/enduser/enduserapi/phonePwdLogin
@@ -91,19 +81,16 @@ Query: internationalCode, phone, pwd(加密后), random, signature, userDomain
 | ⚠️ 坑 | 签名中的 pwd 是加密后的 Base64，不是明文 |
 | ⚠️ 坑 | token 过期用 refreshToken 续，无需重登录 |
 
-**当前凭据**：
+**当前凭据**（`utils/config.js`）：
 
-```js
-// utils/config.js
-USER_DOMAIN: 'C.DM.1507151130577592.1'
-USER_DOMAIN_SECRET: '9hGmrVHHK2RQVmAi9nR6TLbhMF8w5diWhF1wshk2P4TS'
-BASE_URL: 'https://iot-api.quectelcn.com'
-PRODUCT_KEY: 'p11yMv'
-DEVICE_KEY: '66ccff'
-
-// utils/ws-client.js (硬编码)
-ACCESS_TOKEN: 'Bearer eyJ...'  // 来自 curl 登录返回
-```
+| 配置项 | 值 |
+|:-------|:---|
+| USER_DOMAIN | `C.DM.1507151130577592.1` |
+| BASE_URL | `https://iot-api.quectelcn.com` |
+| PRODUCT_KEY | `p11yMv` |
+| DEVICE_KEY | `66ccff` |
+| BLE_DEVICE_PREFIX | `SmartHelmet-` |
+| TENCENT_MAP_KEY | 腾讯地图 WebService API Key |
 
 ### 3.3 设备绑定
 
@@ -117,19 +104,15 @@ Query: sn=7305831455A211F1822EF18D13D07623, pk=p11yMv
 | ⚠️ 坑 | 参数名是 `pk`/`sn`，不是 `productKey`/`sn` |
 | 📌 注意 | SN 在 DMP 平台 → 设备详情页获取 |
 
-### 3.4 数据轮询
+### 3.4 数据通道
 
-```
-GET /v2/binding/enduserapi/getDeviceBusinessAttributes?pk=p11yMv&dk=66ccff
-Header: Authorization: Bearer {token}
-返回: customizeTslInfo[{abId, resourceCode, resourceValce, ...}]
-```
+**当前方案：BLE GATT Notify（主通道）**
 
-| ⚠️ 坑 | 字段名是 `abId` 不是 `id` |
-| ⚠️ 坑 | 字段名是 `resourceValce` 不是 `value`（API 拼写错误） |
-| ⚠️ 坑 | 设备离线时 `customizeTslInfo` 为空数组 |
-| ⚠️ 坑 | 微信开发者工具必须勾"不校验合法域名" |
-| ⚠️ 坑 | `wx.request` 的 method 必须与实际 API 一致（GET） |
+小程序作为 BLE Central，连接头盔 GATT Server（Service UUID 0xFFF0），通过 FFF1 Notify 每 2 秒接收传感器数据 JSON。
+
+**历史方案：HTTP 轮询（已弃用）**
+
+> 原方案通过 `GET /v2/binding/enduserapi/getDeviceBusinessAttributes` 每 2 秒轮询 TSL 数据。已弃用，详见 `services/data-service.js`。
 
 ---
 
@@ -138,63 +121,75 @@ Header: Authorization: Bearer {token}
 ```
 WeChatMiniProgram/
 ├── app.js              全局入口 — globalData(token, isRiding, rideCache)
-├── app.json            pages+窗口+定位权限
+├── app.json            pages + 窗口 + 定位权限
+├── services/
+│   ├── ble-service.js          BLE Central 客户端（主数据通道，扫描/连接/收发/自动重连）
+│   ├── alarm-service.js        报警检测 + 弹窗规则（纯函数）
+│   ├── ride-service.js         骑行状态机 + Haversine 总结
+│   ├── map-service.js          轨迹 polyline + marker 生成
+│   ├── navigation-service.js   导航状态机（腾讯地图 API 算路 + BLE FFF2 指令推送）
+│   └── data-service.js         [已弃用] HTTP 轮询 + TSL 解析（历史参考）
 ├── utils/
 │   ├── config.js       凭据配置
-│   ├── crypto.js       SHA256+MD5+AES-128-CBC（纯JS）
-│   ├── logger.js       日志（console+文件，上限1000条）
-│   └── ws-client.js    QuecClient：轮询+离线检测+日志，token从globalData取
-└── pages/
-    ├── login/           手机号+密码登录页
-    └── index/           首页：地图+数据卡片+骑行控制+总结弹窗
-        ├── index.js     状态机(idle/riding)+数据解析+缓存+总结+地图控制
-        ├── index.wxml   导航栏+地图(展开/收起)+卡片(scroll-view)+按钮+弹窗
-        ├── index.wxss   暗色主题+地图/导航栏/弹窗样式
-        └── index.json   自定义导航栏
+│   ├── crypto.js       SHA256 + MD5 + AES-128-CBC（纯 JS）
+│   ├── logger.js       日志（console + 文件，上限 1000 条）
+│   ├── ble-protocol.js BLE 协议常量（UUID、设备前缀、重连参数、类型映射）
+│   └── ws-client.js    [已弃用] 兼容层（→ data-service，历史参考）
+├── pages/
+│   ├── login/          登录页（手机号 + 密码，crypto 加密）
+│   └── index/          首页：地图 + 数据卡片 + 骑行控制 + 导航 + 报警 + 总结
+│       ├── index.js    调度器（BLE 连接 + 数据解析 + 状态管理 + 事件分发）
+│       ├── index.wxml  导航栏 + 地图(展开/收起) + 卡片 + 弹窗 + 导航浮层
+│       ├── index.wxss  Tactical Cyan 暗色主题 + 动画
+│       └── index.json  自定义导航栏
+└── doc/                文档 4 篇（architecture / requirements / development / voice_feasibility）
 ```
 
-**index.js 数据流（完整）**：
+**index.js 数据流（BLE 直连）**：
 
 ```
-登录→首页(idle,不轮询,手机定位)→点击"开始骑行"
-  → client.connect()
-  → 每2秒: GET getDeviceBusinessAttributes
-  → 回调 _onData(items)
-  → 第1遍扫描 isAlarm
-  → 第2遍解析: abId→字段+单位, 报警态跳过温湿度
-  → 缓存 rideCache[] + 更新 trackPoints
-  → setData(数据+轨迹+地图)
-→ 点击"结束骑行"
-  → 弹窗确认→停止轮询
-  → 遍历 cache → Haversine里程/avgSpeed/avgTemp/alarmCount
-  → 总结弹窗
+登录 → 首页(idle, 手机 GPS 定位) → 点击"开始骑行"
+  → BleService.init() + scan() + connectById()
+  → BLE Notify 每 2s 推送 JSON: {"t":0,"d":{tmp,hum,spd,lat,lon,alt,lux}}
+  → onData 回调:
+    t=0 → 解析传感器数据 → setData(显示) + rideCache(缓存) + trackPoints(轨迹)
+    t=5 → AlarmService.analyze() → 全屏报警弹窗 + 暂停导航
+    t=6 → 清除报警 + 恢复导航
+  → 点击"结束骑行"
+  → 确认 → 停止 BLE → RideService.end() → 总结弹窗(含地图)
 ```
-
-**报警状态处理**：
-
-- 每轮字段先清零为 `"--"`，alarm 默认 `"正常"`
-- 两遍扫描：先判断 isAlarm（abId=6≠0），再报警态跳过温湿度
-- 设备常态发 `tsl[6]=0` 显式覆盖 API 缓存
 
 ---
 
 ## 5. 当前状态
 
+### Step A *(✅ 已完成 2026-06-01)*
+
 | 功能 | 状态 | 说明 |
 |:-----|:----:|:-----|
-| 设备→移远云数据上传 | ✅ | QthDriver + LarkCloudService E2E 通过 |
-| 用户注册/登录 | ✅ | 手机号+密码→crypto→API |
-| 设备绑定 | ✅ | SN 绑定成功 |
-| 实时数据显示 | ✅ | 温度/湿度/速度/位置/信号/报警，每 2 秒刷新 |
-| 报警高亮 | ✅ | 报警态红色显示，缺字段显示 `"--"` |
+| BLE 直连数据通道 | ✅ | BLE GATT Notify FFF1，t=0 传感器/t=5 报警/t=6 解除/t=99 心跳 |
+| 用户注册/登录 | ✅ | 手机号+密码→crypto→QuecCloud API，登录 UI 完整 |
+| 实时数据显示 | ✅ | 温度/湿度/速度/位置/报警，BLE 2s 推送 |
+| 报警弹窗 | ✅ | 碰撞 Lv2+/SOS 全屏红色弹窗 + 报警取消功能 |
+| 骑行控制 | ✅ | 开始→BLE数据+缓存，结束→确认→总结 |
+| 骑行总结 | ✅ | 全屏页面，时长/速度/温度/里程/报警次数，起点+终点标记 |
+| 地图轨迹 | ✅ | polyline 实时绘制（BLE GPS），canvas 蓝点 marker，show-location 条件切换 |
 | 小程序登录 UI | ✅ | pages/login，crypto 纯 JS 加密 |
-| 骑行开始/结束控制 | ✅ | 开始→轮询+缓存，结束→确认弹窗+总结 |
-| 骑行总结 | ✅ | 时长/速度/温度/里程(Haversine)/报警次数 |
-| 地图轨迹 | ✅ | polyline实时绘制，展开/收起，跟随/手动 |
-| 手机定位 | ✅ | 空闲态微信定位，骑行态头盔GPS |
-| token 自动刷新 | 📅 | 过期后用 refreshToken 续 |
-| WebSocket 实时推送 | 📅 | 替换 HTTP 轮询 |
-| 导航 + 语音 | 📅 | Step B / v2 |
+| 测试文件 | ✅ | Tests/miniprogram/ 6 个独立测试文件 |
+
+### Step B *(🔜 导航框架已搭建)*
+
+| 功能 | 状态 | 说明 |
+|:-----|:----:|:-----|
+| 导航路线规划 | 🔜 | navigation-service.js + 腾讯地图 bicycling API |
+| 导航指令下发 | 🔜 | BLE FFF2 sendNav（5s 间隔推送转弯指令） |
+| 导航界面 | 🔜 | 指令浮层 + 规划路线 polyline（绿色） |
+
+### Step C *(📅)*
+
+| 功能 | 状态 | 说明 |
+|:-----|:----:|:-----|
+| 语音交互 | 📅 | 语音指令 R13（详见 doc/voice_feasibility.md） |
 
 ---
 
@@ -202,7 +197,10 @@ WeChatMiniProgram/
 
 | 文档 | 路径 |
 |:-----|:-----|
+| 架构设计 (C4) | `doc/architecture.md` |
+| 需求定义 | `doc/requirements.md` |
+| 开发全记录 | `doc/development.md` |
+| 语音可行性分析 | `doc/voice_feasibility.md` |
+| 导航 brainstorm | `doc/.brainstorms/260528-2100-navigation/` |
 | 移远云 OpenAPI 文档 | https://iot-cloud-docs.quectelcn.com |
-| Android SDK Demo | `WeChatMiniProgram/android_iot_sdk_1.12.0/` |
-| 技术路线与验证方案 | `Modules/doc/LarkCloudService_route.md` |
-| 设计总体方案 | `02_Design_scheme.md` |
+| 设计总体方案 | `00_Planning/02_Design_scheme.md` |

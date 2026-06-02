@@ -15,7 +15,7 @@
                          │ 使用
                          ▼
 ┌──────────────────────────────────────────────────────────┐
-│              智能骑行头盔 微信小程序                       │
+│              智能骑行头盔 微信小程序                         │
 └────┬─────────────────────┬──────────────────┬────────────┘
      │ 登录 · 设备数据      │ 地图底图          │ 手机 GPS
      ▼                     ▼                  ▼
@@ -111,7 +111,10 @@ RideComponent
 
 MapComponent
   pushPoint(lat, lon) → void
-  toggleFollow() · toggleExpand() · resetCenter() → void
+  buildPolyline(points) → polyline
+  buildMarker(points, iconPath) → marker
+  buildRoutePolyline(points) → polyline
+  buildDestMarker(lat, lon, name) → marker
 
 NavComponent
   selectDestination() → Promise<{lat, lng, name}>
@@ -158,7 +161,7 @@ NavComponent
 | ADR-2 | BLE GATT Notify（主通道） | 低延迟、无云端依赖。HTTP 轮询为历史方案，已弃用 |
 | ADR-3 | 零 npm | `require()` 即可 |
 | ADR-4 | globalData 共享 | 5 个状态不需 Redux |
-| ADR-5 | 导航指令经 writeData REST API 下行 | 协议已文档化，30/秒 QPS 够用。1-3s 延迟非安全关键，可接受 |
+| ADR-5 | 导航指令经 BLE FFF2 直连 sendNav 下行 | 低延迟（<100ms）、无云端依赖。已从 writeData REST API 迁移到 BLE 直连 |
 
 ---
 
@@ -166,7 +169,7 @@ NavComponent
 
 | 约束 | 目标 |
 |:-----|:-----|
-| 组件行数 | ≤ 200 行/文件 |
+| 组件行数 | Service/Utility ≤ 200 行，Page ≤ 600 行（index.js 作为调度器例外） |
 | setData 频率 | ≤ 5 次/秒 |
 | 全局状态 | ≤ 8 个 |
 | 轨迹点 | ≤ 500 |
