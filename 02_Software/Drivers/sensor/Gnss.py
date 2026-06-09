@@ -54,6 +54,7 @@ class GNSSDriver(BaseModule):
             "longitude": 0.0,         # 经度
             "altitude": 0.0,          # 海拔 (m)
             "speed_kmh": 0.0,         # 速度 (km/h)
+            "cog": 0.0,              # 对地航向 (度, 0-360, 北为0)
             "signal_quality": "none", # 信号质量: good/fair/poor/none
             "valid": False,           # 数据有效性标志
         }
@@ -101,6 +102,7 @@ class GNSSDriver(BaseModule):
                 self._data["longitude"] = loc["longitude"]
                 self._data["altitude"] = loc["altitude"]
                 self._data["speed_kmh"] = loc["speed_kmh"]
+                self._data["cog"] = loc.get("cog", 0.0)
                 self._data["valid"] = True
                 self.ctx["err_count"] = 0
                 self.ctx["no_fix_count"] = 0
@@ -180,6 +182,7 @@ class GNSSDriver(BaseModule):
             "longitude": self._data["longitude"],
             "altitude": self._data["altitude"],
             "speed_kmh": self._data["speed_kmh"],
+            "cog": self._data["cog"],
             "signal_quality": self._data["signal_quality"],
             "valid": self._data["valid"],
             "timestamp": time.ticks_ms()

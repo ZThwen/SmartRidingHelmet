@@ -33,7 +33,7 @@ function buildPolyline(points) {
  * @param {string} label - 标记文字
  * @returns {Array} markers
  */
-function buildMarker(points, iconPath) {
+function buildMarker(points, iconPath, rotate) {
   if (!points || points.length === 0) return [];
   var last = points[points.length - 1];
   var marker = {
@@ -45,6 +45,9 @@ function buildMarker(points, iconPath) {
   };
   if (iconPath) {
     marker.iconPath = iconPath;
+  }
+  if (rotate != null) {
+    marker.rotate = rotate;
   }
   return [marker];
 }

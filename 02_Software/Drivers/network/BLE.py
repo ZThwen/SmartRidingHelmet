@@ -197,6 +197,15 @@ class BLEDriver(BaseModule):
                 uuid = evt.get("uuid")
                 value = evt.get("value", "")
 
+                # hex 解码：清理空格/换行后尝试解码
+                if isinstance(value, str) and len(value) > 2:
+                    try:
+                        clean = value.strip().replace(' ', '').replace('\n', '').replace('\r', '')
+                        if len(clean) % 2 == 0 and all(c in '0123456789abcdefABCDEF' for c in clean):
+                            value = bytes.fromhex(clean).decode('utf-8')
+                    except:
+                        pass  # 解码失败，保持原值
+
                 if uuid == self.cfg["char_nav"]:
                     if self.event_bus:
                         self.event_bus.publish(EVENT_NAV_CMD, {"raw": value})

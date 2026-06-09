@@ -5,6 +5,13 @@ note 采用队列缓冲与互斥锁，确保主线程/辅助线程安全调用�
 import time
 import _thread
 
+# CPython 兼容：MicroPython 有 time.ticks_ms()，CPython 没有
+try:
+    _ticks_ms = time.ticks_ms
+except AttributeError:
+    def _ticks_ms():
+        return int(time.time() * 1000)
+
 class EventBus:
     def __init__(self):
         """
@@ -42,7 +49,7 @@ class EventBus:
         """
         # 统一数据结构：确保 data 是字典，自动补充通用字段
         payload = data if isinstance(data, dict) else {"value": data}
-        payload.setdefault("timestamp", time.ticks_ms())
+        payload.setdefault("timestamp", _ticks_ms())
         payload.setdefault("source", "unknown")
 
         self._lock.acquire()

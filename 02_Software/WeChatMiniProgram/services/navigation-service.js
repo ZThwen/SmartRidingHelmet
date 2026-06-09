@@ -45,7 +45,7 @@ function selectDestination() {
   });
 }
 
-function startNavigation(dest) {
+function startNavigation(dest, origin) {
   if (_state.state !== 'idle' && _state.state !== 'arrived' && _state.state !== 'cancelled') {
     return;
   }
@@ -56,17 +56,23 @@ function startNavigation(dest) {
 
   logger.log('NAV', '开始规划路线 → ' + dest.name);
 
-  wx.getLocation({
-    type: 'gcj02',
-    isHighAccuracy: true,
-    success: function(res) {
-      _fetchRoute(res.latitude, res.longitude, dest.lat, dest.lng);
-    },
-    fail: function() {
-      // 获取当前位置失败，用默认位置
-      _fetchRoute(22.5431, 113.9523, dest.lat, dest.lng);
-    },
-  });
+  if (origin && origin.lat && origin.lng) {
+    // 用板子 BLE 坐标做路线规划起点
+    logger.log('NAV', '使用板子坐标: ' + origin.lat + ', ' + origin.lng);
+    _fetchRoute(origin.lat, origin.lng, dest.lat, dest.lng);
+  } else {
+    // fallback 手机 GPS
+    wx.getLocation({
+      type: 'gcj02',
+      isHighAccuracy: true,
+      success: function(res) {
+        _fetchRoute(res.latitude, res.longitude, dest.lat, dest.lng);
+      },
+      fail: function() {
+        _fetchRoute(22.5431, 113.9523, dest.lat, dest.lng);
+      },
+    });
+  }
 }
 
 function stopNavigation(reason) {
@@ -164,17 +170,32 @@ function _fetchRoute(fromLat, fromLng, toLat, toLng) {
   });
 }
 
+/**
+ * 腾讯地图 act_desc → 板子方向值
+ * act_desc: 左转/右转/偏左转/偏右转/左后转/右后转/左转掉头/直行/空
+ */
+function _mapActDesc(actDesc) {
+  if (actDesc === '左转') return 'left';
+  if (actDesc === '右转') return 'right';
+  if (actDesc === '偏左转') return 'slight_left';
+  if (actDesc === '偏右转') return 'slight_right';
+  if (actDesc === '左后转' || actDesc === '右后转' || actDesc === '左转掉头') return 'uturn';
+  if (actDesc === '直行') return 'straight';
+  if (actDesc === '' || actDesc === '到达') return 'arrive';
+  return 'straight';
+}
+
 function _parseRoute(route) {
-  // 解压 polyline 坐标
+  // 解压 polyline 坐标（前向差分解压）
   _state.routePolyline = _decodePolyline(route.polyline || []);
 
-  // 解析 steps
+  // 解析 steps（用 act_desc 映射方向）
   _state.steps = (route.steps || []).map(function(step) {
     return {
       instruction: step.instruction || '',
       road_name: step.road_name || '',
       distance: step.distance || 0,
-      action: step.action || '',
+      action: _mapActDesc(step.act_desc || ''),
     };
   });
 
@@ -197,40 +218,25 @@ function _parseRoute(route) {
  * 腾讯地图 polyline 差分解压
  * 第一个点是绝对坐标，后续是相对前一个点的偏移量
  */
-function _decodePolyline(polyline) {
-  if (!polyline || polyline.length === 0) return [];
+/**
+ * 腾讯地图 polyline 前向差分解压
+ * 官方格式：[lat1, lng1, delta_lat2, delta_lng2, ...]
+ * 解压：coors[i] = coors[i-2] + coors[i] / 1e6
+ */
+function _decodePolyline(coors) {
+  if (!coors || coors.length < 2) return [];
 
-  var points = [];
-  var prevLat = 0;
-  var prevLng = 0;
-
-  for (var i = 0; i < polyline.length; i++) {
-    var point = polyline[i];
-    // 腾讯地图返回的压缩格式是 {lat, lng} 或 [lat, lng]
-    var lat, lng;
-    if (typeof point === 'string') {
-      // 可能是差分编码字符串
-      lat = parseInt(point) || 0;
-      lng = 0;
-    } else if (Array.isArray(point)) {
-      lat = point[0] || 0;
-      lng = point[1] || 0;
-    } else if (typeof point === 'object') {
-      lat = point.lat || 0;
-      lng = point.lng || 0;
-    } else {
-      continue;
-    }
-
-    prevLat += lat;
-    prevLng += lng;
-
-    points.push({
-      latitude: prevLat / 1e5,
-      longitude: prevLng / 1e5,
-    });
+  // 前向差分解压（参考腾讯地图官方示例）
+  var kr = 1000000;
+  for (var i = 2; i < coors.length; i++) {
+    coors[i] = Number(coors[i - 2]) + Number(coors[i]) / kr;
   }
 
+  // 转为 [{latitude, longitude}, ...] 格式
+  var points = [];
+  for (var i = 0; i < coors.length; i += 2) {
+    points.push({ latitude: coors[i], longitude: coors[i + 1] });
+  }
   return points;
 }
 

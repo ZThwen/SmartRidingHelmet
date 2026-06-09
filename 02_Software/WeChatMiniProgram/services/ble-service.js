@@ -75,7 +75,10 @@ function _registerListeners() {
 
   wx.onBLECharacteristicValueChange(function(res) {
     if (!_callbacks.onData) return;
+    var cid = res.characteristicId || '';
+    if (cid.indexOf('FFF1') < 0) return;
     var str = _ab2str(res.value);
+    if (!str || str.length < 3) return;
     try {
       var data = JSON.parse(str);
       _callbacks.onData(data);
@@ -241,13 +244,36 @@ function isConnected() {
 }
 
 function _ab2str(buf) {
-  return String.fromCharCode.apply(null, new Uint8Array(buf));
+  var bytes = new Uint8Array(buf);
+  var str = '';
+  for (var i = 0; i < bytes.length; i++) {
+    var b = bytes[i];
+    if (b < 0x80) {
+      str += String.fromCharCode(b);
+    } else if (b < 0xE0) {
+      str += String.fromCharCode(((b & 0x1F) << 6) | (bytes[++i] & 0x3F));
+    } else {
+      str += String.fromCharCode(((b & 0x0F) << 12) | ((bytes[++i] & 0x3F) << 6) | (bytes[++i] & 0x3F));
+    }
+  }
+  return str;
 }
 
 function _str2ab(str) {
-  var buf = new ArrayBuffer(str.length);
+  var utf8 = [];
+  for (var i = 0; i < str.length; i++) {
+    var c = str.charCodeAt(i);
+    if (c < 0x80) {
+      utf8.push(c);
+    } else if (c < 0x800) {
+      utf8.push(0xC0 | (c >> 6), 0x80 | (c & 0x3F));
+    } else {
+      utf8.push(0xE0 | (c >> 12), 0x80 | ((c >> 6) & 0x3F), 0x80 | (c & 0x3F));
+    }
+  }
+  var buf = new ArrayBuffer(utf8.length);
   var view = new Uint8Array(buf);
-  for (var i = 0; i < str.length; i++) view[i] = str.charCodeAt(i);
+  for (var i = 0; i < utf8.length; i++) view[i] = utf8[i];
   return buf;
 }
 

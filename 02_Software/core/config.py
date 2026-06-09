@@ -40,6 +40,9 @@ EVENT_POWER_STATE_CHANGE    = "POWER_STATE_CHANGE"    # 功耗状态切换
 # GNSS相关事件
 EVENT_GPS_LOST              = "GPS_LOST"              # GPS信号丢失
 
+# LBS相关事件
+EVENT_LBS_READY             = "LBS_READY"              # LBS定位数据就绪
+
 # 网络相关事件
 EVENT_NETWORK_CONNECTED     = "NETWORK_CONNECTED"     # 网络连接成功
 EVENT_NETWORK_DISCONNECTED  = "NETWORK_DISCONNECTED"  # 网络断开
@@ -82,6 +85,12 @@ AUDIO_ALARM_LOOP_COUNT    = 3                      # 报警音循环次数
 TTS_BATTERY_LOW           = "当前电量不足，请及时充电"
 TTS_BATTERY_CRITICAL      = "电池电量严重不足，请立即充电"
 TTS_GPS_LOST              = "GPS信号已丢失"
+
+# 导航 TTS
+TTS_NAV_TURN          = "前方%d米%s"           # 前方200米右转
+TTS_NAV_ROAD          = "前方%d米%s进入%s"     # 前方200米右转进入中山路
+TTS_NAV_ARRIVE        = "已到达目的地"
+TTS_NAV_CANCEL        = "导航已结束"
 
 # ================= 碰撞检测配置（裸板适配）=================
 # 多级阈值（单位：g，1g=9.8m/s²）
@@ -194,3 +203,7 @@ BLE_CHAR_ACK              = 0xFFF4                  # 报警确认通道 (WRITE)
 BLE_MTU                   = 247                     # 最大传输单元
 BLE_UPLOAD_INTERVAL_MS    = 2000                    # BLE 通知推送间隔 (ms)
 BLE_KEEPALIVE_MS          = 5000                    # 心跳间隔 (ms)
+
+# ================= LBS 基站定位配置 =================
+LBS_TIMEOUT_MS          = 15000    # LBS 定位超时 (ms)
+LBS_SAMPLE_MS           = 30000    # LBS 采样间隔 (ms)

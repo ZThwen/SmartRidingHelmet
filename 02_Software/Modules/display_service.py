@@ -9,11 +9,12 @@ note Service层业务服务，MicroPython环境，在真实硬件上运行
 4. 报警联动：碰撞显示文字，SOS显示预警图标(移远图标)
 5. 功耗管理：休眠关闭背光，唤醒恢复背光
 
-画面布局（正常骑行画面）：
-    第1行 (y=20): T:25.5°C      (温度)
-    第2行 (y=60): H:65%         (湿度)
-    第3行 (y=100): Lat:31.23 Lon:121.47  (定位)
-    第4行 (y=140): V:18.5km/h   (速度)
+画面布局（正常骑行画面，紧凑布局）：
+    第1行 (y=10): T:25.5°C      (温度)
+    第2行 (y=35): H:65%         (湿度)
+    第3行 (y=60): Lat:31.23 Lon:121.47  (定位)
+    第4行 (y=85): V:18.5km/h   (速度)
+    第5行 (y=110): [导航行]     (由 NavigationService 写入)
 
 图片说明：
     - images.py (QQ_ICON_40x40): 开机Logo，只显示一次
@@ -306,10 +307,10 @@ class DisplayService(BaseModule):
                 location_str = self._format_location(self._data["lat"], self._data["lon"])
                 speed_str = self._format_speed(self._data["speed"])
                 
-                lcd.show_string(10, 20, temp_str, lcd.WHITE, lcd.BLACK)
-                lcd.show_string(10, 60, humid_str, lcd.WHITE, lcd.BLACK)
-                lcd.show_string(10, 100, location_str, lcd.WHITE, lcd.BLACK)
-                lcd.show_string(10, 140, speed_str, lcd.WHITE, lcd.BLACK)
+                lcd.show_string(10, 10, temp_str, lcd.WHITE, lcd.BLACK)
+                lcd.show_string(10, 35, humid_str, lcd.WHITE, lcd.BLACK)
+                lcd.show_string(10, 60, location_str, lcd.WHITE, lcd.BLACK)
+                lcd.show_string(10, 85, speed_str, lcd.WHITE, lcd.BLACK)
                 
                 print("[{}] 正常画面渲染: {} {} {} {}".format(
                     self.name, temp_str, humid_str, location_str, speed_str))

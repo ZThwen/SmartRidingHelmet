@@ -16,7 +16,7 @@ Page({
     bleConnected: false,
     bleDevices: [],
     showBlePicker: false,
-    temp: '--', humid: '--', speed: '--',
+    temp: '--', humid: '--', speed: '--', cog: '--',
     lat: '--', lon: '--', alt: '--',
     lux: '--', alarm: '正常', time: '',
     riding: false,
@@ -64,37 +64,43 @@ Page({
     var that = this;
 
     // 用 canvas 画蓝色圆点作为当前位置标记
-    var query = wx.createSelectorQuery();
-    query.select('#dotCanvas').fields({ node: true, size: true }).exec(function(res) {
-      if (!res[0] || !res[0].node) return;
-      var canvas = res[0].node;
-      var ctx = canvas.getContext('2d');
-      canvas.width = 20;
-      canvas.height = 20;
-      // 外圈光晕
+    function _drawDot(ctx) {
       ctx.beginPath();
       ctx.arc(10, 10, 9, 0, Math.PI * 2);
       ctx.fillStyle = 'rgba(102, 204, 255, 0.3)';
       ctx.fill();
-      // 内圈实心
       ctx.beginPath();
       ctx.arc(10, 10, 5, 0, Math.PI * 2);
       ctx.fillStyle = '#66ccff';
       ctx.fill();
-      // 白色边框
       ctx.beginPath();
       ctx.arc(10, 10, 5, 0, Math.PI * 2);
       ctx.strokeStyle = '#ffffff';
       ctx.lineWidth = 1.5;
       ctx.stroke();
-      // 导出为临时文件
-      wx.canvasToTempFilePath({
-        canvas: canvas,
-        success: function(r) {
-          that._dotIconPath = r.tempFilePath;
-          logger.log('PAGE', '蓝点图标就绪');
-        },
-      });
+    }
+    var query = wx.createSelectorQuery();
+    query.select('#dotCanvas').fields({ node: true, size: true }).exec(function(res) {
+      if (res[0] && res[0].node) {
+        var canvas = res[0].node;
+        canvas.width = 20;
+        canvas.height = 20;
+        _drawDot(canvas.getContext('2d'));
+        wx.canvasToTempFilePath({
+          canvas: canvas,
+          success: function(r) { that._dotIconPath = r.tempFilePath; logger.log('PAGE', '蓝点图标就绪(DOM)'); },
+        });
+      } else {
+        // DevTools 兜底：离屏 canvas
+        try {
+          var off = wx.createOffscreenCanvas({ type: '2d', width: 20, height: 20 });
+          _drawDot(off.getContext('2d'));
+          that._dotIconPath = off.toTempFilePathSync();
+          logger.log('PAGE', '蓝点图标就绪(离屏)');
+        } catch (e) {
+          logger.log('PAGE', '蓝点图标生成失败: ' + e.message);
+        }
+      }
     });
 
     wx.getLocation({
@@ -114,21 +120,9 @@ Page({
         logger.log('PAGE', 'startLocationUpdate 成功，注册 onLocationChange');
         wx.onLocationChange(function(res) {
           logger.log('PAGE', 'onLocationChange: lat=' + res.latitude + ' lon=' + res.longitude);
-          // 始终更新地图中心
-          if (that.data.mapFollowing) {
+          // 未骑行时用手机 GPS 更新地图中心，骑行中用 BLE 坐标
+          if (that.data.mapFollowing && !RideService.isActive()) {
             that.setData({ mapLat: res.latitude, mapLon: res.longitude });
-          }
-          // 骑行时：手机 GPS 画轨迹
-          if (RideService.isActive()) {
-            var points = MapService.pushPoint(that.data.trackPoints, res.latitude, res.longitude);
-            var poly = MapService.buildPolyline(points);
-            var marks = MapService.buildMarker(points, '手机');
-            logger.log('PAGE', '手机GPS轨迹: pts=' + points.length + ' poly=' + poly.length + ' marks=' + marks.length);
-            that.setData({
-              trackPoints: points,
-              trackPolylines: poly,
-              trackMarkers: marks,
-            });
           }
         });
       },
@@ -152,13 +146,21 @@ Page({
           data.navCurDistance = instr.distance;
         }
         data.navRemainDistance = s.remainDistance;
-        data.navRoutePolylines = MapService.buildRoutePolyline(s.routePolyline);
-        if (s.dest) {
-          data.navDestMarker = MapService.buildDestMarker(s.dest.lat, s.dest.lng, s.dest.name);
-        }
+        var navPoly = MapService.buildRoutePolyline(s.routePolyline);
+        var navMarker = s.dest ? MapService.buildDestMarker(s.dest.lat, s.dest.lng, s.dest.name) : [];
+        // 导航模式：地图只显示导航路线（不显示轨迹）
+        data.trackPolylines = navPoly;
+        data.trackMarkers = navMarker;
+        data._navPolylines = navPoly;
+        data._navMarkers = navMarker;
       } else {
-        data.navRoutePolylines = [];
-        data.navDestMarker = [];
+        // 导航结束：恢复骑行轨迹
+        var trackPoly = MapService.buildPolyline(that.data.trackPoints || []);
+        var trackMarks = MapService.buildMarker(that.data.trackPoints || [], that._dotIconPath);
+        data.trackPolylines = trackPoly;
+        data.trackMarkers = trackMarks;
+        data._navPolylines = [];
+        data._navMarkers = [];
         data.navInstruction = '';
       }
       that.setData(data);
@@ -297,7 +299,7 @@ Page({
     this.setData({
       riding: true, status: '骑行中...', isOnline: true,
       btnText: '结束骑行', btnClass: 'btn-end',
-      temp: '--', humid: '--', speed: '--',
+      temp: '--', humid: '--', speed: '--', cog: '--',
       lat: '--', lon: '--', alt: '--',
       lux: '--', alarm: '正常', time: '',
       trackPoints: [], trackPolylines: [], trackMarkers: [],
@@ -306,9 +308,18 @@ Page({
 
     this._rideStartTime = Date.now();
 
-    // 如果选择了目的地，开始导航
+    // 保存原始轨迹数据（导航结束时恢复）
+    this._savedTrackPolylines = [];
+    this._savedTrackMarkers = [];
+
+    // 如果选择了目的地，开始导航（用缓存的 BLE 坐标）
     if (this._navDest) {
-      NavService.startNavigation(this._navDest);
+      var origin = null;
+      if (this.data.bleConnected && this._lastBleLat && this._lastBleLon) {
+        origin = { lat: this._lastBleLat, lng: this._lastBleLon };
+        logger.log('NAV', '使用板子坐标作为起点: ' + origin.lat + ', ' + origin.lng);
+      }
+      NavService.startNavigation(this._navDest, origin);
       this._navDest = null;
     }
   },
@@ -333,13 +344,15 @@ Page({
     var data = {
       riding: false, status: '已结束', isOnline: false,
       btnText: '开始骑行', btnClass: 'btn-start',
-      temp: '--', humid: '--', speed: '--',
+      temp: '--', humid: '--', speed: '--', cog: '--',
       lat: '--', lon: '--', alt: '--',
       lux: '--', alarm: '--', time: '',
       trackPoints: [], trackPolylines: [], trackMarkers: [],
       navState: 'idle', showNavCard: false,
       navRoutePolylines: [], navDestMarker: [],
       navInstruction: '', navCurDistance: 0, navRemainDistance: 0,
+      _navPolylines: [], _navMarkers: [],
+      _savedTrackPolylines: [], _savedTrackMarkers: [],
     };
 
     if (summary) {
@@ -431,35 +444,49 @@ Page({
           if (d.lat != null) u.lat = d.lat.toFixed(4);
           if (d.lon != null) u.lon = d.lon.toFixed(4);
           if (d.alt != null) u.alt = d.alt.toFixed(1) + 'm';
+          if (d.cog != null) u.cog = d.cog.toFixed(0) + '°';
           if (d.lux != null) u.lux = d.lux;
           u.time = new Date().toLocaleTimeString();
           u.isOnline = true;
 
-          // 骑行记录 + BLE GPS 画轨迹
-          if (RideService.isActive() && d.lat != null && d.lon != null) {
-            RideService.addRecord({
-              temp: d.tmp, humid: d.hum, speed: d.spd,
-              lat: d.lat, lon: d.lon, alt: d.alt,
-            });
-            var points = MapService.pushPoint(that.data.trackPoints, d.lat, d.lon);
-            var poly = MapService.buildPolyline(points);
-            var marks = MapService.buildMarker(points, that._dotIconPath);
-            u.trackPoints = points;
-            u.trackPolylines = poly;
-            u.trackMarkers = marks;
-            if (that.data.mapFollowing) {
+          // 缓存最新 BLE 坐标（无论是否骑行）
+          if (d.lat != null && d.lon != null) {
+            that._lastBleLat = d.lat;
+            that._lastBleLon = d.lon;
+            // 骑行中用 BLE 坐标更新地图中心（替代手机 GPS）
+            if (RideService.isActive() && that.data.mapFollowing) {
               u.mapLat = d.lat;
               u.mapLon = d.lon;
             }
-            // 诊断日志
-            logger.log('BLE', 'pts=' + points.length
-              + ' poly_len=' + poly.length
-              + ' poly_pts=' + (poly[0] ? poly[0].points.length : 0)
-              + ' poly_color=' + (poly[0] ? poly[0].color : 'none')
-              + ' poly_arrow=' + (poly[0] ? poly[0].arrowLine : 'none')
-              + ' marks=' + marks.length
-              + ' marks_callout=' + (marks[0] && marks[0].callout ? marks[0].callout.content : 'none')
-              + ' mapLat=' + u.mapLat + ' mapLon=' + u.mapLon);
+          }
+
+          // 骑行记录（始终记录轨迹数据，用于最终总结）
+          if (RideService.isActive() && d.lat != null && d.lon != null) {
+            RideService.addRecord({
+              temp: d.tmp, humid: d.hum, speed: d.spd, cog: d.cog,
+              lat: d.lat, lon: d.lon, alt: d.alt,
+            });
+
+            // 只在坐标变化时更新地图（避免闪烁）
+            var lastPt = that.data.trackPoints.length > 0 ? that.data.trackPoints[that.data.trackPoints.length - 1] : null;
+            var posChanged = !lastPt || lastPt.latitude !== d.lat || lastPt.longitude !== d.lon;
+
+            if (NavService.isNavigating()) {
+              // 导航模式：每次 BLE 数据都更新（保持 marker 持久显示）
+              var userMarker = MapService.buildMarker([{latitude: d.lat, longitude: d.lon}], that._dotIconPath, d.cog);
+              var navPoly = that.data._navPolylines || [];
+              var navMarker = that.data._navMarkers || [];
+              u.trackPolylines = navPoly;
+              u.trackMarkers = navMarker.concat(userMarker);
+            } else {
+              // 直接骑行：显示轨迹 + 用户位置蓝点
+              var points = posChanged ? MapService.pushPoint(that.data.trackPoints, d.lat, d.lon) : that.data.trackPoints;
+              if (posChanged) {
+                u.trackPoints = points;
+                u.trackPolylines = MapService.buildPolyline(points);
+                u.trackMarkers = MapService.buildMarker(points, that._dotIconPath, d.cog);
+              }
+            }
           }
 
           // 合并所有数据为一次 setData

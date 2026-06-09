@@ -55,6 +55,7 @@ class BLEService(BaseModule):
             "latest_lon": None,
             "latest_alt": None,
             "latest_spd": None,
+            "latest_cog": None,
             "latest_lux": None,
         }
 
@@ -123,6 +124,8 @@ class BLEService(BaseModule):
             d["lon"] = self._data["latest_lon"]
             d["spd"] = self._data["latest_spd"]
             d["alt"] = self._data["latest_alt"]
+            if self._data["latest_cog"] is not None:
+                d["cog"] = self._data["latest_cog"]
         if self._data["latest_lux"] is not None:
             d["lux"] = self._data["latest_lux"]
 
@@ -181,6 +184,7 @@ class BLEService(BaseModule):
         self._data["latest_lon"] = payload.get("longitude")
         self._data["latest_alt"] = payload.get("altitude")
         self._data["latest_spd"] = payload.get("speed_kmh")
+        self._data["latest_cog"] = payload.get("cog", 0.0)
 
     def _on_light(self, payload):
         if not payload.get("valid", False):
