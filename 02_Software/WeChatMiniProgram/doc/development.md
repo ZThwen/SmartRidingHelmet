@@ -193,15 +193,18 @@ Step A ✅           Step B 🟡 开发中    Step C 📅       上线 📅
 | R5 | 骑行总结 | 时长/速度/温度/里程(Haversine)/报警次数，全屏页面，起点+终点标记 | ✅ |
 | R6 | 日志 | console + app.log，上限 1000 行 | ✅ |
 
-#### Step B *(🔜 导航框架已搭建)*
+#### Step B *(🔜 部分已实现)*
 
 | 编号 | 模块 | 需求 | 状态 |
 |:-----|:-----|:-----|:-----|
-| R7 | 导航输入 | wx.chooseLocation → 腾讯地图API规划路线 | 🔜 框架已搭建 |
-| R8 | 指令下发 | 路线解析 → BLE FFF2 sendNav（已从云端writeData改为BLE直连） | 🔜 框架已搭建 |
-| R9 | 导航界面 | 地图显示规划路线 + 当前指令浮层 (方向+距离+路名) | 🔜 框架已搭建 |
+| R7 | 导航输入 | wx.chooseLocation → 腾讯地图API规划路线 | ✅ 已实现 |
+| R8 | 指令下发 | 路线解析 → BLE FFF2 sendNav（5s 间隔推流） | ✅ 已实现 |
+| R8.1 | 导航位置播报 | 头盔根据 GNSS 位置自主播报（替代 5s 推流） | 📅 规划中 |
+| R9 | 导航界面 | 地图显示规划路线 + 当前指令浮层 (方向+距离+路名) | ✅ 已实现 |
+| R9.1 | polyline 修复 | 前向差分解压（参考腾讯地图官方示例） | ✅ 已修复 |
+| R9.2 | 方向映射修复 | act_desc → dir（骑行 API 无 action 字段） | ✅ 已修复 |
 | R10 | 心率显示 | 云端收心率 → 实时数值 + 异常预警 | 📅 |
-| R11 | 头灯控制 | 远程开关 → BLE FFF3 sendCtrl | 📅 |
+| R11 | 远端控制 | 小程序控制面板（头灯/音量）→ BLE FFF3 sendCtrl → 头盔执行 | 📅 未实现 |
 | R12 | 电量显示 | 云端收电量 → 图标 + 百分比 + 低电提醒 | 📅 |
 
 #### Step C *(📅)*
@@ -299,6 +302,7 @@ Step A ✅           Step B 🟡 开发中    Step C 📅       上线 📅
 | **AlarmComponent** | 无状态 (纯函数) | 报警检测、弹窗判断 | `analyze(alarmType, level)` → `{displayText,shouldPopup,icon}` |
 | **LogComponent** | 日志缓冲区 | 写日志、刷盘 | `init()` `log(tag,msg)` `flush()` |
 | **NavComponent** | 路线、指令序列、推送定时器 | 选目的地、算路、逐条 BLE FFF2 推送 | `selectDestination()` `startNavigation(dest)` `stopNavigation()` `pause()` `resume()` |
+| **RemoteControlComponent** *📅* | 远端控制状态 | 头灯开关、音量调节等 BLE FFF3 指令下发 | `toggleLight()` `setVolume(level)` `sendCommand(cmd)` |
 | **VoiceComponent** *📅* | 语音会话 | 语音输入→指令 | `listen()` `onCommand(cb)` |
 
 ### 3.2 集成架构
@@ -424,6 +428,7 @@ LogComponent
 | RideComponent | `services/ride-service.js` | 骑行状态机 + 总结 |
 | MapComponent | `services/map-service.js` | 轨迹 polyline + marker |
 | NavComponent | `services/navigation-service.js` | 导航状态机 + BLE FFF2 推送 |
+| RemoteControlComponent *📅* | 首页控制面板（待实现） | 远端控制 UI + BLE FFF3 sendCtrl |
 | LogComponent | `utils/logger.js` | 日志双写 |
 
 > **历史方案备注**：`DataComponent`（`utils/ws-client.js` → `services/data-service.js`）为 HTTP 轮询方案，已被 `BleComponent` 替代。文件保留作为历史参考。
@@ -761,7 +766,8 @@ WeChatMiniProgram/
 | 2026-05-28 | BLE 稳定性修复 | BLEDriver 回调 try/except、MTU 去重；BLEService 断连清队列、deinit 等待线程、熔断机制；小程序断连清理+直连重连+write fail 回调 |
 | 2026-05-31 | BLE 报警修复 + 导航框架 | t=5 载荷压缩为 15 字节（ATT_MTU 限制 +CME ERROR: 53）；navigation-service.js 搭建（腾讯地图API + BLE FFF2 sendNav）；测试文件拆分到 Tests/miniprogram/ |
 | 2026-06-01 | Step A 完成 | 轨迹显示修复（WXML concat 根因）；canvas 蓝点 marker + show-location 条件切换；总结地图起点+终点标记；报警取消功能；小程序包瘦身（3099KB→141KB） |
-| 🔜 Step B | 导航+心率+头灯+电量 | 导航 R7~R9 完整实现、心率 R10、头灯 R11、电量 R12 |
+| 2026-06-09 | Step B 导航开发 | polyline 前向差分解压修复（参考腾讯地图官方示例）；act_desc 方向映射（骑行 API 无 action 字段）；BLE hex 解码修复；NavigationService 头盔端实现 |
+| 🔜 Step B 剩余 | 位置播报+远端控制 | 导航位置播报（头盔 GNSS 自主播报）R8.1、远端控制 R11、心率 R10、电量 R12 |
 | 📅 Step C | 语音交互 | 语音指令 R13 |
 
 ---
@@ -830,3 +836,5 @@ WeChatMiniProgram/
 | 6 | `wx.onLocationChange` 未在 `onUnload` 注销 | reLaunch 后旧回调操作过期数据 | 未触发 | `onUnload` 中加 `wx.offLocationChange` |
 | 7 | 总结地图依赖 `_summary*` 独立缓存字段 | 重构时误删会导致总结地图空白 | 正常工作 | 加注释说明依赖关系 |
 | 8 | `alarm-service.js` JSDoc 参数与实际不符 | 文档写 3 参数，实际 2 参数 | 未触发 | 更新 JSDoc |
+| 9 | 腾讯地图骑行 API 不返回 `action` 字段 | 驾车/步行 API 有 `action`，骑行 API 方向信息在 `act_desc`（中文：左转/右转/直行等） | 6/09 修复 | `_mapActDesc()` 映射中文→英文方向值 |
+| 10 | `catch` 块捕获的不一定是 JSON.parse 错误 | `onData` 回调内部的 ReferenceError 也会被 catch 捕获，表现为"解析失败" | 代码分析 | 检查 catch 的实际异常类型 |

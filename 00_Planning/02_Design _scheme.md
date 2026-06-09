@@ -79,7 +79,7 @@
 - 发布定位数据就绪事件
 
 **发布事件**：
-- `EVENT_GNSS_READY`：定位数据就绪，携带数据 `{latitude, longitude, altitude, speed_kmh, signal_quality, valid, timestamp}`
+- `EVENT_GNSS_READY`：定位数据就绪，携带数据 `{latitude, longitude, altitude, speed_kmh, cog, signal_quality, valid, timestamp}`
 
 **订阅事件**：
 - `EVENT_CONFIG_UPDATE`：远程配置更新
@@ -88,6 +88,47 @@
 - 模组：EC200U 内置 GNSS
 - 接口：GNSS 天线接口 J102（需外接无源 GNSS 天线）
 - 参考示例：`examples/gnss.py`
+
+**技术要点**：
+- `get_location()` 返回 `cog`（Course Over Ground）字段：对地航向，0-360 度，北为 0
+- 参考：`00_Planning/doc/API/Network&GNSS&File-API参考手册.pdf` 第 16 页
+
+---
+
+#### 2.1.3.1 LBS 基站定位驱动模块（LBS.py）
+
+**所属层次**：Device层（设备封装层）
+
+**需求对应**：F-SEN-03 位置与速度采集（室内补充）
+
+**当前状态**：✅ **v1 已实现**（2026-06-09）
+
+**模块功能**：
+- 封装 quectel.LBS API，提供室内基站定位能力
+- 周期触发定位（默认 30s 间隔，15s 超时）
+- 定位成功发布 `EVENT_LBS_READY`
+- 与 GNSSDriver 互斥（EC200U 不能同时运行 GNSS 和 LBS）
+
+**发布事件**：
+- `EVENT_LBS_READY`：LBS 定位数据就绪，携带数据 `{latitude, longitude, accuracy, source, timestamp}`
+
+**订阅事件**：
+- `EVENT_CONFIG_UPDATE`：配置更新
+
+**公共接口**：
+- `init()`：创建 LBS 实例
+- `tick()`：周期调度定位
+- `deinit()`：释放 LBS 资源
+- `get_data()`：获取定位数据快照
+- `get_status()`：获取模块运行状态
+
+**硬件说明**：
+- 模组：EC200U 内置 LBS
+- 互斥约束：不能与 GNSSDriver 同时 init（EC200U 限制）
+
+**分层设计说明**：
+- Device 层封装 LBS API，不包含业务逻辑
+- 定位为 GNSS 的室内补充方案
 
 ---
 
@@ -287,27 +328,61 @@ LCD 内部维护 `display_mode` 状态（normal / alarm），用于防止 Servic
 
 ---
 
-#### 2.1.9 灯光驱动模块（Headlight.py）【v2 新增，待硬件设计】
+#### 2.1.9 PWM调光LED驱动模块（PWM_LED.py）
 
 **所属层次**：Device层（设备封装层）
 
-**需求对应**：F-LIGHT-01 大功率灯光
+**需求对应**：F-LIGHT-01 大功率灯光调光控制
 
-**当前状态**：🟡 **硬件设计中**，代码暂空壳占位
+**模块功能**（纯硬件控制，无业务逻辑）：
 
-**模块职责**（预留）：
-- PWM 控制大功率 LED
-- 支持模式切换（高亮/低亮/关闭）
-- 自适应环境光照调节
+- 初始化PWM硬件（Timer + Channel）
+- 通过PWM占空比控制LED亮度（0-100%）
+- 支持功耗状态管理（休眠时自动熄灭）
+- 错误检测与事件上报
 
-**公共接口**（预留）：
+**发布事件**：
 
-- `set_mode(mode)`：设置灯光模式
-- `get_status()`：查询当前模式
+- `EVENT_PWM_LED_ERROR`：PWM控制错误，携带数据 `{"module": "pwm_led", "error": "错误信息", "timestamp}`
 
-**依赖**：
-- 大功率 LED 驱动电路（硬件设计中）
+**订阅事件**：
 
+- `EVENT_CONFIG_UPDATE`：配置更新（功耗状态变化）
+
+**公共接口**（供Service层调用）：
+
+- `set_brightness(duty_cycle)`：设置LED亮度（占空比0-100）
+  - `duty_cycle=0`：LED熄灭
+  - `duty_cycle=50`：LED 50%亮度
+  - `duty_cycle=100`：LED最亮
+- `deinit()`：反初始化PWM资源
+
+**核心特性**：
+
+- **直接调光**：调用 `set_brightness()` 即可立即改变亮度，无需周期调度
+- **占空比自动截断**：输入超出0-100范围会自动截断到边界值
+- **功耗管理**：休眠状态时自动熄灭，唤醒后恢复
+- **错误容错**：连续失败超过3次才上报错误事件
+
+**硬件说明**：
+
+- **引脚**：Arduino D5（STM32 PE11）
+- **Timer**：TIM1（Timer 1）
+- **Channel**：CH2（Channel 2）
+- **PWM频率**：1000Hz（默认，可配置）
+- **驱动方式**：直接驱动LED或通过MOSFET驱动大功率LED
+- **参考示例**：`examples/pwm.py`
+
+**分层设计说明**：
+
+- Device层只提供基础PWM控制，不包含业务逻辑
+- 不订阅业务事件，由Service层或主循环调用
+
+**典型应用场景**：
+
+1. **报警闪烁**：AlarmService调用 `set_brightness()` 实现闪烁效果（高亮→低亮循环）
+2. **节能控制**：休眠时功耗状态变为SUSPENDED，LED自动熄灭
+3. **手动调光**：通过外部指令直接调用 `set_brightness()` 控制亮度
 ---
 
 #### 2.1.10 Qth 网络驱动模块（Qth.py）
@@ -387,6 +462,7 @@ LCD 内部维护 `display_mode` 状态（normal / alarm），用于防止 Servic
 - MTU 回退：EC200U 可能在 EVT_CONNECTED 之前先发 EVT_MTU，驱动通过 `_connected_published` 标志位防止重复发布 `EVENT_BLE_CONNECTED`
 - 连接回调在 modem 线程执行，`_callback()` 整体包裹 try/except 防止异常崩溃 BLE 协议栈
 - 回调中不做阻塞 I/O
+- Hex 解码：FFF2 写入的导航指令可能是 hex 编码字符串，驱动自动检测（清理空格/换行后校验 hex 格式）并解码为 UTF-8
 
 **分层设计说明**：
 - Device 层 BLEDriver 封装底层 BLE API，不包含业务逻辑
@@ -606,7 +682,7 @@ LCD 内部维护 `display_mode` 状态（normal / alarm），用于防止 Servic
 
 | type (t) | 含义 | 数据字段 (d) |
 |:--------:|:-----|:-------------|
-| 0 | 合并传感器数据 | `{tmp, hum, lat, lon, spd, alt, lux}` |
+| 0 | 合并传感器数据 | `{tmp, hum, lat, lon, spd, alt, cog, lux}` |
 | 5 | 报警触发 | `{a:1, l:2}` (a: 1=碰撞, 2=SOS; l: 级别) — 压缩格式，15 字节 |
 | 6 | 报警取消 | `{}` |
 | 99 | 心跳 | `{s: "ok"}` |
@@ -715,31 +791,84 @@ LCD 内部维护 `display_mode` 状态（normal / alarm），用于防止 Servic
 
 ---
 
-#### 2.2.6 导航引导服务（NavigationService.py）【v2 新增，待开发】
+#### 2.2.6 导航引导服务（NavigationService.py）
 
 **所属层次**：Service层（业务服务层）
 
 **需求对应**：F-NAV-01 导航引导
 
-**当前状态**：🔜 **小程序侧导航框架已搭建**（头盔端 NavigationService 待开发）
+**当前状态**：✅ **头盔端 TTS+LCD 已实现**（2026-06-09）；📅 **位置播报升级规划中**
 
 **模块职责**：
-- 接收微信小程序通过 BLE FFF2 下发的转弯指令（方向、距离、路名）
-- 指令格式：`{"a":"nav", "d":{"dir":"right", "dist":200, "road":"中山路"}}`
-- 小程序每 5 秒推送当前指令，头盔端 TTS 播报
-- 报警时小程序暂停推送，报警解除后恢复
+- 订阅 `EVENT_NAV_CMD` 事件（来自 BLE FFF2 写入）
+- 解析 JSON 导航指令（方向、距离、路名）
+- 调用 Audio.play_tts() 播报中文导航（非阻塞：`_thread.start_new_thread`）
+- 在 LCD 底部 (y=110) 写导航摘要行
+
+**指令格式**：`{"a":"nav", "d":{"dir":"right", "dist":200, "road":"中山路"}}`
+
+**方向映射**：left→左转、right→右转、straight→直行、slight_left→靠左、slight_right→靠右、uturn→掉头、arrive→到达目的地、cancel→导航结束
 
 **数据流**：
-  小程序（腾讯地图 API 规划路线）→ BLE FFF2 sendNav → NavigationService → TTS 播报
+  小程序（腾讯地图 API 规划路线）→ BLE FFF2 sendNav → EVENT_NAV_CMD → NavigationService → TTS 播报 + LCD 显示
 
-**发布事件**（预留）：
-- `EVENT_NAV_INSTRUCTION`：收到导航指令，携带数据 `{dir, dist, road}`
-- `EVENT_NAV_ARRIVED`：到达目的地
+**发布事件**：无（纯消费）
+
+**订阅事件**：
+- `EVENT_NAV_CMD`：收到导航指令
+
+**TTS 播报文本**：
+- 有路名：`"前方200米右转进入中山路"`
+- 无路名：`"前方200米右转"`
+- 到达：`"已到达目的地"`（`TTS_NAV_ARRIVE`）
+- 取消：`"导航已结束"`（`TTS_NAV_CANCEL`）
 
 **依赖**：
-- BLEDriver（接收 FFF2 写入数据，已有）
-- Audio 驱动 TTS 播报（已有）
-- 微信小程序 Step B（导航框架已搭建）
+- BLEDriver（接收 FFF2 写入数据）
+- Audio 驱动 TTS 播报
+- LCD 驱动（导航行显示）
+
+**位置播报升级方案**（📅 规划中）：
+
+当前方案为小程序每 5 秒推流（被动接收），升级为头盔根据 GNSS 位置自主播报：
+- 小程序一次性推送完整路线（所有 steps + waypoints）到头盔
+- 头盔 NavigationService 比对自身 GNSS 位置，在接近拐弯点时自主 TTS 播报
+- 优势：断网/弱 BLE 信号时仍可播报；播报时机更精准（基于实际位置而非定时器）
+- 依赖：GNSS cog 字段（已实现）、路线数据 BLE 传输协议（待设计）
+
+---
+
+#### 2.2.6.1 远端控制服务（RemoteControlService）【v2 新增，📅 未实现】
+
+**所属层次**：Service层（业务服务层）
+
+**需求对应**：F-CTRL-01 远端控制
+
+**当前状态**：📅 **未实现**（通道就绪，端到端待开发）
+
+**模块职责**：
+- 订阅 `EVENT_RIDE_CONTROL` 事件（来自 BLE FFF3 写入）
+- 解析远端控制指令（头灯开关、音量调节等）
+- 调用对应设备驱动执行控制
+
+**数据格式**（规划）：`{"a":"ctrl","d":{"cmd":"light_on"}}`
+
+**数据流**：
+  小程序 UI（控制面板）→ sendCtrl() → BLE FFF3 写入 → EVENT_RIDE_CONTROL → RemoteControlService → 设备驱动
+
+**已有基础设施**：
+- 小程序端：`sendCtrl(cmd)` — ble-service.js 已实现
+- 头盔端：`EVENT_RIDE_CONTROL` — config.py 已定义，BLEDriver FFF3 写入时已发布
+
+**待实现**：
+- 小程序端：远端控制 UI 面板（头灯开关、音量调节等按钮）
+- 头盔端：RemoteControlService 订阅事件并调用设备驱动
+- 依赖 Headlight 驱动（等硬件就绪）
+
+**依赖**：
+- BLEDriver（接收 FFF3 写入数据）
+- Headlight 驱动（等硬件）
+- Audio 驱动（音量控制）
 
 ---
 
@@ -749,14 +878,18 @@ LCD 内部维护 `display_mode` 状态（normal / alarm），用于防止 Servic
 
 **需求对应**：F-NAV-01 导航引导、F-VOICE-01 语音交互
 
-**当前状态**：🟢 **Step A 已完成**（2026-06-01），Step B 导航框架已搭建，三步走开发
+**当前状态**：🟢 **Step A 已完成**（2026-06-01），Step B 导航推送已实现 + 位置播报/远端控制待开发，三步走开发
 
 **开发计划**：
 
 | 步骤 | 内容 | 状态 |
 |:----:|:----|:----:|
 | Step A | 登录+实时数据+骑行控制+总结+地图轨迹+报警取消 | ✅ 已完成 (2026-06-01) |
-| Step B | 导航功能（腾讯地图 API + BLE FFF2 sendNav 指令推送） | 🔜 框架已搭建 |
+| Step B | 导航路线规划 + 指令推送（腾讯地图 API + BLE FFF2 sendNav） | ✅ 已实现 |
+| | polyline 前向差分解压 + act_desc 方向映射修复 | ✅ 已修复 |
+| | 导航位置播报（头盔根据 GNSS 位置自主播报，替代 5s 推流） | 📅 规划中 |
+| | 远端控制 UI（头灯开关、音量调节等控制面板，BLE FFF3 sendCtrl） | 📅 未实现 |
+| | 远端控制服务（头盔端 RemoteControlService 接收执行） | 📅 未实现 |
 | Step C | 语音交互（微信语音识别 → BLE FFF3 命令下发） | 📅 后续 |
 
 **通信方式**：
@@ -995,6 +1128,42 @@ gnss.get_location() 返回有效数据
 
 ---
 
+#### 场景六：导航指令（当前方案）
+
+```
+小程序(腾讯地图 API 规划路线)
+ │
+ └── 每 5 秒 BLE FFF2 写入 {"a":"nav","d":{"dir":"right","dist":200,"road":"中山路"}}
+      │
+      └── BLEDriver._callback() hex 解码
+           └── [E] EVENT_NAV_CMD {raw}
+                 └──→ NavigationService._on_nav_cmd()
+                        ├── JSON 解析 → 提取 dir/dist/road
+                        ├── [S] TTS 播报(子线程): "前方200米右转进入中山路"
+                        └── [S] LCD 显示(y=110): "> 200m 中山路"
+
+到达/取消:
+小程序 → sendNav("arrive"/"cancel") → NavigationService → TTS "已到达目的地" / "导航已结束"
+```
+
+---
+
+#### 场景七：远端控制（📅 规划中）
+
+```
+小程序 UI（控制面板，如头灯按钮）
+ │
+ └── sendCtrl("light_on") → BLE FFF3 写入
+      │
+      └── BLEDriver._callback()
+           └── [E] EVENT_RIDE_CONTROL {raw}
+                 └──→ RemoteControlService（待实现）
+                        ├── JSON 解析 → 提取 cmd
+                        └── [S] 调用设备驱动（如 Headlight.set_brightness()）
+```
+
+---
+
 #### 时序对照表
 
 | 周期 | 模块 | 频率 | 事件 | 消费方 |
@@ -1040,10 +1209,12 @@ gnss.get_location() 返回有效数据
 
 | # | 模块 | 状态 | 说明 |
 |:-|:----|:----|:------|
+| 4.1 | LBS 基站定位（LBSDriver） | ✅ v1 已实现 | quectel.LBS 基站定位，与 GNSS 互斥 |
 | 17 | 心率驱动（HeartRate） | 📅 v2 | BLE 扫描心率带广播数据 |
 | 18 | 大功率灯光驱动（Headlight） | 📅 v2 | PWM 控制高亮 LED |
-| 19 | 导航引导服务（NavigationService） | 🔜 小程序框架已搭建 | BLE FFF2 接收指令 + TTS 播报 |
-| 20 | 微信小程序（WeChatMiniProgram） | 🟢 Step A 完成 + Step B 框架 | 登录+BLE 实时数据+骑行控制+总结+地图+导航框架 |
+| 19 | 导航引导服务（NavigationService） | ✅ 头盔端 TTS+LCD 已实现 | BLE FFF2 接收指令 + TTS 播报；位置播报升级 📅 |
+| 19.1 | 远端控制服务（RemoteControlService） | 📅 未实现 | BLE FFF3 接收指令 + 设备控制 |
+| 20 | 微信小程序（WeChatMiniProgram） | 🟢 Step A 完成 + Step B 部分完成 | 登录+BLE+骑行+地图+导航推送+远端控制 📅 |
 ```
 
 ---
@@ -1164,15 +1335,17 @@ gnss.get_location() 返回有效数据
 | 日期 | 里程碑 | 说明 |
 |:----:|:-------|:-----|
 | 5/5 - 5/13 | Phase 1 驱动层开发 | 传感器 + 执行器 + Button，第一阶段验收通过 |
-| 5/14 - 5/16 | 驶动层验收 + 文档同步 | GNSS、LCD、config 等细节完善 |
+| 5/14 | 驱动层验收 + 文档同步 | GNSS、LCD、config 等细节完善 |
 | 5/17 | CloudService + Network/MQTT | 云端通信方案实现（MQTT → ConnectLab） |
 | 5/18 - 5/19 | AlarmService + CollisionService + DisplayService | 业务服务层核心模块 |
 | 5/20 | v1 系统集成完成 | 12 模块全部集成到 main.py，5 步渐进验证通过 |
 | 5/22 | Qth + LarkCloudService | 移远云通信方案实现（Qth SDK → 移远云 DMP） |
-| 5/28 | BLE 模块开发 | BLEDriver + BLEService + 3 个测试文件 |
-| 5/28 | 小程序 BLE 连通 | 微信小程序通过 BLE 连接头盔，实时数据显示 + 骑行控制 + 报警弹窗 |
+| 5/22-5/28 | 小程序 Step A 开发 | 需求(5/22)→开发(5/23)→架构重构(5/24)→BLE 连通(5/28)，一次性 push；登录+实时数据+骑行控制+报警弹窗+地图轨迹 |
+| 5/28 | BLE 模块开发 | BLEDriver + BLEService + GATT Server FFF1-FFF4 + 稳定性修复（MTU 去重、断连清队列、熔断机制） |
 | 5/31 | BLE 报警修复 + 导航框架 | t=5 载荷压缩为 15 字节（ATT_MTU 限制）；navigation-service.js 搭建（腾讯地图 API + BLE FFF2 sendNav） |
 | 6/01 | Step A 完成 | 轨迹显示修复（WXML concat 根因）；canvas 蓝点 marker；总结地图起点+终点标记；报警取消功能；小程序包瘦身（3099KB→141KB） |
+| 6/02 | 文档对齐 + 密钥安全 | 规划文档/小程序文档同步至 Step A 完成状态；config.js 从 git 排除；BLE t=5 压缩入库 |
+| 6/09 | 导航功能开发 | BLE hex 解码、TTS 非阻塞（_thread）、NavigationService 创建、LBS 驱动、GNSS cog 字段、小程序 polyline 前向差分解压 + act_desc 方向映射 |
 
 ---
 
@@ -1193,7 +1366,9 @@ gnss.get_location() 返回有效数据
 | PowerService | 服务 | 🟡 等硬件 | 电池供电方案就绪 |
 | HeartRate | 驱动 | 🟡 待开发 | 心率带硬件到货 |
 | Headlight | 驱动 | 🟡 等硬件 | 大功率 LED 电路设计 |
-| NavigationService | 服务 | 🔜 小程序框架已搭建 | BLE FFF2 + TTS |
+| NavigationService | 服务 | ✅ 头盔端 TTS+LCD 已实现 | BLE FFF2 + TTS；位置播报 📅 |
+| RemoteControlService | 服务 | 📅 未实现 | BLE FFF3 + 设备驱动 |
+| LBSDriver | 驱动 | ✅ v1 已实现 | quectel.LBS，与 GNSS 互斥 |
 | WeChatMiniProgram | 外部 | 🟢 Step A 完成 + Step B 框架 | 无 |
 
 **集成策略**：与 v1 相同的逐步集成原则，每个模块独立开发验证后加入 main.py。
@@ -1284,9 +1459,9 @@ M1: 起步验证 ──→ M2: 本地闭环 ──→ M3: 云端打通 ──→
 
 ### 时间轴
 
-✅ M1 ──→ ✅ M2 ──→ ✅ M3 ──→ ✅ M4 ──→ 🔵 M5 ──→ 📅 M6  
-起步验证　　本地闭环　　云端打通　　v1 集成　　v2 进行中　　      收官  
-05上旬　　　05-13　　　   05-19　　　 05-21　　　 待定　　　　　将来
+✅ M1 ──→ ✅ M2 ──→ ✅ M3 ──→ ✅ M4 ──→ 🔵 M5 ──→ 📅 M6
+起步验证　　本地闭环　　云端打通　　v1 集成　　v2 进行中　　      收官
+05上旬　　　05-13　　　   05-19　　　 05-20　　　 05-28~　　　　将来
 
 > 箭头表示开发推进方向，✅=已完成　🔵=进行中　📅=计划中
 
@@ -1295,9 +1470,9 @@ M1: 起步验证 ──→ M2: 本地闭环 ──→ M3: 云端打通 ──→
 | 05上旬 | M1 起步验证 | ✅ | 驱动封装：AHT20(温湿度)、LIS2DH12TR(IMU)、GNSS(定位)、GL5528(光照)、LED、Audio、LCD |
 | 05-13 | M2 本地闭环 | ✅ | 碰撞检测算法(CollisionService)、报警联动(AlarmService)：LED 闪烁 + 音频 + 按钮 SOS |
 | 05-19 | M3 云端打通 | ✅ | Network 驱动、MQTT 驱动、CloudService(ConnectLab) E2E 测试通过 |
-| 05-21 | M4 v1 集成 | ✅ | 12 模块 main.py 集成、EventBus 事件总线、`test_system_full_v1.py` 全系统测试 |
+| 05-20 | M4 v1 集成 | ✅ | 12 模块 main.py 集成、EventBus 事件总线、`test_system_full_v1.py` 全系统测试 |
 | 05-22 | M4+ 移远云 | ✅ | QthDriver 驱动、LarkCloudService、移远云 DMP 数据通道 E2E 通过 |
-| 待定 | M5 v2 设计 | 🔵 | PowerService、HeartRate、Headlight、NavigationService、WeChatMiniProgram |
+| 05-28 ~ 06-02 | M5 v2 设计 | 🔵 | BLE 模块、小程序 Step A 完成 + Step B 导航框架、文档对齐 |
 | 将来 | M6 收官 | 📅 | 设计文档、演示视频、答辩 PPT、开源整理 |
 
 ---
@@ -1371,9 +1546,11 @@ M1: 起步验证 ──→ M2: 本地闭环 ──→ M3: 云端打通 ──→
 | M5.2 灯光驱动 | Headlight（等灯光硬件） | 🟡 等硬件 |
 | M5.3 心率模块 | HeartRate 驱动（数据走 MQTT） | 🟡 等心率带到货 |
 | M5.4 微信小程序 | Step A: 登录+实时数据+骑行控制+总结+地图+报警取消 ✅ | 🟢 完成 (2026-06-01) |
-| | Step B: 导航功能（腾讯地图 API + BLE FFF2 sendNav） | 🔜 框架已搭建 |
+| | Step B: 导航推送（腾讯地图 API + BLE FFF2 sendNav + polyline 修复） | ✅ 已实现 (2026-06-09) |
+| | Step B: 导航位置播报（头盔 GNSS 位置自主播报） | 📅 规划中 |
+| | Step B: 远端控制（小程序 UI + BLE FFF3 + 头盔 Service） | 📅 未实现 |
 | | Step C: 语音交互（微信语音识别 → BLE FFF3 命令下发） | 📅 第三步 |
-| M5.5 导航+语音 | NavigationService，BLE FFF2 接收 + TTS 播报 | 🔜 小程序框架已搭建 |
+| M5.5 导航+语音 | NavigationService TTS+LCD ✅ + 位置播报 📅 + RemoteControlService 📅 | 🔜 头盔端已实现，位置播报和远端控制待开发 |
 | M5.6 移远云通道 | LarkCloudService + QthDriver，Qth SDK 接入移远云 | ✅ v1 已完成（2026-5-22） |
 
 ---
@@ -1393,7 +1570,7 @@ M1: 起步验证 ──→ M2: 本地闭环 ──→ M3: 云端打通 ──→
 
 ---
 
-**文档版本**：v6.1
-**更新日期**：2026-06-02
+**文档版本**：v7.0
+**更新日期**：2026-06-09
 **维护团队**：锦依卫队
-**备注**：v1 集成完成（M4），v2 导航框架已搭建（小程序侧），BLE 直连为主数据通道
+**备注**：v1 集成完成（M4），v2 导航功能开发中（头盔端 TTS+LCD 已实现，位置播报和远端控制待开发），BLE 直连为主数据通道

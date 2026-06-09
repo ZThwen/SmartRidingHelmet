@@ -143,7 +143,7 @@
 
 ---
 
-## R8 导航 *(框架已搭建 🔜)*
+## R8 导航 *(部分已实现 🔜)*
 
 > ⚠️ **数据通道已变更**：原设计通过移远云 `writeData` REST API 下行（R8.1-R8.2），已于 2026-05-28 决策改为 **BLE FFF2 直连 sendNav**（低延迟、无云端依赖）。旧方案保留为历史参考。
 
@@ -182,12 +182,18 @@
 6. 用户取消导航 → sendNav(cancel, 0, "")
 ```
 
-**R8.3 5 秒推流策略**
+**R8.3 5 秒推流策略（当前方案）**
 
 - 路线拐弯步数：通常 5-20 步
 - 每步推送时机：每 5 秒推队列中的下一步
-- 头盔端（后续开发）由 STM32 自行比对 GNSS 位置判断是否到达拐弯点
 - 报警时暂停推送，解除后恢复
+
+**R8.3.1 位置播报升级方案（📅 规划中）**
+
+- 小程序一次性推送完整路线（所有 steps + waypoints）到头盔
+- 头盔 NavigationService 比对自身 GNSS 位置，在接近拐弯点时自主 TTS 播报
+- 优势：断网/弱 BLE 信号时仍可播报；播报时机更精准
+- 依赖：GNSS cog 字段（已实现）、路线数据 BLE 传输协议（待设计）
 
 **R8.4 状态机**
 
@@ -215,6 +221,32 @@ idle ──用户选目的地──→ planning ──算路完成──→ navi
 **旧 R8.2 writeData 接口** — `POST /v2/deviceshadow/r3/openapi/dm/writeData`，QPS 30/秒。
 
 **切换原因**：BLE 直连延迟 <100ms（vs 云端 1-3s），无云端依赖，无需 DMP TSL 配置。
+
+---
+
+## R11 远端控制 *(📅 未实现)*
+
+**R11.1 控制面板 UI**
+- 首页新增远端控制区域（骑行中显示）
+- 头灯开关按钮（开/关切换）
+- 音量调节（可选）
+- 控制按钮在骑行状态下可用，空闲态隐藏
+
+**R11.2 指令下发**
+- 通过 BLE FFF3 `sendCtrl(cmd)` 下发控制指令
+- 指令格式：`{"a":"ctrl","d":{"cmd":"light_on"}}` / `{"a":"ctrl","d":{"cmd":"light_off"}}`
+- 指令下发后等待头盔确认（可选）
+
+**R11.3 头盔端执行**
+- 头盔 RemoteControlService 订阅 `EVENT_RIDE_CONTROL` 事件
+- 解析指令并调用对应设备驱动（Headlight、Audio 等）
+- 执行结果可选通过 BLE Notify 回传
+
+**R11.4 依赖**
+- 小程序端：`sendCtrl()` 已实现（ble-service.js）
+- 头盔端：`EVENT_RIDE_CONTROL` 已定义（config.py），BLEDriver 已发布
+- 头盔端：RemoteControlService（待开发）
+- 头盔端：Headlight 驱动（待硬件就绪）
 
 ---
 

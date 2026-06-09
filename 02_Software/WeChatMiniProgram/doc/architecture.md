@@ -74,6 +74,7 @@ AuthComponent ──token──→ BleComponent
 | RideComponent | 骑行状态机、Haversine 总结 | `services/ride-service.js` |
 | MapComponent | 轨迹 polyline、marker 生成 | `services/map-service.js` |
 | NavComponent | 路线规划、BLE 写入导航指令 | `services/navigation-service.js` |
+| RemoteControlComponent *📅* | 远端控制 UI + BLE FFF3 指令下发 | 首页控制面板（待实现） |
 | LogComponent | 日志双写 | `utils/logger.js` |
 
 > **历史方案备注**：`DataComponent`（`services/data-service.js`）为 v1 初期的 HTTP 轮询方案，当前未被 `index.js` 引用。数据采集已由 `BleComponent` 通过 BLE Notify 接管。
@@ -121,6 +122,13 @@ NavComponent
   startNavigation(dest) → void
   updateStep(stepIndex) → void
   stopNavigation() → void
+  pause() → void
+  resume() → void
+
+RemoteControlComponent *📅*
+  toggleLight() → void
+  setVolume(level: int) → void
+  sendCommand(cmd: string) → void
 ```
 
 ---

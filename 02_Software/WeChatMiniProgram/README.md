@@ -1,7 +1,7 @@
 # 智能骑行头盔 — 微信小程序开发文档
 
-> **当前状态**：🟢 Step A 完成（实时数据显示 + BLE 直连） · Step B 导航框架已搭建
-> **更新日期**：2026-06-01
+> **当前状态**：🟢 Step A 完成（实时数据显示 + BLE 直连） · Step B 导航推送已实现 + 位置播报/远端控制待开发
+> **更新日期**：2026-06-09
 
 ---
 
@@ -177,13 +177,18 @@ WeChatMiniProgram/
 | 小程序登录 UI | ✅ | pages/login，crypto 纯 JS 加密 |
 | 测试文件 | ✅ | Tests/miniprogram/ 6 个独立测试文件 |
 
-### Step B *(🔜 导航框架已搭建)*
+### Step B *(🔜 部分已实现)*
 
 | 功能 | 状态 | 说明 |
 |:-----|:----:|:-----|
-| 导航路线规划 | 🔜 | navigation-service.js + 腾讯地图 bicycling API |
-| 导航指令下发 | 🔜 | BLE FFF2 sendNav（5s 间隔推送转弯指令） |
-| 导航界面 | 🔜 | 指令浮层 + 规划路线 polyline（绿色） |
+| 导航路线规划 | ✅ | navigation-service.js + 腾讯地图 bicycling API |
+| 导航指令推送 | ✅ | BLE FFF2 sendNav（5s 间隔推流） |
+| 导航界面 | ✅ | 指令浮层 + 规划路线 polyline（绿色） |
+| polyline 修复 | ✅ | 前向差分解压 + act_desc 方向映射 |
+| 导航位置播报 | 📅 | 头盔根据 GNSS 位置自主播报，替代 5s 推流 |
+| 远端控制 | 📅 | 小程序控制面板 + BLE FFF3 sendCtrl + 头盔执行 |
+| 心率显示 | 📅 | 云端收心率 → 实时数值 + 异常预警 |
+| 电量显示 | 📅 | 云端收电量 → 图标 + 百分比 + 低电提醒 |
 
 ### Step C *(📅)*
 
