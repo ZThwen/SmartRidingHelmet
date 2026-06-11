@@ -354,9 +354,8 @@ SmartRidingHelmet-TeamX/
 │   │   │   ├── gnss.py          # GNSS定位
 │   │   │   └── Light.py         # 光照（GL5528 ADC）
 │   │   ├── actuator/
-│   │   │   ├── buzzer.py        # 蜂鸣器
 │   │   │   ├── led.py           # LED指示灯
-│   │   │   └── Headlight.py     # 【v2】大功率灯光驱动
+│   │   │   └── PWM_LED.py       # PWM调光LED驱动（18W大功率灯）
 │   │   ├── interface/
 │   │   │   └── Button.py        # SOS按键
 │   │   └── network/
@@ -373,6 +372,8 @@ SmartRidingHelmet-TeamX/
 │   │   ├── lark_cloud.py        # 移远云通信（Qth SDK）
 │   │   ├── ble_service.py       # BLE推送服务
 │   │   ├── display_service.py   # 显示管理服务
+│   │   ├── light_service.py     # 自适应灯光服务
+│   │   ├── control_service.py   # 统一控制服务（BLE远端+语音）
 │   │   ├── power_service.py     # 【v2】电源管理（等电池硬件）
 │   │   └── navigation_service.py# 【v2】导航引导服务
 │   │

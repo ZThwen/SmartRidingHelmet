@@ -238,15 +238,15 @@ idle ──用户选目的地──→ planning ──算路完成──→ navi
 - 指令下发后等待头盔确认（可选）
 
 **R11.3 头盔端执行**
-- 头盔 RemoteControlService 订阅 `EVENT_RIDE_CONTROL` 事件
-- 解析指令并调用对应设备驱动（Headlight、Audio 等）
+- 头盔 ControlService 订阅 `EVENT_RIDE_CONTROL` 事件
+- 解析指令并调用对应设备驱动（LightService、Audio 等）
 - 执行结果可选通过 BLE Notify 回传
 
 **R11.4 依赖**
 - 小程序端：`sendCtrl()` 已实现（ble-service.js）
 - 头盔端：`EVENT_RIDE_CONTROL` 已定义（config.py），BLEDriver 已发布
-- 头盔端：RemoteControlService（待开发）
-- 头盔端：Headlight 驱动（待硬件就绪）
+- 头盔端：ControlService（✅ 板子端已实现）
+- 头盔端：LightService + PWM_LED（✅ 板子端已实现）
 
 ---
 

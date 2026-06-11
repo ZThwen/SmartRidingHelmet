@@ -334,6 +334,8 @@ LCD 内部维护 `display_mode` 状态（normal / alarm），用于防止 Servic
 
 **需求对应**：F-LIGHT-01 大功率灯光调光控制
 
+**当前状态**：✅ **v1 已实现**（2026-06-10）
+
 **模块功能**（纯硬件控制，无业务逻辑）：
 
 - 初始化PWM硬件（Timer + Channel）
@@ -366,7 +368,7 @@ LCD 内部维护 `display_mode` 状态（normal / alarm），用于防止 Servic
 
 **硬件说明**：
 
-- **引脚**：Arduino D5（STM32 PE11）
+- **引脚**：PE11（Arduino D5）
 - **Timer**：TIM1（Timer 1）
 - **Channel**：CH2（Channel 2）
 - **PWM频率**：1000Hz（默认，可配置）
@@ -536,6 +538,9 @@ LCD 内部维护 `display_mode` 状态（normal / alarm），用于防止 Servic
 - 依赖Audio驱动（调用play_file、play_tts方法）
 - 依赖LED驱动（调用blink、on、off方法）
 
+**公共接口**：
+- `cancel_alarm()`：外部取消报警（供 ControlService 调用），与内部 `_cancel_alarm()` 逻辑一致
+
 **分层设计说明**：
 - Service层负责业务逻辑编排和事件订阅
 - 不直接操作硬件，通过调用Device层接口实现具体功能
@@ -677,6 +682,7 @@ LCD 内部维护 `display_mode` 状态（normal / alarm），用于防止 Servic
 - `EVENT_LIGHT_READY`：缓存光照数据
 - `EVENT_ALARM_TRIGGERED`：立即推送报警 JSON
 - `EVENT_ALARM_CANCELED`：立即推送报警取消 JSON
+- `EVENT_CONTROL_STATE_CHANGED`：控制状态变更，推送到小程序
 
 **BLE JSON 协议**（手机端接收）：
 
@@ -685,6 +691,7 @@ LCD 内部维护 `display_mode` 状态（normal / alarm），用于防止 Servic
 | 0 | 合并传感器数据 | `{tmp, hum, lat, lon, spd, alt, cog, lux}` |
 | 5 | 报警触发 | `{a:1, l:2}` (a: 1=碰撞, 2=SOS; l: 级别) — 压缩格式，15 字节 |
 | 6 | 报警取消 | `{}` |
+| 7 | 控制状态 | `{lm:"auto", lb:50, vol:5, pm:"active"}` |
 | 99 | 心跳 | `{s: "ok"}` |
 
 **依赖关系**：
@@ -791,6 +798,103 @@ LCD 内部维护 `display_mode` 状态（normal / alarm），用于防止 Servic
 
 ---
 
+#### 2.2.5.1 自适应灯光服务（LightService.py）（✅ v1 已实现）
+
+**所属层次**：Service层（业务服务层）
+
+**需求对应**：F-SEN-04 环境光照采集（自适应灯光调节）
+
+**当前状态**：✅ **v1 已实现**（2026-06-10）
+
+**模块功能**：
+- 订阅 `EVENT_LIGHT_READY`，根据光照强度自动调节 LED 亮度
+- 支持自动/手动模式切换（`set_manual_brightness()` / `set_auto_mode()`）
+- 18W 灯散热优化（峰值亮度 50%，gamma 非线性映射）
+- 防抖 + 亮度变化阈值过滤，避免频繁调节
+
+**发布事件**：无（纯消费）
+
+**订阅事件**：
+- `EVENT_LIGHT_READY`：光照数据就绪，计算目标亮度并调用 PWM LED
+- `EVENT_CONFIG_UPDATE`：配置更新（阈值参数、功耗状态）
+
+**依赖**：
+- PWMLEDDriver（Device层，调用 `set_brightness()` 接口）
+- LightSensorDriver（间接依赖，通过 EventBus 事件）
+
+**配置参数**（在 config.py 中定义）：
+
+| 常量 | 默认值 | 说明 |
+|:-----|:-------|:-----|
+| `LIGHT_DAY_ADC_THRESHOLD` | 30000 | 白天阈值（ADC值 < 此值 → 光照强 → 灯不开） |
+| `LIGHT_NIGHT_ADC_THRESHOLD` | 50000 | 晚上阈值（ADC值 > 此值 → 光照弱 → 灯最亮） |
+| `LIGHT_BRIGHTNESS_MIN` | 5 | 最小亮度（%） |
+| `LIGHT_BRIGHTNESS_MAX` | 50 | 最大亮度（%），18W灯散热限制 |
+| `LIGHT_GAMMA` | 1.5 | 非线性映射参数 |
+| `LIGHT_BRIGHTNESS_THRESHOLD` | 3 | 亮度变化阈值 |
+| `LIGHT_DEBOUNCE_MS` | 50 | 防抖间隔（ms） |
+
+**分层设计说明**：
+- Service 层负责亮度计算算法和模式管理
+- 不直接操作 PWM 硬件，通过注入的 PWMLEDDriver 引用调用 Device 层
+- 纯事件驱动，tick() 为空实现
+
+---
+
+#### 2.2.5.2 统一控制服务（ControlService.py）（✅ v1 已实现）
+
+**所属层次**：Service层（业务服务层）
+
+**需求对应**：F-CTRL-01 远端控制
+
+**当前状态**：✅ **v1 已实现**（2026-06-10）
+
+**模块职责**：
+- 订阅 `EVENT_RIDE_CONTROL` 事件（来自 BLE FFF3 写入）
+- 订阅 `EVENT_VOICE_CMD` 事件（来自 VoiceDriver，预留）
+- 解析 JSON 控制指令，路由到对应设备驱动
+- 控制状态回推（`EVENT_CONTROL_STATE_CHANGED`）
+
+**指令格式**：`{"a":"ctrl", "d":{"cmd":"light_on"}}`
+
+**支持指令**：
+
+| 指令 | 功能 | 调用目标 |
+|------|------|----------|
+| `light_on` | 头灯开 | `light_service.set_manual_brightness(50)` |
+| `light_off` | 头灯关 | `light_service.set_manual_brightness(0)` |
+| `brightness_up` | 亮度+ | `light_service.set_manual_brightness(current+10)` |
+| `brightness_down` | 亮度- | `light_service.set_manual_brightness(current-10)` |
+| `light_auto` | 自动模式 | `light_service.set_auto_mode()` |
+| `volume_up` | 音量+ | `audio_driver.set_volume(current+1)` |
+| `volume_down` | 音量- | `audio_driver.set_volume(current-1)` |
+| `alarm_cancel` | 取消报警 | `alarm_service.cancel_alarm()` |
+| `power_save` | 省电模式 | `EVENT_POWER_STATE_CHANGE(SUSPENDED)` |
+| `power_normal` | 恢复正常 | `EVENT_POWER_STATE_CHANGE(ACTIVE)` |
+
+**发布事件**：
+- `EVENT_CONTROL_STATE_CHANGED`：控制状态变更，携带数据 `{light_mode, light_brightness, volume, power_mode}`
+
+**订阅事件**：
+- `EVENT_RIDE_CONTROL`：BLE 远端控制指令
+- `EVENT_VOICE_CMD`：语音指令（预留，等 VoiceDriver 就绪后启用）
+
+**依赖**：
+- LightService（灯光控制）
+- AudioDriver（音量控制）
+- AlarmService（报警取消）
+
+**技术要点**：
+- 纯事件驱动，tick() 为空实现
+- 指令防抖（300ms），防止快速重复触发
+- 依赖可为 None，降级运行不崩溃
+- 与 NavigationService 相同的架构模式
+
+**数据流**：
+  小程序 UI → sendCtrl() → BLE FFF3 → EVENT_RIDE_CONTROL → ControlService → 设备驱动
+
+---
+
 #### 2.2.6 导航引导服务（NavigationService.py）
 
 **所属层次**：Service层（业务服务层）
@@ -838,37 +942,40 @@ LCD 内部维护 `display_mode` 状态（normal / alarm），用于防止 Servic
 
 ---
 
-#### 2.2.6.1 远端控制服务（RemoteControlService）【v2 新增，📅 未实现】
+#### 2.2.6.1 统一控制服务（ControlService.py）（✅ 板子端已实现）
 
 **所属层次**：Service层（业务服务层）
 
 **需求对应**：F-CTRL-01 远端控制
 
-**当前状态**：📅 **未实现**（通道就绪，端到端待开发）
+**当前状态**：✅ **板子端已实现**（2026-06-11），小程序控制 UI 待开发
 
 **模块职责**：
 - 订阅 `EVENT_RIDE_CONTROL` 事件（来自 BLE FFF3 写入）
-- 解析远端控制指令（头灯开关、音量调节等）
-- 调用对应设备驱动执行控制
+- 解析 JSON 控制指令，路由到对应设备驱动
+- 控制状态回推（`EVENT_CONTROL_STATE_CHANGED`）
+- 预留 `EVENT_VOICE_CMD`（等 VoiceDriver 就绪后启用）
 
-**数据格式**（规划）：`{"a":"ctrl","d":{"cmd":"light_on"}}`
+**支持指令**：light_on/off, brightness_up/down, light_auto, volume_up/down, alarm_cancel, power_save/normal
 
 **数据流**：
-  小程序 UI（控制面板）→ sendCtrl() → BLE FFF3 写入 → EVENT_RIDE_CONTROL → RemoteControlService → 设备驱动
+  小程序 UI（控制面板）→ sendCtrl() → BLE FFF3 → EVENT_RIDE_CONTROL → ControlService → 设备驱动
 
 **已有基础设施**：
 - 小程序端：`sendCtrl(cmd)` — ble-service.js 已实现
 - 头盔端：`EVENT_RIDE_CONTROL` — config.py 已定义，BLEDriver FFF3 写入时已发布
+- ControlService — 板子端已实现并真机验证通过
+- BLE 回调 → EventBus → ControlService 全链路已通
 
 **待实现**：
 - 小程序端：远端控制 UI 面板（头灯开关、音量调节等按钮）
-- 头盔端：RemoteControlService 订阅事件并调用设备驱动
-- 依赖 Headlight 驱动（等硬件就绪）
+- main.py 集成（BLEDriver + BLEService + LightService + ControlService 等 v2 模块）
 
 **依赖**：
 - BLEDriver（接收 FFF3 写入数据）
-- Headlight 驱动（等硬件）
+- LightService（灯光控制）
 - Audio 驱动（音量控制）
+- AlarmService（报警取消）
 
 ---
 
@@ -888,8 +995,8 @@ LCD 内部维护 `display_mode` 状态（normal / alarm），用于防止 Servic
 | Step B | 导航路线规划 + 指令推送（腾讯地图 API + BLE FFF2 sendNav） | ✅ 已实现 |
 | | polyline 前向差分解压 + act_desc 方向映射修复 | ✅ 已修复 |
 | | 导航位置播报（头盔根据 GNSS 位置自主播报，替代 5s 推流） | 📅 规划中 |
-| | 远端控制 UI（头灯开关、音量调节等控制面板，BLE FFF3 sendCtrl） | 📅 未实现 |
-| | 远端控制服务（头盔端 RemoteControlService 接收执行） | 📅 未实现 |
+| | 远端控制 UI（头灯开关、音量调节等控制面板，BLE FFF3 sendCtrl） | 📅 小程序端待开发 |
+| | 统一控制服务（头盔端 ControlService 板子端已实现） | ✅ 板子端已实现 |
 | Step C | 语音交互（微信语音识别 → BLE FFF3 命令下发） | 📅 后续 |
 
 **通信方式**：
@@ -1148,7 +1255,7 @@ gnss.get_location() 返回有效数据
 
 ---
 
-#### 场景七：远端控制（📅 规划中）
+#### 场景七：远端控制（✅ 板子端已实现）
 
 ```
 小程序 UI（控制面板，如头灯按钮）
@@ -1157,9 +1264,9 @@ gnss.get_location() 返回有效数据
       │
       └── BLEDriver._callback()
            └── [E] EVENT_RIDE_CONTROL {raw}
-                 └──→ RemoteControlService（待实现）
+                 └──→ ControlService（✅ 板子端已实现）
                         ├── JSON 解析 → 提取 cmd
-                        └── [S] 调用设备驱动（如 Headlight.set_brightness()）
+                        └── [S] 调用设备驱动（LightService.set_manual_brightness）
 ```
 
 ---
@@ -1194,6 +1301,7 @@ gnss.get_location() 返回有效数据
 6. LED 驱动（LED）（✅已实现）
 7. 音频驱动（Audio）（✅已实现）
 8. LCD 驱动（LCD）（✅已实现）
+8.1. PWM LED 驱动（PWM_LED）（✅ v1 已实现）
 9. 网络驱动：Network → MQTT（✅已实现）
 10. 网络驱动：Qth（✅ v1 已实现）
 11. BLE 驱动（BLEDriver）（✅ v1 已实现，待集成到 main.py）
@@ -1203,7 +1311,9 @@ gnss.get_location() 返回有效数据
 15. 云端通信服务（CloudService）（✅ v1 已实现）
 16. 移远云通信服务（LarkCloudService）（✅ v1 已实现）
 17. 显示管理服务（DisplayService）（✅ v1 已实现）
+17.1. 自适应灯光服务（LightService）（✅ v1 已实现）
 18. BLE 推送服务（BLEService）（✅ v1 已实现，待集成到 main.py）
+18.1. 统一控制服务（ControlService）（✅ v1 已实现，待集成到 main.py）
 
 **v2 新增模块**：
 
@@ -1211,10 +1321,11 @@ gnss.get_location() 返回有效数据
 |:-|:----|:----|:------|
 | 4.1 | LBS 基站定位（LBSDriver） | ✅ v1 已实现 | quectel.LBS 基站定位，与 GNSS 互斥 |
 | 17 | 心率驱动（HeartRate） | 📅 v2 | BLE 扫描心率带广播数据 |
-| 18 | 大功率灯光驱动（Headlight） | 📅 v2 | PWM 控制高亮 LED |
-| 19 | 导航引导服务（NavigationService） | ✅ 头盔端 TTS+LCD 已实现 | BLE FFF2 接收指令 + TTS 播报；位置播报升级 📅 |
-| 19.1 | 远端控制服务（RemoteControlService） | 📅 未实现 | BLE FFF3 接收指令 + 设备控制 |
-| 20 | 微信小程序（WeChatMiniProgram） | 🟢 Step A 完成 + Step B 部分完成 | 登录+BLE+骑行+地图+导航推送+远端控制 📅 |
+| 18 | PWM 调光 LED 驱动（PWM_LED） | ✅ 板子端已实现（未集成 main.py） | PE11 + TIM1_CH2，PWM 调光 |
+| 18.1 | 自适应灯光服务（LightService） | ✅ 板子端已实现（未集成 main.py） | 订阅光照事件 + PWM LED 调光 + 自动/手动模式 |
+| 19 | 导航引导服务（NavigationService） | ✅ 板子端已实现（未集成 main.py） | BLE FFF2 接收指令 + TTS 播报；位置播报升级 📅 |
+| 19.1 | 统一控制服务（ControlService） | ✅ 板子端已实现（小程序端待开发） | BLE FFF3 接收指令 + 统一路由到设备驱动 |
+| 20 | 微信小程序（WeChatMiniProgram） | 🟢 Step A + Step B 导航完成，远端控制 UI 待开发 | 登录+BLE+骑行+地图+导航推送+远端控制 🔜 |
 ```
 
 ---
@@ -1365,9 +1476,10 @@ gnss.get_location() 返回有效数据
 |:----|:----|:----:|:--------|
 | PowerService | 服务 | 🟡 等硬件 | 电池供电方案就绪 |
 | HeartRate | 驱动 | 🟡 待开发 | 心率带硬件到货 |
-| Headlight | 驱动 | 🟡 等硬件 | 大功率 LED 电路设计 |
-| NavigationService | 服务 | ✅ 头盔端 TTS+LCD 已实现 | BLE FFF2 + TTS；位置播报 📅 |
-| RemoteControlService | 服务 | 📅 未实现 | BLE FFF3 + 设备驱动 |
+| PWM_LED | 驱动 | ✅ 板子端已实现 | PE11 + TIM1_CH2，PWM 调光 |
+| NavigationService | 服务 | ✅ 板子端已实现 | BLE FFF2 + TTS；位置播报 📅 |
+| ControlService | 服务 | ✅ 板子端已实现 | BLE FFF3 + 统一路由；小程序端待开发 |
+| VoiceDriver | 驱动 | 📅 等 ASRPRO 硬件 | UART 串口通信 |
 | LBSDriver | 驱动 | ✅ v1 已实现 | quectel.LBS，与 GNSS 互斥 |
 | WeChatMiniProgram | 外部 | 🟢 Step A 完成 + Step B 框架 | 无 |
 
@@ -1452,7 +1564,7 @@ gnss.get_location() 返回有效数据
 ### 里程碑总览
 
 ```
-M1: 起步验证 ──→ M2: 本地闭环 ──→ M3: 云端打通 ──→ M4: 整体集成 ──→ M5: 设计与集成 ──→ M6: 整体收官
+M1: 起步验证 ──→ M2: 本地闭环 ──→ M3: 云端打通 ──→ M4: 整体集成 ──→ M5: v2设计与集成 ──→ M6: 整体收官
 ```
 
 ---
@@ -1543,14 +1655,14 @@ M1: 起步验证 ──→ M2: 本地闭环 ──→ M3: 云端打通 ──→
 | 子里程碑 | 内容 | 状态 |
 |:--------|:----|:----:|
 | M5.1 电源管理 | PowerService（等电池硬件） | 🟡 等硬件 |
-| M5.2 灯光驱动 | Headlight（等灯光硬件） | 🟡 等硬件 |
+| M5.2 灯光驱动 | PWM_LED（PE11, TIM1_CH2） | ✅ 板子端已实现 |
 | M5.3 心率模块 | HeartRate 驱动（数据走 MQTT） | 🟡 等心率带到货 |
 | M5.4 微信小程序 | Step A: 登录+实时数据+骑行控制+总结+地图+报警取消 ✅ | 🟢 完成 (2026-06-01) |
 | | Step B: 导航推送（腾讯地图 API + BLE FFF2 sendNav + polyline 修复） | ✅ 已实现 (2026-06-09) |
 | | Step B: 导航位置播报（头盔 GNSS 位置自主播报） | 📅 规划中 |
-| | Step B: 远端控制（小程序 UI + BLE FFF3 + 头盔 Service） | 📅 未实现 |
+| | Step B: 远端控制（小程序 UI + BLE FFF3 + 头盔 Service） | 🔜 板子端已实现，小程序端待开发 |
 | | Step C: 语音交互（微信语音识别 → BLE FFF3 命令下发） | 📅 第三步 |
-| M5.5 导航+语音 | NavigationService TTS+LCD ✅ + 位置播报 📅 + RemoteControlService 📅 | 🔜 头盔端已实现，位置播报和远端控制待开发 |
+| M5.5 导航+语音 | NavigationService ✅ + ControlService ✅（板子端） | 🔜 板子端已实现，位置播报和小程序 UI 待开发 |
 | M5.6 移远云通道 | LarkCloudService + QthDriver，Qth SDK 接入移远云 | ✅ v1 已完成（2026-5-22） |
 
 ---
