@@ -15,6 +15,7 @@ from core.config import (
     EVENT_TEMP_HUMID_READY, EVENT_IMU_READY,
     EVENT_GNSS_READY, EVENT_LIGHT_READY,
     EVENT_ALARM_TRIGGERED, EVENT_ALARM_CANCELED,
+    EVENT_CONTROL_STATE_CHANGED,
     BLE_UPLOAD_INTERVAL_MS, BLE_KEEPALIVE_MS,
 )
 from Drivers.network.thread_queue import ThreadSafeQueue
@@ -74,6 +75,7 @@ class BLEService(BaseModule):
                 self.event_bus.subscribe(EVENT_LIGHT_READY, self._on_light)
                 self.event_bus.subscribe(EVENT_ALARM_TRIGGERED, self._on_alarm)
                 self.event_bus.subscribe(EVENT_ALARM_CANCELED, self._on_alarm_canceled)
+                self.event_bus.subscribe(EVENT_CONTROL_STATE_CHANGED, self._on_control_state)
 
             self.ctx["thread_running"] = True
             _thread.stack_size(4096)
@@ -202,6 +204,15 @@ class BLEService(BaseModule):
 
     def _on_alarm_canceled(self, payload):
         self.send_queue.put('{"t":6,"d":{}}')
+
+    def _on_control_state(self, payload):
+        """
+        brief 控制状态变更回调
+        param payload: 控制状态字典 {light_mode, light_brightness, volume, power_mode}
+        note 通过 BLE Notify 推送到小程序，type=7
+        """
+        msg = json.dumps({"t": 7, "d": payload})
+        self.send_queue.put(msg)
 
     def get_data(self):
         return {

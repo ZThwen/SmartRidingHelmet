@@ -14,6 +14,7 @@ var TYPE_MAP = {
   0: 'merged',
   5: 'alarm',
   6: 'alarm_cancel',
+  7: 'ctrl_state',
   99: 'keepalive',
 };
 
