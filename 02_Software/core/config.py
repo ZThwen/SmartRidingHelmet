@@ -56,6 +56,10 @@ EVENT_NAV_CMD               = "NAV_CMD"                # 导航指令（手机�
 EVENT_RIDE_CONTROL          = "RIDE_CONTROL"           # 骑行控制指令
 EVENT_BLE_ALARM_ACK         = "BLE_ALARM_ACK"          # 报警确认（手机取消）
 
+# 控制系统事件
+EVENT_CONTROL_STATE_CHANGED = "CONTROL_STATE_CHANGED"  # 控制状态变更（回推到小程序）
+EVENT_VOICE_CMD             = "VOICE_CMD"              # 语音指令（ASRPRO → ControlService）
+
 # ================= 默认参数配置 =================
 # 传感器采样间隔
 TEMP_HUMID_SAMPLE_MS   = 2000    # 温湿度传感器采样间隔 (ms)
@@ -207,3 +211,19 @@ BLE_KEEPALIVE_MS          = 5000                    # 心跳间隔 (ms)
 # ================= LBS 基站定位配置 =================
 LBS_TIMEOUT_MS          = 15000    # LBS 定位超时 (ms)
 LBS_SAMPLE_MS           = 30000    # LBS 采样间隔 (ms)
+
+# ================= PWM LED 配置 =================
+EVENT_PWM_LED_ERROR     = "PWM_LED_ERROR"      # PWM控制错误
+PWM_LED_PIN             = "PE11"               # PWM引脚（STM32 PE11, TIM1_CH2）
+PWM_LED_TIMER_ID        = 1                    # Timer1
+PWM_LED_TIMER_CHANNEL   = 2                    # Channel 2
+PWM_LED_FREQ            = 1000                 # PWM频率 (Hz)
+
+# ================= LightService 自适应灯光配置 =================
+LIGHT_DAY_ADC_THRESHOLD    = 30000   # 白天阈值（ADC值 < 此值 → 光照强 → 灯不开）
+LIGHT_NIGHT_ADC_THRESHOLD  = 50000   # 晚上阈值（ADC值 > 此值 → 光照弱 → 灯最亮）
+LIGHT_BRIGHTNESS_MIN       = 5       # 最小亮度（%）
+LIGHT_BRIGHTNESS_MAX       = 50      # 最大亮度（%），18W灯散热限制
+LIGHT_GAMMA                = 1.5     # 非线性映射参数（>1时暗环境更敏感）
+LIGHT_BRIGHTNESS_THRESHOLD = 3       # 亮度变化阈值（小于此值不调节）
+LIGHT_DEBOUNCE_MS          = 50      # 防抖间隔（ms）

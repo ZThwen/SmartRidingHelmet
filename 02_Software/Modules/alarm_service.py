@@ -172,6 +172,13 @@ class AlarmService(BaseModule):
         self.ctx["alarm_level"] = 0
         self.ctx["alarm_start"] = 0
 
+    def cancel_alarm(self):
+        """
+        brief 外部取消报警（供 ControlService 调用）
+        note 公开接口，与 _cancel_alarm 逻辑一致
+        """
+        self._cancel_alarm()
+
     # ==================== 事件回调 ====================
 
     def _on_collision(self, payload):
