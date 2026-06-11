@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>远端控制面板 — Tactical HUD 预览</title>
+<style>
+  body { margin: 0; padding: 40px 20px; background: #1a1a2e; display: flex; justify-content: center; font-family: -apple-system, 'PingFang SC', sans-serif; }
+  .phone { width: 375px; height: 920px; background: #080d17; border-radius: 24px; border: 2px solid rgba(102,204,255,0.15); overflow: hidden; box-shadow: 0 0 60px rgba(102,204,255,0.08); }
+  .status-bar { height: 44px; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #5a7a98; }
+  .ble-bar { display: flex; align-items: center; padding: 8px 16px; margin: 0 12px 8px; background: rgba(12,20,36,0.6); border: 1px solid rgba(102,204,255,0.08); border-radius: 8px; font-size: 12px; color: #8899aa; }
+  .ble-dot { width: 6px; height: 6px; border-radius: 50%; background: #66ccff; margin-right: 8px; box-shadow: 0 0 6px #66ccff; animation: breathe 2s ease-in-out infinite; }
+  @keyframes breathe { 0%,100%{box-shadow:0 0 4px rgba(102,204,255,0.5)} 50%{box-shadow:0 0 12px rgba(102,204,255,0.9),0 0 24px rgba(102,204,255,0.3)} }
+
+  .card { margin: 0 12px; position: relative; background: radial-gradient(ellipse 80px 40px at 15% 25%,rgba(102,204,255,0.03) 0%,transparent 100%),rgba(12,20,36,0.85); border: 1px solid rgba(102,204,255,0.12); border-radius: 12px; padding: 16px 20px; }
+  .corner { position: absolute; width: 6px; height: 6px; background: rgba(102,204,255,0.4); }
+  .corner.tl{top:0;left:0;border-top-left-radius:12px} .corner.tr{top:0;right:0;border-top-right-radius:12px}
+  .corner.bl{bottom:0;left:0;border-bottom-left-radius:12px} .corner.br{bottom:0;right:0;border-bottom-right-radius:12px}
+
+  .card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .card-title { font-size: 12px; font-weight: 600; color: #7a9a98; letter-spacing: 2px; }
+  .deco-line { flex: 1; height: 1px; background: linear-gradient(90deg, rgba(102,204,255,0.3), transparent); }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #66ccff; box-shadow: 0 0 6px rgba(102,204,255,0.6); animation: breathe 2s ease-in-out infinite; }
+
+  .section { padding: 10px 0; }
+  .section + .section { border-top: 1px solid rgba(102,204,255,0.06); }
+  .label { font-size: 11px; color: #5a7a98; letter-spacing: 1.5px; margin-bottom: 10px; display: block; }
+
+  .btns { display: flex; gap: 8px; }
+  .btn { flex: 1; height: 40px; display: flex; align-items: center; justify-content: center; border: 1px solid rgba(102,204,255,0.15); border-radius: 6px; background: rgba(102,204,255,0.03); cursor: pointer; transition: all 0.25s; user-select: none; }
+  .btn .i { font-size: 11px; font-weight: 700; letter-spacing: 2px; color: #5a7a98; transition: all 0.25s; }
+  .btn.active { border-color: #66ccff; background: rgba(102,204,255,0.1); box-shadow: 0 0 10px rgba(102,204,255,0.15), inset 0 0 16px rgba(102,204,255,0.05); }
+  .btn.active .i { color: #66ccff; text-shadow: 0 0 6px rgba(102,204,255,0.5); }
+  .btn:hover { background: rgba(102,204,255,0.08); }
+
+  .btn.sos { border-color: rgba(255,61,0,0.3); background: rgba(255,61,0,0.05); }
+  .btn.sos .i { color: #ff6b3d; font-weight: 800; letter-spacing: 3px; }
+  .btn.sos:hover { border-color: rgba(255,61,0,0.6); background: rgba(255,61,0,0.12); box-shadow: 0 0 12px rgba(255,61,0,0.15); }
+
+  .btn.stealth { border-color: rgba(148,103,189,0.3); background: rgba(148,103,189,0.05); }
+  .btn.stealth .i { color: #9467bd; font-weight: 700; }
+  .btn.stealth:hover { border-color: rgba(148,103,189,0.6); background: rgba(148,103,189,0.12); }
+
+  .btn.emergency { border-color: rgba(255,152,0,0.3); background: rgba(255,152,0,0.05); }
+  .btn.emergency .i { color: #ff9800; font-weight: 700; }
+  .btn.emergency:hover { border-color: rgba(255,152,0,0.6); background: rgba(255,152,0,0.12); }
+
+  .seg-row { display: flex; align-items: center; gap: 10px; }
+  .seg-btn { width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border: 1px solid rgba(102,204,255,0.2); border-radius: 6px; background: rgba(102,204,255,0.04); cursor: pointer; flex-shrink: 0; user-select: none; }
+  .seg-btn span { font-size: 18px; color: #7a9a98; font-weight: 600; }
+  .seg-btn:hover { background: rgba(102,204,255,0.12); border-color: #66ccff; }
+  .seg-btn:hover span { color: #66ccff; }
+  .seg-bar { flex: 1; height: 10px; background: rgba(102,204,255,0.06); border-radius: 2px; position: relative; overflow: hidden; }
+  .seg-fill { position: absolute; top: 0; left: 0; bottom: 0; background: linear-gradient(90deg, rgba(102,204,255,0.6), #66ccff, #00ffff); border-radius: 2px; transition: width 0.3s; box-shadow: 0 0 6px rgba(102,204,255,0.3); }
+  .seg-tick { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(8,13,23,0.7); }
+  .seg-tick:nth-child(2){left:25%} .seg-tick:nth-child(3){left:50%} .seg-tick:nth-child(4){left:75%}
+  .seg-val { font-size: 12px; color: #66ccff; min-width: 48px; text-align: right; font-weight: 500; }
+
+  .wave { height: 14px; margin: 6px 12px; background: radial-gradient(circle 5px at 5px 5px, rgba(102,204,255,0.08) 50%, transparent 51%), radial-gradient(circle 5px at 15px 5px, rgba(102,204,255,0.06) 50%, transparent 51%); background-size: 20px 14px; opacity: 0.5; }
+  .legend { margin: 16px 12px 0; padding: 12px 16px; background: rgba(12,20,36,0.6); border: 1px solid rgba(102,204,255,0.08); border-radius: 8px; font-size: 11px; color: #5a7a98; line-height: 1.8; }
+  .legend strong { color: #7a9a98; }
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status-bar">智能骑行头盔</div>
+  <div class="ble-bar"><div class="ble-dot"></div><span>BLE: 已连接</span></div>
+
+  <div class="card">
+    <div class="corner tl"></div><div class="corner tr"></div><div class="corner bl"></div><div class="corner br"></div>
+    <div class="card-header">
+      <span class="card-title">远端控制</span>
+      <div class="deco-line"></div>
+      <div class="status-dot"></div>
+    </div>
+
+    <!-- 头灯 -->
+    <div class="section">
+      <span class="label">头灯</span>
+      <div class="btns">
+        <div class="btn active" onclick="setGroup(this,'light')"><span class="i">ON</span></div>
+        <div class="btn" onclick="setGroup(this,'light')"><span class="i">OFF</span></div>
+        <div class="btn" onclick="setGroup(this,'light')"><span class="i">AUTO</span></div>
+      </div>
+    </div>
+
+    <!-- 亮度 -->
+    <div class="section">
+      <span class="label">亮度</span>
+      <div class="seg-row">
+        <div class="seg-btn" onclick="change('bri',-10)"><span>-</span></div>
+        <div class="seg-bar"><div class="seg-fill" id="briFill" style="width:50%"></div><div class="seg-tick"></div><div class="seg-tick"></div><div class="seg-tick"></div><div class="seg-tick"></div></div>
+        <span class="seg-val" id="briVal">50%</span>
+        <div class="seg-btn" onclick="change('bri',10)"><span>+</span></div>
+      </div>
+    </div>
+
+    <!-- 音量 -->
+    <div class="section">
+      <span class="label">音量</span>
+      <div class="seg-row">
+        <div class="seg-btn" onclick="change('vol',-1)"><span>-</span></div>
+        <div class="seg-bar"><div class="seg-fill" id="volFill" style="width:71%"></div><div class="seg-tick"></div><div class="seg-tick"></div><div class="seg-tick"></div><div class="seg-tick"></div></div>
+        <span class="seg-val" id="volVal">5/7</span>
+        <div class="seg-btn" onclick="change('vol',1)"><span>+</span></div>
+      </div>
+    </div>
+
+    <!-- 电源 -->
+    <div class="section">
+      <span class="label">电源</span>
+      <div class="btns">
+        <div class="btn active" onclick="setGroup(this,'power')"><span class="i">正常</span></div>
+        <div class="btn" onclick="setGroup(this,'power')"><span class="i">省电</span></div>
+        <div class="btn emergency" onclick="setGroup(this,'power')"><span class="i">超级</span></div>
+      </div>
+    </div>
+
+    <!-- 报警 -->
+    <div class="section">
+      <span class="label">报警</span>
+      <div class="btns">
+        <div class="btn sos" onclick="alert('SOS 报警已发送！')"><span class="i">SOS</span></div>
+        <div class="btn stealth" onclick="alert('静默报警已发送！')"><span class="i">静默</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="wave"></div>
+  <div class="legend">
+    <strong>设计说明</strong><br>
+    - 头灯: ON / OFF / AUTO 三态，选中态天依蓝发光<br>
+    - 亮度/音量: 分段进度条 + 刻度线 + 渐变辉光<br>
+    - 电源: 正常(蓝) / 省电(蓝) / 超级省电(橙黄)<br>
+    - 报警: SOS(橙红) / 静默(暗紫)，取消在报警弹窗内<br>
+    - SOS/静默/超级省电 均有确认弹窗防误触
+  </div>
+</div>
+<script>
+var bri=50, vol=5;
+function setGroup(el,group) {
+  el.parentElement.querySelectorAll('.btn').forEach(function(b){b.classList.remove('active')});
+  el.classList.add('active');
+}
+function change(t,d) {
+  if(t==='bri'){bri=Math.max(0,Math.min(100,bri+d));document.getElementById('briFill').style.width=bri+'%';document.getElementById('briVal').textContent=bri+'%';}
+  else{vol=Math.max(0,Math.min(7,vol+d));document.getElementById('volFill').style.width=(vol/7*100)+'%';document.getElementById('volVal').textContent=vol+'/7';}
+}
+</script>
+</body>
+</html>
