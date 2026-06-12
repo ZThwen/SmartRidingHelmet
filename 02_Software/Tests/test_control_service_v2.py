@@ -509,6 +509,21 @@ def scene_query_commands(ctrl, bus, events):
     bus.publish(EVENT_GNSS_READY, {"speed_kmh": 25.3, "latitude": 31.23, "longitude": 121.47, "valid": True})
     bus.pump()
 
+    # query_status
+    clear_events(events)
+    print("\n--- query_status ---")
+    print_state(ctrl, "当前状态")
+    raw = send_ble_cmd(bus, "query_status")
+    print("  发送: %s" % raw)
+    print("  TTS 事件: %s" % events.get("tts", []))
+    if events.get("tts"):
+        tts_text = events["tts"][-1].get("text", "")
+        print("  播报内容: %s" % tts_text)
+        print("  ✅ query_status 发出 TTS 请求")
+    else:
+        print("  ❌ query_status 未发出 TTS 请求")
+    wait_next()
+
     # query_temp
     clear_events(events)
     print("\n--- query_temp ---")
