@@ -53,7 +53,6 @@ def pump_loop(event_bus, modules, duration_s=3):
                 except Exception:
                     pass
         event_bus.pump()
-        time.sleep_ms(100)
 
 
 def prompt_and_watch(msg, event_bus, modules, duration_s=5):
@@ -75,7 +74,6 @@ def prompt_and_watch(msg, event_bus, modules, duration_s=5):
                 except Exception:
                     pass
         event_bus.pump()
-        time.sleep_ms(100)
     print("  --- 收到 %d 次状态回推, %d 次 TTS ---" % (len(state_pushes), len(tts_events)))
     if state_pushes:
         for i, s in enumerate(state_pushes):
@@ -160,7 +158,7 @@ def main():
     prompt_and_watch("light_on — 观察头灯是否亮起", event_bus, modules, 8)
 
     print("\n  FFF3 发送: {\"a\":\"ctrl\",\"d\":{\"cmd\":\"brightness_up\"}}")
-    print("  预期: 头灯变亮（60%%）")
+    print("  预期: 头灯变亮（50%%，已到上限）")
     prompt_and_watch("brightness_up — 观察头灯变亮", event_bus, modules, 8)
 
     print("\n  FFF3 发送: {\"a\":\"ctrl\",\"d\":{\"cmd\":\"light_off\"}}")
