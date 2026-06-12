@@ -150,11 +150,13 @@ def test_alarm_cancel_flow():
 
 
 def test_volume_up_flow():
-    """ControlService volume_up → AudioDriver +1"""
+    """ControlService volume_up → EVENT_VOLUME_CONTROL{up}"""
     bus, ctrl, alarm, light, led, audio, pwm = make_system()
-    audio.set_volume(3)
+    received = []
+    bus.subscribe(EVENT_VOLUME_CONTROL, lambda p: received.append(p))
     send_cmd(bus, "volume_up")
-    assert audio.get_volume() == 4
+    assert len(received) == 1
+    assert received[0]["cmd"] == "up"
     print("  OK volume_up_flow")
 
 
