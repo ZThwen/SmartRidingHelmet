@@ -130,6 +130,7 @@ class BLEService(BaseModule):
 
     def _notify_thread(self):
         CIRCUIT_BREAKER_THRESHOLD = 10
+        MAX_BLE_PAYLOAD = 244  # ATT_MTU(247) - 3(ATT header)
         while self.ctx["thread_running"]:
             try:
                 data = self.send_queue.get()
@@ -137,6 +138,10 @@ class BLEService(BaseModule):
                     time.sleep_ms(100)
                     continue
                 if not self._ble or not self._ble.ctx["is_connected"]:
+                    continue
+                if len(data) > MAX_BLE_PAYLOAD:
+                    print("[%s] payload too large (%d > %d), dropped" % (
+                        self.name, len(data), MAX_BLE_PAYLOAD))
                     continue
                 if self.ctx["consecutive_errors"] >= CIRCUIT_BREAKER_THRESHOLD:
                     time.sleep_ms(500)
@@ -147,7 +152,7 @@ class BLEService(BaseModule):
             except Exception as e:
                 self.ctx["err_count"] += 1
                 self.ctx["consecutive_errors"] += 1
-                print("[%s] 后台线程异常: %s" % (self.name, e))
+                print("[%s] notify err: %s" % (self.name, e))
 
     def _on_connected(self, payload):
         self.ctx["ble_connected"] = True
