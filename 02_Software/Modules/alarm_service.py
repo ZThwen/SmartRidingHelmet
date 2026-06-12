@@ -11,7 +11,7 @@ from core.config import (
     EVENT_ALARM_TRIGGERED, EVENT_ALARM_CANCELED,
     EVENT_COLLISION_DETECTED, EVENT_BUTTON_PRESSED,
     EVENT_BATTERY_LOW, EVENT_BATTERY_CRITICAL, EVENT_GPS_LOST,
-    EVENT_CONFIG_UPDATE,
+    EVENT_CONFIG_UPDATE, EVENT_ALARM_CONTROL,
     ALARM_DURATION_MS, ALARM_ENABLE_LOCAL,
     AUDIO_ALARM_FILE_L1, AUDIO_ALARM_FILE_L2, AUDIO_ALARM_FILE_L3,
     AUDIO_SOS_FILE,
@@ -71,6 +71,7 @@ class AlarmService(BaseModule):
                 self.event_bus.subscribe(EVENT_BATTERY_LOW, self._on_battery_low)
                 self.event_bus.subscribe(EVENT_BATTERY_CRITICAL, self._on_battery_critical)
                 self.event_bus.subscribe(EVENT_CONFIG_UPDATE, self._on_config_update)
+                self.event_bus.subscribe(EVENT_ALARM_CONTROL, self._on_alarm_control)
 
             self.ctx["alarm_active"] = False
             self.ctx["alarm_type"] = ""
@@ -179,6 +180,38 @@ class AlarmService(BaseModule):
         """
         self._cancel_alarm()
 
+    def trigger_sos(self):
+        """
+        brief 触发 SOS 报警（供 ControlService 远端调用）
+        note LED 快闪 + SOS 音，与物理按钮触发逻辑一致
+        """
+        self._start_alarm("sos", 3)
+
+    def trigger_stealth_alarm(self):
+        """
+        brief 触发静默报警（无 LED 无声音）
+        note 仅发布 EVENT_ALARM_TRIGGERED 供 BLE 通知手机
+              适用于用户不想引起注意但需要记录的场景
+        """
+        # 先取消已有报警（如果有）
+        if self.ctx["alarm_active"]:
+            self._cancel_alarm()
+
+        self.ctx["alarm_active"] = True
+        self.ctx["alarm_type"] = "stealth"
+        self.ctx["alarm_level"] = 1
+        self.ctx["alarm_start"] = time.ticks_ms()
+
+        # 不触发声光，只发布事件
+        if self.event_bus:
+            self.event_bus.publish(EVENT_ALARM_TRIGGERED, {
+                "alarm_type": "stealth",
+                "level": 1,
+                "timestamp": time.ticks_ms(),
+            })
+
+        print("[{}] stealth alarm triggered".format(self.name))
+
     # ==================== 事件回调 ====================
 
     def _on_collision(self, payload):
@@ -208,6 +241,19 @@ class AlarmService(BaseModule):
     def _on_battery_critical(self, payload):
         """严重低电量事件（stub，待 PowerService 就绪后启用）"""
         pass
+
+    def _on_alarm_control(self, payload):
+        """
+        brief 报警控制指令回调（来自 ControlService）
+        param payload: {cmd: "cancel"/"sos"/"stealth"}
+        """
+        cmd = payload.get("cmd", "")
+        if cmd == "cancel":
+            self.cancel_alarm()
+        elif cmd == "sos":
+            self.trigger_sos()
+        elif cmd == "stealth":
+            self.trigger_stealth_alarm()
 
     def _on_config_update(self, payload):
         """配置更新回调"""
