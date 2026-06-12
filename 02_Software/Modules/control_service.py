@@ -46,6 +46,9 @@ class ControlService(BaseModule):
     无模块依赖，只通过 EventBus 发布事件
     """
 
+    _LIGHT_MODE_MAP = {"auto": 0, "manual": 1}
+    _POWER_MODE_MAP = {"active": 0, "suspended": 1, "emergency": 2, "custom": 3}
+
     def __init__(self, event_bus=None):
         """
         brief 初始化控制服务实例
@@ -344,10 +347,21 @@ class ControlService(BaseModule):
     def _push_state(self):
         """
         brief 推送控制状态到 BLE（通过 EventBus）
+        note 拆分为 3 条消息，每条 ≤20 字节（ATT_MTU 限制）
+             t=7 灯光 {m:mode, b:brightness}
+             t=8 音量 {v:volume}
+             t=9 电源 {p:power_mode}
         """
-        if self.event_bus:
-            self.event_bus.publish(EVENT_CONTROL_STATE_CHANGED,
-                                   dict(self._control_state))
+        if not self.event_bus:
+            return
+        cs = self._control_state
+        self.event_bus.publish(EVENT_CONTROL_STATE_CHANGED,
+            {"t": 7, "m": self._LIGHT_MODE_MAP.get(cs["light_mode"], 0),
+             "b": cs["light_brightness"]})
+        self.event_bus.publish(EVENT_CONTROL_STATE_CHANGED,
+            {"t": 8, "v": cs["volume"]})
+        self.event_bus.publish(EVENT_CONTROL_STATE_CHANGED,
+            {"t": 9, "p": self._POWER_MODE_MAP.get(cs["power_mode"], 0)})
 
     # ==================== 数据接口 ====================
 

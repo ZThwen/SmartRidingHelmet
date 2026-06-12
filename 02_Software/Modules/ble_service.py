@@ -208,10 +208,10 @@ class BLEService(BaseModule):
     def _on_control_state(self, payload):
         """
         brief 控制状态变更回调
-        param payload: 控制状态字典 {light_mode, light_brightness, volume, power_mode}
-        note 通过 BLE Notify 推送到小程序，type=7
+        param payload: 已压缩的 BLE 消息 {t:7/8/9, ...}
+        note 直接序列化发送，payload 已 ≤20 字节
         """
-        msg = json.dumps({"t": 7, "d": payload})
+        msg = json.dumps(payload)
         self.send_queue.put(msg)
 
     def get_data(self):

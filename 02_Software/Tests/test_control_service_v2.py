@@ -445,7 +445,7 @@ def scene_edge_cases(ctrl, bus, events):
 
 
 def scene_state_push(ctrl, bus, events):
-    """场景: 状态回推"""
+    """场景: 状态回推（拆分为 t=7/8/9 三条消息）"""
     print("\n" + "=" * 50)
     print("场景: 状态回推 (EVENT_CONTROL_STATE_CHANGED)")
     print("=" * 50)
@@ -454,15 +454,27 @@ def scene_state_push(ctrl, bus, events):
     print("\n--- light_on 后检查状态回推 ---")
     raw = send_ble_cmd(bus, "light_on")
     print("  发送: %s" % raw)
-    print("  state 事件数: %d" % len(events["state"]))
-    if events["state"]:
-        print("  回推内容: %s" % events["state"][-1])
-        if events["state"][-1].get("light_mode") == "manual":
-            print("  ✅ 状态回推正确")
-        else:
-            print("  ❌ 状态回推内容不正确")
+    print("  state 事件数: %d (应为3: t=7灯光 t=8音量 t=9电源)" % len(events["state"]))
+    for e in events["state"]:
+        print("  回推: %s" % e)
+    # 检查 t=7 灯光消息
+    light_msg = [e for e in events["state"] if e.get("t") == 7]
+    if light_msg and light_msg[-1].get("m") == 1:
+        print("  ✅ 灯光回推正确 (m=1=manual)")
     else:
-        print("  ❌ 未收到状态回推")
+        print("  ❌ 灯光回推不正确")
+    # 检查 t=8 音量消息
+    vol_msg = [e for e in events["state"] if e.get("t") == 8]
+    if vol_msg:
+        print("  ✅ 音量回推正确 (v=%s)" % vol_msg[-1].get("v"))
+    else:
+        print("  ❌ 音量回推缺失")
+    # 检查 t=9 电源消息
+    pwr_msg = [e for e in events["state"] if e.get("t") == 9]
+    if pwr_msg:
+        print("  ✅ 电源回推正确 (p=%s)" % pwr_msg[-1].get("p"))
+    else:
+        print("  ❌ 电源回推缺失")
     wait_next()
 
 
