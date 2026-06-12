@@ -1,16 +1,20 @@
 """
 brief 统一控制服务（ControlService）
-note Service层业务服务，接收BLE远端控制指令，路由到对应设备驱动
+note Service层业务服务，接收BLE远端控制指令，发布事件到各模块响应
 
 功能：
 1. 订阅 EVENT_RIDE_CONTROL 事件（来自 BLE FFF3 写入）
 2. 解析 JSON 控制指令
-3. 路由到 LightService / AudioDriver / AlarmService
+3. 发布对应控制事件（EVENT_LIGHT_CONTROL / EVENT_VOLUME_CONTROL / EVENT_ALARM_CONTROL）
 4. 状态回推（EVENT_CONTROL_STATE_CHANGED）
 
+架构：
+    ControlService 不依赖任何具体模块，只通过 EventBus 发布事件
+    各模块自行订阅事件并响应
+
 数据流：
-    小程序(按钮) → BLE FFF3 → EVENT_RIDE_CONTROL → ControlService → 设备驱动
-    语音模块(未来) → UART → VoiceDriver → EVENT_VOICE_CMD → ControlService → 设备驱动
+    小程序(按钮) → BLE FFF3 → EVENT_RIDE_CONTROL → ControlService → EVENT_xxx_CONTROL → 目标模块
+    语音模块(未来) → UART → VoiceDriver → EVENT_VOICE_CMD → ControlService → EVENT_xxx_CONTROL → 目标模块
 """
 import time
 import json
@@ -19,7 +23,8 @@ from core.Base_Module import BaseModule
 from core.config import (
     EVENT_RIDE_CONTROL, EVENT_CONTROL_STATE_CHANGED,
     EVENT_POWER_STATE_CHANGE, EVENT_VOICE_CMD,
-    POWER_STATE_ACTIVE, POWER_STATE_SUSPENDED,
+    EVENT_LIGHT_CONTROL, EVENT_VOLUME_CONTROL, EVENT_ALARM_CONTROL,
+    POWER_STATE_ACTIVE, POWER_STATE_SUSPENDED, POWER_STATE_EMERGENCY,
 )
 
 # CPython 兼容
@@ -32,37 +37,25 @@ except AttributeError:
 
 class ControlService(BaseModule):
     """
-    统一控制服务：BLE 远端 + 本地语音 → 统一入口 → 设备驱动
+    统一控制服务：BLE 远端 + 本地语音 → 统一入口 → 事件发布
 
-    注入依赖：
-        light_service: LightService（灯光控制）
-        audio_driver: AudioDriver（音量控制）
-        alarm_service: AlarmService（报警取消）
+    无模块依赖，只通过 EventBus 发布事件
     """
 
-    def __init__(self, event_bus=None, light_service=None,
-                 audio_driver=None, alarm_service=None):
+    def __init__(self, event_bus=None):
         """
         brief 初始化控制服务实例
         param event_bus: 事件总线实例引用
-        param light_service: LightService 实例（灯光控制）
-        param audio_driver: AudioDriver 实例（音量控制）
-        param alarm_service: AlarmService 实例（报警取消）
         """
         super().__init__()
         self.event_bus = event_bus
         self.name = "control_service"
 
-        # 注入的依赖（可为 None，调用处有 None guard）
-        self.light_service = light_service
-        self.audio_driver = audio_driver
-        self.alarm_service = alarm_service
-
         # ===================== 四元组：静态配置 =====================
         self.cfg = {
             "brightness_step": 10,       # 亮度调节步长 (%)
             "volume_step": 1,            # 音量调节步长
-            "volume_max": 7,             # 最大音量
+            "volume_max": 5,             # 最大音量（对齐 AudioDriver 0-5）
             "volume_min": 0,             # 最小音量
             "default_brightness": 50,    # 开灯默认亮度 (%)
             "cmd_debounce_ms": 300,      # 指令防抖间隔 (ms)
@@ -81,26 +74,29 @@ class ControlService(BaseModule):
             "last_cmd_source": "",       # 指令来源（ble / voice）
         }
 
-        # 控制状态（回推到小程序）
+        # 控制状态（乐观缓存，回推到小程序）
         self._control_state = {
             "light_mode": "auto",        # auto / manual
             "light_brightness": 0,       # 0-100
-            "volume": 5,                 # 0-7
-            "power_mode": "active",      # active / suspended
+            "volume": 5,                 # 0-5（对齐 AudioDriver）
+            "power_mode": "active",      # active / suspended / emergency
         }
 
-        # 指令分发表
+        # 指令分发表 — 全部发布事件，不直接调用模块
         self._cmd_handlers = {
-            "light_on":       self._cmd_light_on,
-            "light_off":      self._cmd_light_off,
-            "brightness_up":  self._cmd_brightness_up,
-            "brightness_down": self._cmd_brightness_down,
-            "light_auto":     self._cmd_light_auto,
-            "volume_up":      self._cmd_volume_up,
-            "volume_down":    self._cmd_volume_down,
-            "alarm_cancel":   self._cmd_alarm_cancel,
-            "power_save":     self._cmd_power_save,
-            "power_normal":   self._cmd_power_normal,
+            "light_on":        lambda: self._pub(EVENT_LIGHT_CONTROL, {"cmd": "on"}),
+            "light_off":       lambda: self._pub(EVENT_LIGHT_CONTROL, {"cmd": "off"}),
+            "light_auto":      lambda: self._pub(EVENT_LIGHT_CONTROL, {"cmd": "auto"}),
+            "brightness_up":   lambda: self._pub(EVENT_LIGHT_CONTROL, {"cmd": "brightness_up"}),
+            "brightness_down": lambda: self._pub(EVENT_LIGHT_CONTROL, {"cmd": "brightness_down"}),
+            "volume_up":       lambda: self._pub(EVENT_VOLUME_CONTROL, {"cmd": "up"}),
+            "volume_down":     lambda: self._pub(EVENT_VOLUME_CONTROL, {"cmd": "down"}),
+            "alarm_cancel":    lambda: self._pub(EVENT_ALARM_CONTROL, {"cmd": "cancel"}),
+            "alarm_sos":       lambda: self._pub(EVENT_ALARM_CONTROL, {"cmd": "sos"}),
+            "alarm_stealth":   lambda: self._pub(EVENT_ALARM_CONTROL, {"cmd": "stealth"}),
+            "power_save":      lambda: self._pub(EVENT_POWER_STATE_CHANGE, {"power_state": POWER_STATE_SUSPENDED}),
+            "power_normal":    lambda: self._pub(EVENT_POWER_STATE_CHANGE, {"power_state": POWER_STATE_ACTIVE}),
+            "power_emergency": lambda: self._pub(EVENT_POWER_STATE_CHANGE, {"power_state": POWER_STATE_EMERGENCY}),
         }
 
     def init(self):
@@ -126,6 +122,17 @@ class ControlService(BaseModule):
         brief 周期调度：纯事件驱动，tick()为空实现
         """
         pass
+
+    # ==================== 事件发布 ====================
+
+    def _pub(self, event, payload):
+        """
+        brief 发布事件到 EventBus
+        param event: 事件名称常量
+        param payload: 事件负载 dict
+        """
+        if self.event_bus:
+            self.event_bus.publish(event, payload)
 
     # ==================== 事件回调 ====================
 
@@ -180,6 +187,8 @@ class ControlService(BaseModule):
                 self.ctx["last_cmd_tick"] = now
                 self._data["last_cmd"] = cmd
                 self._data["last_cmd_source"] = source
+                # 乐观更新本地状态缓存
+                self._update_control_state(cmd)
                 self._push_state()
                 print("[{}] cmd={} src={}".format(self.name, cmd, source))
             except Exception as e:
@@ -189,78 +198,43 @@ class ControlService(BaseModule):
         else:
             print("[{}] unknown cmd: {}".format(self.name, cmd))
 
-    # ==================== 指令实现 ====================
+    # ==================== 状态乐观更新 ====================
 
-    def _cmd_light_on(self):
-        if self.light_service:
-            self.light_service.set_manual_brightness(self.cfg["default_brightness"])
+    def _update_control_state(self, cmd):
+        """
+        brief 根据指令乐观更新本地状态缓存
+        note 不依赖模块回推，足够小程序 UI 使用
+        """
+        if cmd == "light_on":
             self._control_state["light_mode"] = "manual"
             self._control_state["light_brightness"] = self.cfg["default_brightness"]
-
-    def _cmd_light_off(self):
-        if self.light_service:
-            self.light_service.set_manual_brightness(0)
+        elif cmd == "light_off":
             self._control_state["light_mode"] = "manual"
             self._control_state["light_brightness"] = 0
-
-    def _cmd_brightness_up(self):
-        if self.light_service:
-            current = self._control_state["light_brightness"]
-            new_val = min(current + self.cfg["brightness_step"], 100)
-            self.light_service.set_manual_brightness(new_val)
+        elif cmd == "brightness_up":
             self._control_state["light_mode"] = "manual"
-            self._control_state["light_brightness"] = new_val
-
-    def _cmd_brightness_down(self):
-        if self.light_service:
-            current = self._control_state["light_brightness"]
-            new_val = max(current - self.cfg["brightness_step"], 0)
-            self.light_service.set_manual_brightness(new_val)
+            self._control_state["light_brightness"] = min(
+                self._control_state["light_brightness"] + self.cfg["brightness_step"], 100)
+        elif cmd == "brightness_down":
             self._control_state["light_mode"] = "manual"
-            self._control_state["light_brightness"] = new_val
-
-    def _cmd_light_auto(self):
-        if self.light_service:
-            self.light_service.set_auto_mode()
+            self._control_state["light_brightness"] = max(
+                self._control_state["light_brightness"] - self.cfg["brightness_step"], 0)
+        elif cmd == "light_auto":
             self._control_state["light_mode"] = "auto"
-
-    def _cmd_volume_up(self):
-        if self.audio_driver:
-            current = self._control_state["volume"]
-            new_vol = min(current + self.cfg["volume_step"], self.cfg["volume_max"])
-            try:
-                self.audio_driver.set_volume(new_vol)
-            except Exception:
-                pass
-            self._control_state["volume"] = new_vol
-
-    def _cmd_volume_down(self):
-        if self.audio_driver:
-            current = self._control_state["volume"]
-            new_vol = max(current - self.cfg["volume_step"], self.cfg["volume_min"])
-            try:
-                self.audio_driver.set_volume(new_vol)
-            except Exception:
-                pass
-            self._control_state["volume"] = new_vol
-
-    def _cmd_alarm_cancel(self):
-        if self.alarm_service:
-            self.alarm_service.cancel_alarm()
-
-    def _cmd_power_save(self):
-        if self.event_bus:
-            self.event_bus.publish(EVENT_POWER_STATE_CHANGE, {
-                "power_state": POWER_STATE_SUSPENDED
-            })
-        self._control_state["power_mode"] = "suspended"
-
-    def _cmd_power_normal(self):
-        if self.event_bus:
-            self.event_bus.publish(EVENT_POWER_STATE_CHANGE, {
-                "power_state": POWER_STATE_ACTIVE
-            })
-        self._control_state["power_mode"] = "active"
+        elif cmd == "volume_up":
+            self._control_state["volume"] = min(
+                self._control_state["volume"] + self.cfg["volume_step"],
+                self.cfg["volume_max"])
+        elif cmd == "volume_down":
+            self._control_state["volume"] = max(
+                self._control_state["volume"] - self.cfg["volume_step"],
+                self.cfg["volume_min"])
+        elif cmd == "power_save":
+            self._control_state["power_mode"] = "suspended"
+        elif cmd == "power_normal":
+            self._control_state["power_mode"] = "active"
+        elif cmd == "power_emergency":
+            self._control_state["power_mode"] = "emergency"
 
     # ==================== 状态回推 ====================
 
