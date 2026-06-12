@@ -19,12 +19,17 @@ except AttributeError:
     def _ticks_ms():
         return int(time.time() * 1000)
 
+
 class ControlService(BaseModule):
+
+    _LIGHT_MODE_MAP = {"auto": 0, "manual": 1}
+    _POWER_MODE_MAP = {"active": 0, "suspended": 1, "emergency": 2, "custom": 3}
 
     def __init__(self, event_bus=None):
         super().__init__()
         self.event_bus = event_bus
         self.name = "control_service"
+
         self.cfg = {
             "brightness_step": 10,
             "brightness_max": LIGHT_BRIGHTNESS_MAX,
@@ -34,21 +39,25 @@ class ControlService(BaseModule):
             "default_brightness": LIGHT_BRIGHTNESS_MAX,
             "cmd_debounce_ms": 300,
         }
+
         self.ctx = {
             "is_init": False,
             "err_count": 0,
             "last_cmd_tick": 0,
         }
+
         self._data = {
             "last_cmd": "",
             "last_cmd_source": "",
         }
+
         self._control_state = {
             "light_mode": "auto",
             "light_brightness": 0,
             "volume": 5,
             "power_mode": "active",
         }
+
         self._sensor_cache = {
             "temperature": None,
             "humidity": None,
@@ -56,7 +65,9 @@ class ControlService(BaseModule):
             "latitude": None,
             "longitude": None,
         }
+
         self._alarm_active = False
+
         self._cmd_handlers = {
             "light_on":        lambda: self._pub(EVENT_LIGHT_CONTROL, {"cmd": "on"}),
             "light_off":       lambda: self._pub(EVENT_LIGHT_CONTROL, {"cmd": "off"}),
@@ -88,8 +99,10 @@ class ControlService(BaseModule):
                 self.event_bus.subscribe(EVENT_GNSS_READY, self._on_gnss)
                 self.event_bus.subscribe(EVENT_ALARM_TRIGGERED, self._on_alarm_triggered)
                 self.event_bus.subscribe(EVENT_ALARM_CANCELED, self._on_alarm_canceled)
+
             self.ctx["is_init"] = True
             print("[%s] OK init" % self.name)
+
         except Exception as e:
             print("[%s] FAIL init: %s" % (self.name, e))
             raise
@@ -106,11 +119,14 @@ class ControlService(BaseModule):
         try:
             cmd_obj = json.loads(raw)
         except Exception as e:
-            print("[%s] JSON err: %s" % (self.name, e))
+            print("[%s] JSON解析失败: %s | raw=%s" % (
+                self.name, e, str(raw)[:50]))
             self.ctx["err_count"] += 1
             return
+
         if cmd_obj.get("a") != "ctrl":
             return
+
         cmd = cmd_obj.get("d", {}).get("cmd", "")
         self._execute_cmd(cmd, source="ble")
 
@@ -121,9 +137,11 @@ class ControlService(BaseModule):
     def _execute_cmd(self, cmd, source="unknown"):
         if not cmd:
             return
+
         now = _ticks_ms()
         if time.ticks_diff(now, self.ctx["last_cmd_tick"]) < self.cfg["cmd_debounce_ms"]:
             return
+
         handler = self._cmd_handlers.get(cmd)
         if handler:
             try:
@@ -141,9 +159,10 @@ class ControlService(BaseModule):
                 print("[%s] cmd=%s src=%s" % (self.name, cmd, source))
             except Exception as e:
                 self.ctx["err_count"] += 1
-                print("[%s] cmd err: %s cmd=%s" % (self.name, e, cmd))
+                print("[%s] cmd执行异常: %s | cmd=%s" % (
+                    self.name, e, cmd))
         else:
-            print("[%s] unknown: %s" % (self.name, cmd))
+            print("[%s] unknown cmd: %s" % (self.name, cmd))
 
     def _update_control_state(self, cmd):
         if cmd == "light_on":
@@ -245,9 +264,16 @@ class ControlService(BaseModule):
             self._tts("位置信息暂不可用")
 
     def _push_state(self):
-        if self.event_bus:
-            self.event_bus.publish(EVENT_CONTROL_STATE_CHANGED,
-                                   dict(self._control_state))
+        if not self.event_bus:
+            return
+        cs = self._control_state
+        self.event_bus.publish(EVENT_CONTROL_STATE_CHANGED,
+            {"t": 7, "m": self._LIGHT_MODE_MAP.get(cs["light_mode"], 0),
+             "b": cs["light_brightness"]})
+        self.event_bus.publish(EVENT_CONTROL_STATE_CHANGED,
+            {"t": 8, "v": cs["volume"]})
+        self.event_bus.publish(EVENT_CONTROL_STATE_CHANGED,
+            {"t": 9, "p": self._POWER_MODE_MAP.get(cs["power_mode"], 0)})
 
     def get_data(self):
         return {
