@@ -15,6 +15,8 @@ from core.config import (
     EVENT_POWER_STATE_CHANGE, EVENT_LIGHT_CONTROL,
     EVENT_VOLUME_CONTROL, EVENT_ALARM_CONTROL,
     POWER_STATE_ACTIVE, POWER_STATE_SUSPENDED, POWER_STATE_EMERGENCY,
+    EVENT_TTS_REQUEST, EVENT_TEMP_HUMID_READY, EVENT_GNSS_READY,
+    POWER_STATE_CUSTOM,
 )
 from Modules.control_service import ControlService
 
@@ -34,12 +36,14 @@ def make_ctrl():
         "alarm": [],
         "power": [],
         "state": [],
+        "tts": [],
     }
     bus.subscribe(EVENT_LIGHT_CONTROL, lambda p: events["light"].append(p))
     bus.subscribe(EVENT_VOLUME_CONTROL, lambda p: events["volume"].append(p))
     bus.subscribe(EVENT_ALARM_CONTROL, lambda p: events["alarm"].append(p))
     bus.subscribe(EVENT_POWER_STATE_CHANGE, lambda p: events["power"].append(p))
     bus.subscribe(EVENT_CONTROL_STATE_CHANGED, lambda p: events["state"].append(p))
+    bus.subscribe(EVENT_TTS_REQUEST, lambda p: events["tts"].append(p))
 
     return ctrl, bus, events
 
@@ -494,6 +498,125 @@ def scene_data_interface(ctrl, bus, events):
     wait_next()
 
 
+def scene_query_commands(ctrl, bus, events):
+    """场景: 查询指令（TTS 播报）"""
+    print("\n" + "=" * 50)
+    print("场景: 查询指令")
+    print("=" * 50)
+
+    # 先喂一些传感器数据
+    bus.publish(EVENT_TEMP_HUMID_READY, {"temp": 28.5, "humid": 65.2, "valid": True})
+    bus.publish(EVENT_GNSS_READY, {"speed_kmh": 25.3, "latitude": 31.23, "longitude": 121.47, "valid": True})
+    bus.pump()
+
+    # query_temp
+    clear_events(events)
+    print("\n--- query_temp ---")
+    raw = send_ble_cmd(bus, "query_temp")
+    print("  发送: %s" % raw)
+    print("  TTS 事件: %s" % events.get("tts", []))
+    if events.get("tts"):
+        print("  ✅ query_temp 发出 TTS 请求")
+    else:
+        print("  ❌ query_temp 未发出 TTS 请求")
+    wait_next()
+
+    # query_speed
+    clear_events(events)
+    print("\n--- query_speed ---")
+    raw = send_ble_cmd(bus, "query_speed")
+    print("  发送: %s" % raw)
+    print("  TTS 事件: %s" % events.get("tts", []))
+    if events.get("tts"):
+        print("  ✅ query_speed 发出 TTS 请求")
+    else:
+        print("  ❌ query_speed 未发出 TTS 请求")
+    wait_next()
+
+    # query_humid
+    clear_events(events)
+    print("\n--- query_humid ---")
+    raw = send_ble_cmd(bus, "query_humid")
+    print("  发送: %s" % raw)
+    print("  TTS 事件: %s" % events.get("tts", []))
+    if events.get("tts"):
+        print("  ✅ query_humid 发出 TTS 请求")
+    else:
+        print("  ❌ query_humid 未发出 TTS 请求")
+    wait_next()
+
+    # query_location
+    clear_events(events)
+    print("\n--- query_location ---")
+    raw = send_ble_cmd(bus, "query_location")
+    print("  发送: %s" % raw)
+    print("  TTS 事件: %s" % events.get("tts", []))
+    if events.get("tts"):
+        print("  ✅ query_location 发出 TTS 请求")
+    else:
+        print("  ❌ query_location 未发出 TTS 请求")
+    wait_next()
+
+    # query_battery (N/A)
+    clear_events(events)
+    print("\n--- query_battery ---")
+    raw = send_ble_cmd(bus, "query_battery")
+    print("  发送: %s" % raw)
+    print("  TTS 事件: %s" % events.get("tts", []))
+    if events.get("tts"):
+        print("  ✅ query_battery 发出 TTS 请求")
+    else:
+        print("  ❌ query_battery 未发出 TTS 请求")
+    wait_next()
+
+
+def scene_custom_state(ctrl, bus, events):
+    """场景: CUSTOM 电源状态切换"""
+    print("\n" + "=" * 50)
+    print("场景: CUSTOM 电源状态切换")
+    print("=" * 50)
+
+    # 先切到 SUSPENDED
+    clear_events(events)
+    print("\n--- 1. 切到 SUSPENDED ---")
+    send_ble_cmd(bus, "power_save")
+    print("  power_mode: %s" % ctrl._control_state["power_mode"])
+    wait_next()
+
+    # 在 SUSPENDED 下执行 light_on → 应切换到 CUSTOM
+    clear_events(events)
+    print("\n--- 2. SUSPENDED 下执行 light_on ---")
+    send_ble_cmd(bus, "light_on")
+    print("  power_mode: %s (应为 custom)" % ctrl._control_state["power_mode"])
+    if ctrl._control_state["power_mode"] == "custom":
+        print("  ✅ 自动切换到 CUSTOM")
+    else:
+        print("  ❌ 未切换到 CUSTOM")
+    wait_next()
+
+    # CUSTOM 下再执行 volume_up → 保持 CUSTOM
+    clear_events(events)
+    print("\n--- 3. CUSTOM 下执行 volume_up ---")
+    send_ble_cmd(bus, "volume_up")
+    print("  power_mode: %s (应仍为 custom)" % ctrl._control_state["power_mode"])
+    if ctrl._control_state["power_mode"] == "custom":
+        print("  ✅ 保持 CUSTOM")
+    else:
+        print("  ❌ 状态异常")
+    wait_next()
+
+    # power_save/power_normal/query 不触发 CUSTOM
+    clear_events(events)
+    print("\n--- 4. power_normal 恢复 ---")
+    send_ble_cmd(bus, "power_normal")
+    print("  power_mode: %s (应为 active)" % ctrl._control_state["power_mode"])
+    if ctrl._control_state["power_mode"] == "active":
+        print("  ✅ 恢复到 ACTIVE")
+    else:
+        print("  ❌ 未恢复")
+    wait_next()
+
+
 def scene_no_event_bus():
     """场景: 无 EventBus 降级"""
     print("\n" + "=" * 50)
@@ -550,6 +673,12 @@ def main():
 
         # 数据接口
         scene_data_interface(ctrl, bus, events)
+
+        # 查询指令
+        scene_query_commands(ctrl, bus, events)
+
+        # CUSTOM 状态切换
+        scene_custom_state(ctrl, bus, events)
 
         # 无 EventBus 降级
         scene_no_event_bus()
