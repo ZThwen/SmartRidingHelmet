@@ -208,10 +208,11 @@ class BLEService(BaseModule):
     def _on_control_state(self, payload):
         """
         brief 控制状态变更回调
-        param payload: 已压缩的 BLE 消息 {t:7/8/9, ...}
-        note 直接序列化发送，payload 已 ≤20 字节
+        param payload: EventBus 事件（含 source/timestamp 注入字段）
+        note 剥离 EventBus 自动注入的字段，只保留压缩格式，确保 ≤20 字节
         """
-        msg = json.dumps(payload)
+        valid_keys = ("t", "m", "b", "v", "p")
+        msg = json.dumps({k: v for k, v in payload.items() if k in valid_keys})
         self.send_queue.put(msg)
 
     def get_data(self):
