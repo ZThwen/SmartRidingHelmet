@@ -64,6 +64,7 @@ EVENT_VOICE_CMD             = "VOICE_CMD"              # 语音指令（ASRPRO �
 EVENT_LIGHT_CONTROL         = "LIGHT_CONTROL"           # 灯光控制指令
 EVENT_VOLUME_CONTROL        = "VOLUME_CONTROL"          # 音量控制指令
 EVENT_ALARM_CONTROL         = "ALARM_CONTROL"           # 报警控制指令
+EVENT_TTS_REQUEST           = "TTS_REQUEST"             # TTS 播报请求
 
 # ================= 默认参数配置 =================
 # 传感器采样间隔
@@ -144,6 +145,7 @@ POWER_STATE_ACTIVE        = "ACTIVE"        # 正常工作状态
 POWER_STATE_SUSPENDED     = "SUSPENDED"     # 挂起状态
 POWER_STATE_DEEP_SLEEP    = "DEEP_SLEEP"    # 深度休眠状态
 POWER_STATE_EMERGENCY     = "EMERGENCY"     # 超级省电（仅 GPS + 报警 + BLE）
+POWER_STATE_CUSTOM        = "CUSTOM"        # 自定义（手动操作覆盖省电模式）
 
 # ================= 网络通信配置 =================
 NETWORK_CONNECT_TIMEOUT_MS = 60000    # 4G网络连接超时时间 (ms)
@@ -233,3 +235,26 @@ LIGHT_BRIGHTNESS_MAX       = 50      # 最大亮度（%），18W灯散热限制
 LIGHT_GAMMA                = 1.5     # 非线性映射参数（>1时暗环境更敏感）
 LIGHT_BRIGHTNESS_THRESHOLD = 3       # 亮度变化阈值（小于此值不调节）
 LIGHT_DEBOUNCE_MS          = 50      # 防抖间隔（ms）
+
+# ================= 语音指令映射表（ASRPRO hex → ControlService cmd）=================
+VOICE_CMD_MAP = {
+    0x01: "light_on",
+    0x02: "light_off",
+    0x03: "brightness_up",
+    0x04: "brightness_down",
+    0x05: "light_auto",
+    0x06: "volume_up",
+    0x07: "volume_down",
+    0x08: "alarm_cancel",
+    0x09: "alarm_sos",
+    0x0A: "alarm_stealth",
+    0x0B: "power_save",
+    0x0C: "power_normal",
+    0x0D: "power_emergency",
+    0x0E: "query_status",
+    0x0F: "query_speed",
+    0x10: "query_temp",
+    0x11: "query_humid",
+    0x12: "query_location",
+    0x13: "query_battery",
+}
