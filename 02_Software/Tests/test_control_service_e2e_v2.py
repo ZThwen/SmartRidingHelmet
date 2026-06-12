@@ -123,7 +123,7 @@ def main():
     # Service 层（ControlService 无模块依赖）
     light_svc = LightService(event_bus, pwm_led=pwm_led)
     alarm = AlarmService(event_bus, led=led, audio=audio)
-    ble_svc = BLEService(event_bus)
+    ble_svc = BLEService(event_bus, ble_driver=ble_driver)
     ctrl = ControlService(event_bus)
 
     init_order = [led, audio, pwm_led, light_sensor, ble_driver,
