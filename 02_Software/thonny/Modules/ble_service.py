@@ -1,10 +1,3 @@
-"""
-brief BLEService — BLE 推送服务
-note 双线程架构：
-       主线程：收事件 → 缓存 → tick() 拼装 JSON → send_queue.put()
-       后台线程：send_queue.get() → BLEDriver.notify_data()
-      绝不阻塞主循环，与 CloudService/LarkCloudService 相同模式
-"""
 import time
 import json
 import _thread
@@ -206,11 +199,6 @@ class BLEService(BaseModule):
         self.send_queue.put('{"t":6,"d":{}}')
 
     def _on_control_state(self, payload):
-        """
-        brief 控制状态变更回调
-        param payload: EventBus 事件（含 source/timestamp 注入字段）
-        note 剥离 EventBus 自动注入的字段，只保留压缩格式，确保 ≤20 字节
-        """
         valid_keys = ("t", "m", "b", "v", "p")
         msg = json.dumps({k: v for k, v in payload.items() if k in valid_keys})
         self.send_queue.put(msg)
