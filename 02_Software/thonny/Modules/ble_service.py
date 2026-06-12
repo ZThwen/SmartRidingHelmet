@@ -1,3 +1,10 @@
+"""
+brief BLEService — BLE 推送服务
+note 双线程架构：
+       主线程：收事件 → 缓存 → tick() 拼装 JSON → send_queue.put()
+       后台线程：send_queue.get() → BLEDriver.notify_data()
+      绝不阻塞主循环，与 CloudService/LarkCloudService 相同模式
+"""
 import time
 import json
 import _thread
@@ -75,11 +82,11 @@ class BLEService(BaseModule):
             _thread.start_new_thread(self._notify_thread, ())
 
             self.ctx["is_init"] = True
-            print("[%s] OK BLE service started" % self.name)
+            print("[%s] ✓ BLE 推送服务已启动" % self.name)
 
         except Exception as e:
             self.ctx["err_count"] += 1
-            print("[%s] FAIL init: %s" % (self.name, e))
+            print("[%s] ✗ 初始化失败: %s" % (self.name, e))
             raise
 
     def tick(self):
@@ -147,7 +154,7 @@ class BLEService(BaseModule):
             except Exception as e:
                 self.ctx["err_count"] += 1
                 self.ctx["consecutive_errors"] += 1
-                print("[%s] thread err: %s" % (self.name, e))
+                print("[%s] 后台线程异常: %s" % (self.name, e))
 
     def _on_connected(self, payload):
         self.ctx["ble_connected"] = True
@@ -189,6 +196,7 @@ class BLEService(BaseModule):
     def _on_alarm(self, payload):
         alarm_type = payload.get("alarm_type", "collision")
         level = payload.get("level", 1)
+        # 压缩载荷：15 字节（原 46 字节），避免超出 ATT_MTU 导致 +CME ERROR: 53
         type_code = 1 if alarm_type == "collision" else 2
         msg = json.dumps({"t": 5, "a": type_code, "l": level})
         self.send_queue.put(msg)
@@ -198,7 +206,13 @@ class BLEService(BaseModule):
         self.send_queue.put('{"t":6,"d":{}}')
 
     def _on_control_state(self, payload):
-        msg = json.dumps(payload)
+        """
+        brief 控制状态变更回调
+        param payload: EventBus 事件（含 source/timestamp 注入字段）
+        note 剥离 EventBus 自动注入的字段，只保留压缩格式，确保 ≤20 字节
+        """
+        valid_keys = ("t", "m", "b", "v", "p")
+        msg = json.dumps({k: v for k, v in payload.items() if k in valid_keys})
         self.send_queue.put(msg)
 
     def get_data(self):
@@ -220,5 +234,6 @@ class BLEService(BaseModule):
 
     def deinit(self):
         self.ctx["thread_running"] = False
+        # 等待后台线程退出：线程 idle 睡眠 100ms + 熔断睡眠 500ms
         time.sleep_ms(700)
         self.ctx["is_init"] = False
