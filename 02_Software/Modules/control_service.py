@@ -25,6 +25,9 @@ from core.config import (
     EVENT_POWER_STATE_CHANGE, EVENT_VOICE_CMD,
     EVENT_LIGHT_CONTROL, EVENT_VOLUME_CONTROL, EVENT_ALARM_CONTROL,
     POWER_STATE_ACTIVE, POWER_STATE_SUSPENDED, POWER_STATE_EMERGENCY,
+    POWER_STATE_CUSTOM, EVENT_TTS_REQUEST,
+    EVENT_TEMP_HUMID_READY, EVENT_GNSS_READY,
+    EVENT_ALARM_TRIGGERED, EVENT_ALARM_CANCELED,
     LIGHT_BRIGHTNESS_MAX,
 )
 
@@ -84,6 +87,18 @@ class ControlService(BaseModule):
             "power_mode": "active",      # active / suspended / emergency
         }
 
+        # 传感器数据缓存（供查询指令使用）
+        self._sensor_cache = {
+            "temperature": None,
+            "humidity": None,
+            "speed_kmh": None,
+            "latitude": None,
+            "longitude": None,
+        }
+
+        # 报警状态标志（查询时保护报警不被 TTS 中断）
+        self._alarm_active = False
+
         # 指令分发表 — 全部发布事件，不直接调用模块
         self._cmd_handlers = {
             "light_on":        lambda: self._pub(EVENT_LIGHT_CONTROL, {"cmd": "on"}),
@@ -99,6 +114,12 @@ class ControlService(BaseModule):
             "power_save":      lambda: self._pub(EVENT_POWER_STATE_CHANGE, {"power_state": POWER_STATE_SUSPENDED}),
             "power_normal":    lambda: self._pub(EVENT_POWER_STATE_CHANGE, {"power_state": POWER_STATE_ACTIVE}),
             "power_emergency": lambda: self._pub(EVENT_POWER_STATE_CHANGE, {"power_state": POWER_STATE_EMERGENCY}),
+            "query_status":    lambda: self._query_status(),
+            "query_speed":     lambda: self._query_speed(),
+            "query_temp":      lambda: self._query_temp(),
+            "query_humid":     lambda: self._query_humid(),
+            "query_location":  lambda: self._query_location(),
+            "query_battery":   lambda: self._tts("电量信息暂不可用"),
         }
 
     def init(self):
@@ -109,8 +130,11 @@ class ControlService(BaseModule):
         try:
             if self.event_bus:
                 self.event_bus.subscribe(EVENT_RIDE_CONTROL, self._on_ride_control)
-                # 语音指令预留（等 VoiceDriver 就绪后启用）
-                # self.event_bus.subscribe(EVENT_VOICE_CMD, self._on_voice_cmd)
+                self.event_bus.subscribe(EVENT_VOICE_CMD, self._on_voice_cmd)
+                self.event_bus.subscribe(EVENT_TEMP_HUMID_READY, self._on_temp_humid)
+                self.event_bus.subscribe(EVENT_GNSS_READY, self._on_gnss)
+                self.event_bus.subscribe(EVENT_ALARM_TRIGGERED, self._on_alarm_triggered)
+                self.event_bus.subscribe(EVENT_ALARM_CANCELED, self._on_alarm_canceled)
 
             self.ctx["is_init"] = True
             print("[{}] OK init".format(self.name))
@@ -192,6 +216,12 @@ class ControlService(BaseModule):
                 # 乐观更新本地状态缓存
                 self._update_control_state(cmd)
                 self._push_state()
+                # 手动操作覆盖省电模式
+                if cmd not in ("power_save", "power_normal", "power_emergency") and not cmd.startswith("query_"):
+                    if self._control_state["power_mode"] != "active":
+                        self._control_state["power_mode"] = "custom"
+                        if self.event_bus:
+                            self.event_bus.publish(EVENT_POWER_STATE_CHANGE, {"power_state": POWER_STATE_CUSTOM})
                 print("[{}] cmd={} src={}".format(self.name, cmd, source))
             except Exception as e:
                 self.ctx["err_count"] += 1
@@ -238,6 +268,76 @@ class ControlService(BaseModule):
             self._control_state["power_mode"] = "active"
         elif cmd == "power_emergency":
             self._control_state["power_mode"] = "emergency"
+
+    # ==================== 传感器缓存回调 ====================
+
+    def _on_temp_humid(self, payload):
+        if payload.get("valid"):
+            self._sensor_cache["temperature"] = payload.get("temp")
+            self._sensor_cache["humidity"] = payload.get("humid")
+
+    def _on_gnss(self, payload):
+        if payload.get("valid"):
+            self._sensor_cache["speed_kmh"] = payload.get("speed_kmh")
+            self._sensor_cache["latitude"] = payload.get("latitude")
+            self._sensor_cache["longitude"] = payload.get("longitude")
+
+    def _on_alarm_triggered(self, payload):
+        self._alarm_active = True
+
+    def _on_alarm_canceled(self, payload):
+        self._alarm_active = False
+
+    # ==================== 查询指令 ====================
+
+    def _tts(self, text):
+        if self._alarm_active:
+            print("[{}] TTS blocked during alarm".format(self.name))
+            return
+        if self.event_bus:
+            self.event_bus.publish(EVENT_TTS_REQUEST, {"text": text})
+
+    def _query_status(self):
+        cs = self._control_state
+        parts = []
+        if cs["light_mode"] == "auto":
+            parts.append("灯光自动模式")
+        else:
+            parts.append("灯光亮度百分之%d" % cs["light_brightness"])
+        parts.append("音量%d" % cs["volume"])
+        mode_map = {"active": "正常模式", "suspended": "省电模式",
+                    "emergency": "超级省电", "custom": "自定义模式"}
+        parts.append(mode_map.get(cs["power_mode"], cs["power_mode"]))
+        self._tts("，".join(parts))
+
+    def _query_speed(self):
+        speed = self._sensor_cache.get("speed_kmh")
+        if speed is not None:
+            self._tts("当前时速%d公里" % int(speed))
+        else:
+            self._tts("速度信息暂不可用")
+
+    def _query_temp(self):
+        temp = self._sensor_cache.get("temperature")
+        if temp is not None:
+            self._tts("当前温度%d度" % int(temp))
+        else:
+            self._tts("温度信息暂不可用")
+
+    def _query_humid(self):
+        humid = self._sensor_cache.get("humidity")
+        if humid is not None:
+            self._tts("当前湿度百分之%d" % int(humid))
+        else:
+            self._tts("湿度信息暂不可用")
+
+    def _query_location(self):
+        lat = self._sensor_cache.get("latitude")
+        lon = self._sensor_cache.get("longitude")
+        if lat is not None and lon is not None:
+            self._tts("当前位置北纬%.4f东经%.4f" % (lat, lon))
+        else:
+            self._tts("位置信息暂不可用")
 
     # ==================== 状态回推 ====================
 
