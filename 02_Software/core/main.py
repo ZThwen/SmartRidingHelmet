@@ -1,6 +1,6 @@
 """
 brief 智能骑行头盔系统入口 — v1 正式版
-note 集成 12 个模块（4 传感器 + 4 执行器 + 4 Service + 4G/MQTT）
+note 集成 18 个模块（4 传感器 + 5 执行器 + 6 Service + 3 Network）
 """
 import sys
 import time
@@ -24,11 +24,17 @@ from Modules.collision_service import CollisionService
 from Modules.alarm_service import AlarmService
 from Modules.cloud_service import CloudService
 from Modules.display_service import DisplayService
+from Drivers.actuator.PWM_LED import PWMLEDDriver
+from Drivers.network.BLE import BLE
+from Modules.light_service import LightService
+from Modules.ble_service import BLEService
+from Modules.control_service import ControlService
+from Modules.navigation_service import NavigationService
 
 
 def main():
     """
-    brief 系统入口: 12 个模块全集成，v1 正式版
+    brief 系统入口: 18 个模块全集成，v1 正式版
     """
     print("🚀 智能骑行头盔系统启动...")
 
@@ -55,10 +61,21 @@ def main():
     cloud = CloudService(event_bus)
     display = DisplayService(event_bus, lcd_driver=lcd, audio_driver=audio)
 
+    # --- PWM LED + 自适应灯光 ---
+    pwm_led = PWMLEDDriver(event_bus)
+    light_svc = LightService(event_bus, pwm_led=pwm_led)
+
+    # --- BLE + 远端控制 + 导航 ---
+    ble = BLE(event_bus)
+    ble_svc = BLEService(event_bus)
+    control = ControlService(event_bus)
+    nav = NavigationService(event_bus, lcd_driver=lcd, audio_driver=audio)
+
     # 3. 按序初始化（传感器 → 执行器 → 服务）
     init_order = [temp_humid, imu, gnss, light,
-                  button, led, audio, lcd,
-                  collision, alarm, cloud, display]
+                  button, led, audio, lcd, pwm_led,
+                  collision, alarm, cloud, display,
+                  light_svc, ble, ble_svc, control, nav]
     failed = []
 
     print("\n[初始化阶段]")
