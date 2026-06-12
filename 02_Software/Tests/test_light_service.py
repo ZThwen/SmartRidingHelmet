@@ -12,7 +12,7 @@ import time
 import sys
 sys.path.append("..")
 
-from core.config import EVENT_LIGHT_READY, EVENT_CONFIG_UPDATE, POWER_STATE_ACTIVE, POWER_STATE_SUSPENDED
+from core.config import EVENT_LIGHT_READY, EVENT_LIGHT_CONTROL, EVENT_CONFIG_UPDATE, POWER_STATE_ACTIVE, POWER_STATE_SUSPENDED
 from core.Event_Bus import EventBus
 from Drivers.sensor.Light import LightSensorDriver
 from Drivers.actuator.PWM_LED import PWMLEDDriver
@@ -157,6 +157,71 @@ def test_light_service():
                 data["current_brightness"], data["mode"]
             ))
             last_print_time = now
+
+    print("\n" + "=" * 60)
+    print("[测试4] 远程灯光控制（EVENT_LIGHT_CONTROL）")
+    print("=" * 60)
+    print("说明：通过事件总线发布灯光控制指令，验证远端控制功能")
+
+    input("\n按回车开始测试远程灯光控制...")
+
+    # cmd: on → 手动模式，最大亮度（50%）
+    print("\n  [4-1] 发布 EVENT_LIGHT_CONTROL {cmd: on}")
+    event_bus.publish(EVENT_LIGHT_CONTROL, {"cmd": "on"})
+    light_sensor.tick()
+    event_bus.pump()
+    data = light_service.get_data()
+    print("    亮度: {}%, 模式: {}".format(data["current_brightness"], data["mode"]))
+    assert data["current_brightness"] == 50, "FAIL: on 应为50%, 实际{}".format(data["current_brightness"])
+    assert data["mode"] == "manual", "FAIL: on 应切手动模式"
+    print("    PASS: on → 亮度50%, 手动模式")
+    input("    按回车继续...")
+
+    # cmd: brightness_up → 50+10=60, 但上限50 → 仍50
+    print("\n  [4-2] 发布 EVENT_LIGHT_CONTROL {cmd: brightness_up}")
+    event_bus.publish(EVENT_LIGHT_CONTROL, {"cmd": "brightness_up"})
+    light_sensor.tick()
+    event_bus.pump()
+    data = light_service.get_data()
+    print("    亮度: {}%, 模式: {}".format(data["current_brightness"], data["mode"]))
+    assert data["current_brightness"] == 50, "FAIL: brightness_up 应为50%(上限), 实际{}".format(data["current_brightness"])
+    print("    PASS: brightness_up → 亮度50%（已达上限）")
+    input("    按回车继续...")
+
+    # cmd: brightness_down → 50-10=40
+    print("\n  [4-3] 发布 EVENT_LIGHT_CONTROL {cmd: brightness_down}")
+    event_bus.publish(EVENT_LIGHT_CONTROL, {"cmd": "brightness_down"})
+    light_sensor.tick()
+    event_bus.pump()
+    data = light_service.get_data()
+    print("    亮度: {}%, 模式: {}".format(data["current_brightness"], data["mode"]))
+    assert data["current_brightness"] == 40, "FAIL: brightness_down 应为40%, 实际{}".format(data["current_brightness"])
+    print("    PASS: brightness_down → 亮度40%")
+    input("    按回车继续...")
+
+    # cmd: auto → 恢复自动模式
+    print("\n  [4-4] 发布 EVENT_LIGHT_CONTROL {cmd: auto}")
+    event_bus.publish(EVENT_LIGHT_CONTROL, {"cmd": "auto"})
+    light_sensor.tick()
+    event_bus.pump()
+    data = light_service.get_data()
+    print("    模式: {}".format(data["mode"]))
+    assert data["mode"] == "auto", "FAIL: auto 应切自动模式"
+    print("    PASS: auto → 自动模式")
+    input("    按回车继续...")
+
+    # cmd: off → 手动模式，亮度0
+    print("\n  [4-5] 发布 EVENT_LIGHT_CONTROL {cmd: off}")
+    event_bus.publish(EVENT_LIGHT_CONTROL, {"cmd": "off"})
+    light_sensor.tick()
+    event_bus.pump()
+    data = light_service.get_data()
+    print("    亮度: {}%, 模式: {}".format(data["current_brightness"], data["mode"]))
+    assert data["current_brightness"] == 0, "FAIL: off 应为0%, 实际{}".format(data["current_brightness"])
+    assert data["mode"] == "manual", "FAIL: off 应切手动模式"
+    print("    PASS: off → 亮度0%, 手动模式")
+
+    print("\n  远程灯光控制测试全部通过!")
 
     print("\n" + "=" * 60)
     print("测试完成")
