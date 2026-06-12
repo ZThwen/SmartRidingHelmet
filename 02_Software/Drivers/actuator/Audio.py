@@ -9,7 +9,8 @@ from quectel import Audio as Audio
 
 from core.Base_Module import BaseModule
 from core.config import (EVENT_AUDIO_PLAYBACK_START, EVENT_AUDIO_PLAYBACK_END,
-                    EVENT_AUDIO_ERROR, EVENT_CONFIG_UPDATE, POWER_STATE_ACTIVE,
+                    EVENT_AUDIO_ERROR, EVENT_VOLUME_CONTROL,
+                    EVENT_CONFIG_UPDATE, POWER_STATE_ACTIVE,
                     AUDIO_TTS_SPEED, AUDIO_TTS_VOLUME, AUDIO_SPEAKER_VOLUME)
 
 
@@ -78,6 +79,7 @@ class AudioDriver(BaseModule):
             # 4. 订阅事件
             if self.event_bus:
                 self.event_bus.subscribe(EVENT_CONFIG_UPDATE, self._on_config_update)
+                self.event_bus.subscribe(EVENT_VOLUME_CONTROL, self._on_volume_control)
 
             self.ctx["is_init"] = True
             print(f"[{self.name}] ✓ 初始化完成 | 音量:{self.cfg['speaker_volume']} TTS语速:{self.cfg['tts_speed']}")
@@ -96,6 +98,18 @@ class AudioDriver(BaseModule):
 
         # Audio 无需周期性采样，保持空实现维持生命周期
         pass
+
+    def _on_volume_control(self, payload):
+        """
+        brief 音量控制指令回调（来自 ControlService）
+        param payload: {cmd: "up"/"down"}
+        """
+        cmd = payload.get("cmd", "")
+        current = self._data.get("volume", AUDIO_SPEAKER_VOLUME)
+        if cmd == "up":
+            self.set_volume(min(current + 1, 5))
+        elif cmd == "down":
+            self.set_volume(max(current - 1, 0))
 
     # ==================== 事件回调 ====================
     def _audio_event_cb(self, event):
