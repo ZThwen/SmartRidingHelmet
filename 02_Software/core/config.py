@@ -60,6 +60,11 @@ EVENT_BLE_ALARM_ACK         = "BLE_ALARM_ACK"          # 报警确认（手机�
 EVENT_CONTROL_STATE_CHANGED = "CONTROL_STATE_CHANGED"  # 控制状态变更（回推到小程序）
 EVENT_VOICE_CMD             = "VOICE_CMD"              # 语音指令（ASRPRO → ControlService）
 
+# 控制指令事件（ControlService → 各模块）
+EVENT_LIGHT_CONTROL         = "LIGHT_CONTROL"           # 灯光控制指令
+EVENT_VOLUME_CONTROL        = "VOLUME_CONTROL"          # 音量控制指令
+EVENT_ALARM_CONTROL         = "ALARM_CONTROL"           # 报警控制指令
+
 # ================= 默认参数配置 =================
 # 传感器采样间隔
 TEMP_HUMID_SAMPLE_MS   = 2000    # 温湿度传感器采样间隔 (ms)
@@ -138,6 +143,7 @@ BATTERY_CRITICAL_THRESHOLD = 10    # 严重不足阈值(%)
 POWER_STATE_ACTIVE        = "ACTIVE"        # 正常工作状态
 POWER_STATE_SUSPENDED     = "SUSPENDED"     # 挂起状态
 POWER_STATE_DEEP_SLEEP    = "DEEP_SLEEP"    # 深度休眠状态
+POWER_STATE_EMERGENCY     = "EMERGENCY"     # 超级省电（仅 GPS + 报警 + BLE）
 
 # ================= 网络通信配置 =================
 NETWORK_CONNECT_TIMEOUT_MS = 60000    # 4G网络连接超时时间 (ms)
