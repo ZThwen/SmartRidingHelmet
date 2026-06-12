@@ -1,21 +1,3 @@
-"""
-brief 统一控制服务（ControlService）
-note Service层业务服务，接收BLE远端控制指令，发布事件到各模块响应
-
-功能：
-1. 订阅 EVENT_RIDE_CONTROL 事件（来自 BLE FFF3 写入）
-2. 解析 JSON 控制指令
-3. 发布对应控制事件（EVENT_LIGHT_CONTROL / EVENT_VOLUME_CONTROL / EVENT_ALARM_CONTROL）
-4. 状态回推（EVENT_CONTROL_STATE_CHANGED）
-
-架构：
-    ControlService 不依赖任何具体模块，只通过 EventBus 发布事件
-    各模块自行订阅事件并响应
-
-数据流：
-    小程序(按钮) → BLE FFF3 → EVENT_RIDE_CONTROL → ControlService → EVENT_xxx_CONTROL → 目标模块
-    语音模块(未来) → UART → VoiceDriver → EVENT_VOICE_CMD → ControlService → EVENT_xxx_CONTROL → 目标模块
-"""
 import time
 import json
 
@@ -25,66 +7,56 @@ from core.config import (
     EVENT_POWER_STATE_CHANGE, EVENT_VOICE_CMD,
     EVENT_LIGHT_CONTROL, EVENT_VOLUME_CONTROL, EVENT_ALARM_CONTROL,
     POWER_STATE_ACTIVE, POWER_STATE_SUSPENDED, POWER_STATE_EMERGENCY,
+    POWER_STATE_CUSTOM, EVENT_TTS_REQUEST,
+    EVENT_TEMP_HUMID_READY, EVENT_GNSS_READY,
+    EVENT_ALARM_TRIGGERED, EVENT_ALARM_CANCELED,
     LIGHT_BRIGHTNESS_MAX,
 )
 
-# CPython 兼容
 try:
     _ticks_ms = time.ticks_ms
 except AttributeError:
     def _ticks_ms():
         return int(time.time() * 1000)
 
-
 class ControlService(BaseModule):
-    """
-    统一控制服务：BLE 远端 + 本地语音 → 统一入口 → 事件发布
-
-    无模块依赖，只通过 EventBus 发布事件
-    """
 
     def __init__(self, event_bus=None):
-        """
-        brief 初始化控制服务实例
-        param event_bus: 事件总线实例引用
-        """
         super().__init__()
         self.event_bus = event_bus
         self.name = "control_service"
-
-        # ===================== 四元组：静态配置 =====================
         self.cfg = {
-            "brightness_step": 10,       # 亮度调节步长 (%)
-            "brightness_max": LIGHT_BRIGHTNESS_MAX,  # 最大亮度（18W灯散热限制）
-            "volume_step": 1,            # 音量调节步长
-            "volume_max": 5,             # 最大音量（对齐 AudioDriver 0-5）
-            "volume_min": 0,             # 最小音量
-            "default_brightness": LIGHT_BRIGHTNESS_MAX,  # 开灯默认亮度
-            "cmd_debounce_ms": 300,      # 指令防抖间隔 (ms)
+            "brightness_step": 10,
+            "brightness_max": LIGHT_BRIGHTNESS_MAX,
+            "volume_step": 1,
+            "volume_max": 5,
+            "volume_min": 0,
+            "default_brightness": LIGHT_BRIGHTNESS_MAX,
+            "cmd_debounce_ms": 300,
         }
-
-        # ===================== 四元组：运行时上下文 =====================
         self.ctx = {
             "is_init": False,
             "err_count": 0,
-            "last_cmd_tick": 0,          # 上次指令时间戳（防抖）
+            "last_cmd_tick": 0,
         }
-
-        # ===================== 四元组：当前数据 =====================
         self._data = {
-            "last_cmd": "",              # 上次执行的指令
-            "last_cmd_source": "",       # 指令来源（ble / voice）
+            "last_cmd": "",
+            "last_cmd_source": "",
         }
-
-        # 控制状态（乐观缓存，回推到小程序）
         self._control_state = {
-            "light_mode": "auto",        # auto / manual
-            "light_brightness": 0,       # 0-100
-            "volume": 5,                 # 0-5（对齐 AudioDriver）
-            "power_mode": "active",      # active / suspended / emergency
+            "light_mode": "auto",
+            "light_brightness": 0,
+            "volume": 5,
+            "power_mode": "active",
         }
-
-        # 指令分发表 — 全部发布事件，不直接调用模块
+        self._sensor_cache = {
+            "temperature": None,
+            "humidity": None,
+            "speed_kmh": None,
+            "latitude": None,
+            "longitude": None,
+        }
+        self._alarm_active = False
         self._cmd_handlers = {
             "light_on":        lambda: self._pub(EVENT_LIGHT_CONTROL, {"cmd": "on"}),
             "light_off":       lambda: self._pub(EVENT_LIGHT_CONTROL, {"cmd": "off"}),
@@ -99,89 +71,59 @@ class ControlService(BaseModule):
             "power_save":      lambda: self._pub(EVENT_POWER_STATE_CHANGE, {"power_state": POWER_STATE_SUSPENDED}),
             "power_normal":    lambda: self._pub(EVENT_POWER_STATE_CHANGE, {"power_state": POWER_STATE_ACTIVE}),
             "power_emergency": lambda: self._pub(EVENT_POWER_STATE_CHANGE, {"power_state": POWER_STATE_EMERGENCY}),
+            "query_status":    lambda: self._query_status(),
+            "query_speed":     lambda: self._query_speed(),
+            "query_temp":      lambda: self._query_temp(),
+            "query_humid":     lambda: self._query_humid(),
+            "query_location":  lambda: self._query_location(),
+            "query_battery":   lambda: self._tts("电量信息暂不可用"),
         }
 
     def init(self):
-        """
-        brief 初始化服务：订阅事件
-        note 失败时直接 raise，main.py会捕获并停止启动
-        """
         try:
             if self.event_bus:
                 self.event_bus.subscribe(EVENT_RIDE_CONTROL, self._on_ride_control)
-                # 语音指令预留（等 VoiceDriver 就绪后启用）
-                # self.event_bus.subscribe(EVENT_VOICE_CMD, self._on_voice_cmd)
-
+                self.event_bus.subscribe(EVENT_VOICE_CMD, self._on_voice_cmd)
+                self.event_bus.subscribe(EVENT_TEMP_HUMID_READY, self._on_temp_humid)
+                self.event_bus.subscribe(EVENT_GNSS_READY, self._on_gnss)
+                self.event_bus.subscribe(EVENT_ALARM_TRIGGERED, self._on_alarm_triggered)
+                self.event_bus.subscribe(EVENT_ALARM_CANCELED, self._on_alarm_canceled)
             self.ctx["is_init"] = True
-            print("[{}] OK init".format(self.name))
-
+            print("[%s] OK init" % self.name)
         except Exception as e:
-            print("[{}] FAIL init: {}".format(self.name, e))
+            print("[%s] FAIL init: %s" % (self.name, e))
             raise
 
     def tick(self):
-        """
-        brief 周期调度：纯事件驱动，tick()为空实现
-        """
         pass
 
-    # ==================== 事件发布 ====================
-
     def _pub(self, event, payload):
-        """
-        brief 发布事件到 EventBus
-        param event: 事件名称常量
-        param payload: 事件负载 dict
-        """
         if self.event_bus:
             self.event_bus.publish(event, payload)
 
-    # ==================== 事件回调 ====================
-
     def _on_ride_control(self, payload):
-        """
-        brief BLE 远端控制事件回调
-        param payload: {"raw": "{\"a\":\"ctrl\",\"d\":{\"cmd\":\"light_on\"}}"}
-        """
         raw = payload.get("raw", "")
         try:
             cmd_obj = json.loads(raw)
         except Exception as e:
-            print("[{}] JSON解析失败: {} | raw={}".format(
-                self.name, e, str(raw)[:50]))
+            print("[%s] JSON err: %s" % (self.name, e))
             self.ctx["err_count"] += 1
             return
-
         if cmd_obj.get("a") != "ctrl":
             return
-
         cmd = cmd_obj.get("d", {}).get("cmd", "")
         self._execute_cmd(cmd, source="ble")
 
     def _on_voice_cmd(self, payload):
-        """
-        brief 语音指令事件回调（等 VoiceDriver 就绪后启用）
-        param payload: {"cmd": "light_on", "id": 1}
-        """
         cmd = payload.get("cmd", "")
         self._execute_cmd(cmd, source="voice")
 
-    # ==================== 指令执行 ====================
-
     def _execute_cmd(self, cmd, source="unknown"):
-        """
-        brief 执行控制指令（统一入口）
-        param cmd: 指令字符串
-        param source: 指令来源（ble / voice）
-        """
         if not cmd:
             return
-
-        # 防抖
         now = _ticks_ms()
         if time.ticks_diff(now, self.ctx["last_cmd_tick"]) < self.cfg["cmd_debounce_ms"]:
             return
-
         handler = self._cmd_handlers.get(cmd)
         if handler:
             try:
@@ -189,24 +131,21 @@ class ControlService(BaseModule):
                 self.ctx["last_cmd_tick"] = now
                 self._data["last_cmd"] = cmd
                 self._data["last_cmd_source"] = source
-                # 乐观更新本地状态缓存
                 self._update_control_state(cmd)
                 self._push_state()
-                print("[{}] cmd={} src={}".format(self.name, cmd, source))
+                if cmd not in ("power_save", "power_normal", "power_emergency") and not cmd.startswith("query_"):
+                    if self._control_state["power_mode"] != "active":
+                        self._control_state["power_mode"] = "custom"
+                        if self.event_bus:
+                            self.event_bus.publish(EVENT_POWER_STATE_CHANGE, {"power_state": POWER_STATE_CUSTOM})
+                print("[%s] cmd=%s src=%s" % (self.name, cmd, source))
             except Exception as e:
                 self.ctx["err_count"] += 1
-                print("[{}] cmd执行异常: {} | cmd={}".format(
-                    self.name, e, cmd))
+                print("[%s] cmd err: %s cmd=%s" % (self.name, e, cmd))
         else:
-            print("[{}] unknown cmd: {}".format(self.name, cmd))
-
-    # ==================== 状态乐观更新 ====================
+            print("[%s] unknown: %s" % (self.name, cmd))
 
     def _update_control_state(self, cmd):
-        """
-        brief 根据指令乐观更新本地状态缓存
-        note 不依赖模块回推，足够小程序 UI 使用
-        """
         if cmd == "light_on":
             self._control_state["light_mode"] = "manual"
             self._control_state["light_brightness"] = self.cfg["default_brightness"]
@@ -239,23 +178,78 @@ class ControlService(BaseModule):
         elif cmd == "power_emergency":
             self._control_state["power_mode"] = "emergency"
 
-    # ==================== 状态回推 ====================
+    def _on_temp_humid(self, payload):
+        if payload.get("valid"):
+            self._sensor_cache["temperature"] = payload.get("temp")
+            self._sensor_cache["humidity"] = payload.get("humid")
+
+    def _on_gnss(self, payload):
+        if payload.get("valid"):
+            self._sensor_cache["speed_kmh"] = payload.get("speed_kmh")
+            self._sensor_cache["latitude"] = payload.get("latitude")
+            self._sensor_cache["longitude"] = payload.get("longitude")
+
+    def _on_alarm_triggered(self, payload):
+        self._alarm_active = True
+
+    def _on_alarm_canceled(self, payload):
+        self._alarm_active = False
+
+    def _tts(self, text):
+        if self._alarm_active:
+            print("[%s] TTS blocked during alarm" % self.name)
+            return
+        if self.event_bus:
+            self.event_bus.publish(EVENT_TTS_REQUEST, {"text": text})
+
+    def _query_status(self):
+        cs = self._control_state
+        parts = []
+        if cs["light_mode"] == "auto":
+            parts.append("灯光自动模式")
+        else:
+            parts.append("灯光亮度百分之%d" % cs["light_brightness"])
+        parts.append("音量%d" % cs["volume"])
+        mode_map = {"active": "正常模式", "suspended": "省电模式",
+                    "emergency": "超级省电", "custom": "自定义模式"}
+        parts.append(mode_map.get(cs["power_mode"], cs["power_mode"]))
+        self._tts("，".join(parts))
+
+    def _query_speed(self):
+        speed = self._sensor_cache.get("speed_kmh")
+        if speed is not None:
+            self._tts("当前时速%d公里" % int(speed))
+        else:
+            self._tts("速度信息暂不可用")
+
+    def _query_temp(self):
+        temp = self._sensor_cache.get("temperature")
+        if temp is not None:
+            self._tts("当前温度%d度" % int(temp))
+        else:
+            self._tts("温度信息暂不可用")
+
+    def _query_humid(self):
+        humid = self._sensor_cache.get("humidity")
+        if humid is not None:
+            self._tts("当前湿度百分之%d" % int(humid))
+        else:
+            self._tts("湿度信息暂不可用")
+
+    def _query_location(self):
+        lat = self._sensor_cache.get("latitude")
+        lon = self._sensor_cache.get("longitude")
+        if lat is not None and lon is not None:
+            self._tts("当前位置北纬%.4f东经%.4f" % (lat, lon))
+        else:
+            self._tts("位置信息暂不可用")
 
     def _push_state(self):
-        """
-        brief 推送控制状态到 BLE（通过 EventBus）
-        """
         if self.event_bus:
             self.event_bus.publish(EVENT_CONTROL_STATE_CHANGED,
                                    dict(self._control_state))
 
-    # ==================== 数据接口 ====================
-
     def get_data(self):
-        """
-        brief 获取控制数据快照
-        return dict {last_cmd, last_cmd_source, control_state, timestamp}
-        """
         return {
             "last_cmd": self._data["last_cmd"],
             "last_cmd_source": self._data["last_cmd_source"],
@@ -264,10 +258,6 @@ class ControlService(BaseModule):
         }
 
     def get_status(self):
-        """
-        brief 获取运行状态快照
-        return dict {is_init, err_count, control_state}
-        """
         return {
             "is_init": self.ctx["is_init"],
             "err_count": self.ctx["err_count"],
