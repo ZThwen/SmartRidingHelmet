@@ -80,8 +80,10 @@ def make_system():
     return bus, ctrl, alarm, light, led, audio, pwm
 
 
-def send_cmd(bus, cmd):
+def send_cmd(bus, cmd, ctrl=None):
     import json
+    if ctrl:
+        ctrl.ctx["last_cmd_tick"] = 0  # 重置防抖，允许连续发送
     raw = json.dumps({"a": "ctrl", "d": {"cmd": cmd}})
     bus.publish(EVENT_RIDE_CONTROL, {"raw": raw})
     bus.pump()
@@ -101,8 +103,8 @@ def test_light_on_flow():
 def test_light_off_flow():
     """ControlService light_off → PWM 0%"""
     bus, ctrl, alarm, light, led, audio, pwm = make_system()
-    send_cmd(bus, "light_on")
-    send_cmd(bus, "light_off")
+    send_cmd(bus, "light_on", ctrl)
+    send_cmd(bus, "light_off", ctrl)
     assert pwm.duty == 0
     print("  OK light_off_flow")
 
@@ -142,9 +144,9 @@ def test_alarm_stealth_flow():
 def test_alarm_cancel_flow():
     """alarm_cancel → 取消报警"""
     bus, ctrl, alarm, light, led, audio, pwm = make_system()
-    send_cmd(bus, "alarm_sos")
+    send_cmd(bus, "alarm_sos", ctrl)
     assert alarm.ctx["alarm_active"] == True
-    send_cmd(bus, "alarm_cancel")
+    send_cmd(bus, "alarm_cancel", ctrl)
     assert alarm.ctx["alarm_active"] == False
     print("  OK alarm_cancel_flow")
 
