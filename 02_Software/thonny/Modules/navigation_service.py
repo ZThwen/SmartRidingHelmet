@@ -1,34 +1,17 @@
-"""
-brief 导航指令服务 - 接收BLE导航指令，TTS播报 + LCD显示
-note Service层业务服务，MicroPython环境，在真实硬件上运行
-
-功能：
-1. 订阅 EVENT_NAV_CMD 事件（来自 BLE FFF2 写入）
-2. 解析 JSON 导航指令（方向、距离、路名）
-3. 调用 Audio.play_tts() 播报中文导航
-4. 在 LCD 底部 (y=110) 写导航摘要行
-
-数据流：
-    小程序(Tencent Map) → BLE FFF2 → EVENT_NAV_CMD → NavigationService → TTS + LCD
-"""
 import time
 import json
 import _thread
-
 from core.Base_Module import BaseModule
 from core.config import (
     EVENT_NAV_CMD,
     TTS_NAV_ARRIVE, TTS_NAV_CANCEL,
 )
-
 # CPython 兼容：MicroPython 有 time.ticks_ms()，CPython 没有
 try:
     _ticks_ms = time.ticks_ms
 except AttributeError:
     def _ticks_ms():
         return int(time.time() * 1000)
-
-# 方向映射：Tencent Maps action → 中文
 _DIR_MAP = {
     "left":        "左转",
     "right":       "右转",
@@ -39,8 +22,6 @@ _DIR_MAP = {
     "arrive":      "到达目的地",
     "cancel":      "导航结束",
 }
-
-# LCD 方向符号
 _DIR_SYMBOL = {
     "left":        "<",
     "right":       ">",
@@ -51,87 +32,41 @@ _DIR_SYMBOL = {
     "arrive":      "*",
     "cancel":      "x",
 }
-
-
 def _map_direction(dir_str):
-    """方向字符串映射为中文，未知方向 fallback 为"直行" """
     return _DIR_MAP.get(dir_str, "直行")
-
-
 def _build_tts_text(dir_str, dist, road):
-    """
-    构造 TTS 播报文本
-    有路名: "前方200米右转进入中山路"
-    无路名: "前方200米右转"
-    到达:   "已到达目的地"
-    取消:   "导航已结束"
-    """
     if dir_str == "arrive":
         return TTS_NAV_ARRIVE
     if dir_str == "cancel":
         return TTS_NAV_CANCEL
-
     cn_dir = _map_direction(dir_str)
     if road:
         return "前方%d米%s进入%s" % (dist, cn_dir, road)
     else:
         return "前方%d米%s" % (dist, cn_dir)
-
-
 def _build_lcd_text(dir_str, dist, road):
-    """
-    构造 LCD 导航行文本（尽量短，适配 160px 宽度）
-    有路名: "> 200m 中山路"
-    无路名: "> 200m"
-    到达:   "已到达"
-    取消:   "导航结束"
-    """
     if dir_str == "arrive":
         return "已到达"
     if dir_str == "cancel":
         return "导航结束"
-
     sym = _DIR_SYMBOL.get(dir_str, "^")
     if road:
-        # 截断路名避免超出屏幕（约 20 字符上限）
         short_road = road[:10]
         return "%s %dm %s" % (sym, dist, short_road)
     else:
         return "%s %dm" % (sym, dist)
-
-
 class NavigationService(BaseModule):
-    """
-    导航指令服务：接收BLE导航指令，TTS播报 + LCD显示
-
-    事件流：
-        EVENT_NAV_CMD → 解析JSON → TTS + LCD
-
-    注入依赖：
-        audio_driver: AudioDriver.play_tts() 播报
-        lcd_driver: LCDDriver.lcd.show_string() 写LCD
-    """
-
     def __init__(self, event_bus=None, audio_driver=None, lcd_driver=None):
-        """
-        brief 初始化导航指令服务实例
-        param event_bus: 事件总线实例引用
-        param audio_driver: Audio 驱动实例（由主循环创建后注入）
-        param lcd_driver: LCD 驱动实例（由主循环创建后注入）
-        """
         super().__init__()
         self.event_bus = event_bus
         self.name = "navigation"
-
         self.audio_driver = audio_driver
         self.lcd_driver = lcd_driver
-
         self.cfg = {
-            "nav_line_y": 110,       # LCD 导航行 y 坐标
-            "nav_line_x": 5,         # LCD 导航行 x 坐标
-            "sample_ms": 1000,       # tick 检查间隔
+            "nav_line_y": 110,
+            "nav_line_x": 5,
+            "sample_ms": 1000,
         }
-
         self.ctx = {
             "is_init": False,
             "is_navigating": False,
@@ -142,7 +77,6 @@ class NavigationService(BaseModule):
             "last_tick": 0,
             "err_count": 0,
         }
-
         self._data = {
             "is_navigating": False,
             "current_dir": "",
@@ -151,29 +85,18 @@ class NavigationService(BaseModule):
             "last_tts": "",
             "last_lcd": "",
         }
-
     def init(self):
-        """初始化：订阅 EVENT_NAV_CMD"""
         try:
             if self.event_bus:
                 self.event_bus.subscribe(EVENT_NAV_CMD, self._on_nav_cmd)
-
             self.ctx["is_init"] = True
             print("[{}] 初始化完成".format(self.name))
-
         except Exception as e:
             print("[{}] 初始化失败: {}".format(self.name, e))
             raise
-
     def tick(self):
-        """事件驱动，无需轮询"""
         pass
-
     def _on_nav_cmd(self, payload):
-        """
-        处理导航指令事件
-        payload: {"raw": "{\"a\":\"nav\",\"d\":{\"dir\":\"right\",\"dist\":200,\"road\":\"中山路\"}}"}
-        """
         print("[nav] 收到事件: %s" % str(payload)[:80])
         raw = payload.get("raw", "")
         try:
@@ -182,37 +105,27 @@ class NavigationService(BaseModule):
             print("[nav] JSON解析失败: %s | raw=%s" % (e, str(raw)[:50]))
             self.ctx["err_count"] += 1
             return
-
         action = cmd.get("a", "")
         if action != "nav":
             return
-
         d = cmd.get("d", {})
         dir_str = d.get("dir", "straight")
         dist = d.get("dist", 0)
         road = d.get("road", "")
-
-        # 更新状态
         self.ctx["current_dir"] = dir_str
         self.ctx["current_dist"] = dist
         self.ctx["current_road"] = road
-
         if dir_str in ("arrive", "cancel"):
             self.ctx["is_navigating"] = False
         else:
             self.ctx["is_navigating"] = True
-
-        # 同步到 _data
         self._data["is_navigating"] = self.ctx["is_navigating"]
         self._data["current_dir"] = dir_str
         self._data["current_dist"] = dist
         self._data["current_road"] = road
-
-        # TTS 播报（非阻塞：子线程播放，防重入）
         tts_text = _build_tts_text(dir_str, dist, road)
         self._data["last_tts"] = tts_text
         print("[nav] ▶ TTS: %s" % tts_text)
-
         if self.audio_driver:
             if self.ctx.get("is_tts_playing"):
                 print("[nav] TTS 播放中，跳过")
@@ -226,21 +139,16 @@ class NavigationService(BaseModule):
                         pass
                     svc.ctx["is_tts_playing"] = False
                 _thread.start_new_thread(_tts_thread, (tts_text, self.audio_driver, svc_ref))
-
-        # LCD 导航行（同步，很快）
         lcd_text = _build_lcd_text(dir_str, dist, road)
         self._data["last_lcd"] = lcd_text
         self._write_nav_line(lcd_text)
         print("[nav] LCD: %s" % lcd_text)
-
     def _write_nav_line(self, text):
-        """在 LCD 底部写导航行"""
         if not self.lcd_driver:
             return
         try:
             if hasattr(self.lcd_driver, 'lcd') and hasattr(self.lcd_driver.lcd, 'show_string'):
                 lcd = self.lcd_driver.lcd
-                # 先用黑色矩形清除旧内容
                 lcd.fill_rectangle(
                     self.cfg["nav_line_x"],
                     self.cfg["nav_line_y"],
@@ -254,9 +162,7 @@ class NavigationService(BaseModule):
         except Exception as e:
             print("[{}] LCD写入失败: {}".format(self.name, e))
             self.ctx["err_count"] += 1
-
     def get_data(self):
-        """获取当前导航数据"""
         return {
             "is_navigating": self._data["is_navigating"],
             "current_dir": self._data["current_dir"],
@@ -266,9 +172,7 @@ class NavigationService(BaseModule):
             "last_lcd": self._data["last_lcd"],
             "timestamp": _ticks_ms(),
         }
-
     def get_status(self):
-        """获取模块运行状态"""
         return {
             "is_init": self.ctx["is_init"],
             "is_navigating": self.ctx["is_navigating"],
