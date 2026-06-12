@@ -22,7 +22,7 @@ from Drivers.actuator.LED import LEDDriver
 from Drivers.actuator.Audio import AudioDriver
 from Drivers.actuator.PWM_LED import PWMLEDDriver
 from Drivers.sensor.Light import LightSensorDriver
-from Drivers.network.BLE import BLE
+from Drivers.network.BLE import BLEDriver
 from Modules.light_service import LightService
 from Modules.alarm_service import AlarmService
 from Modules.ble_service import BLEService
@@ -59,8 +59,13 @@ def pump_loop(event_bus, modules, duration_s=3):
 def prompt_and_watch(msg, event_bus, modules, duration_s=5):
     state_pushes.clear()
     tts_events.clear()
-    print("\n  >>> %s (观察 %d 秒)" % (msg, duration_s))
-    print("  >>> 用 NRF Connect 写入 FFF3，然后观察硬件反应")
+    print("\n  >>> %s" % msg)
+    print("  >>> 准备好后按回车开始（%d 秒观察）" % duration_s)
+    try:
+        input()
+    except (EOFError, KeyboardInterrupt):
+        return
+    print("  >>> 开始计时 %d 秒，用 NRF Connect 写入 FFF3..." % duration_s)
     start = time.ticks_ms()
     while time.ticks_diff(time.ticks_ms(), start) < duration_s * 1000:
         for mod in modules:
@@ -73,9 +78,11 @@ def prompt_and_watch(msg, event_bus, modules, duration_s=5):
         time.sleep_ms(100)
     print("  --- 收到 %d 次状态回推, %d 次 TTS ---" % (len(state_pushes), len(tts_events)))
     if state_pushes:
-        print("  最新状态: %s" % state_pushes[-1])
+        for i, s in enumerate(state_pushes):
+            print("  状态[%d]: %s" % (i, s))
     if tts_events:
-        print("  最新 TTS: %s" % tts_events[-1].get("text", ""))
+        for t in tts_events:
+            print("  TTS: %s" % t.get("text", ""))
 
 
 def send_json(event_bus, cmd):
@@ -113,7 +120,7 @@ def main():
     audio = AudioDriver(event_bus)
     pwm_led = PWMLEDDriver(event_bus)
     light_sensor = LightSensorDriver(event_bus)
-    ble_driver = BLE(event_bus)
+    ble_driver = BLEDriver(event_bus)
 
     # Service 层（ControlService 无模块依赖）
     light_svc = LightService(event_bus, pwm_led=pwm_led)
