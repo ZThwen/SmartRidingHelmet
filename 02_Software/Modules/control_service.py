@@ -25,6 +25,7 @@ from core.config import (
     EVENT_POWER_STATE_CHANGE, EVENT_VOICE_CMD,
     EVENT_LIGHT_CONTROL, EVENT_VOLUME_CONTROL, EVENT_ALARM_CONTROL,
     POWER_STATE_ACTIVE, POWER_STATE_SUSPENDED, POWER_STATE_EMERGENCY,
+    LIGHT_BRIGHTNESS_MAX,
 )
 
 # CPython 兼容
@@ -54,10 +55,11 @@ class ControlService(BaseModule):
         # ===================== 四元组：静态配置 =====================
         self.cfg = {
             "brightness_step": 10,       # 亮度调节步长 (%)
+            "brightness_max": LIGHT_BRIGHTNESS_MAX,  # 最大亮度（18W灯散热限制）
             "volume_step": 1,            # 音量调节步长
             "volume_max": 5,             # 最大音量（对齐 AudioDriver 0-5）
             "volume_min": 0,             # 最小音量
-            "default_brightness": 50,    # 开灯默认亮度 (%)
+            "default_brightness": LIGHT_BRIGHTNESS_MAX,  # 开灯默认亮度
             "cmd_debounce_ms": 300,      # 指令防抖间隔 (ms)
         }
 
@@ -214,7 +216,8 @@ class ControlService(BaseModule):
         elif cmd == "brightness_up":
             self._control_state["light_mode"] = "manual"
             self._control_state["light_brightness"] = min(
-                self._control_state["light_brightness"] + self.cfg["brightness_step"], 100)
+                self._control_state["light_brightness"] + self.cfg["brightness_step"],
+                self.cfg["brightness_max"])
         elif cmd == "brightness_down":
             self._control_state["light_mode"] = "manual"
             self._control_state["light_brightness"] = max(

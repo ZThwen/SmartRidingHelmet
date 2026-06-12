@@ -95,15 +95,16 @@ class LightService(BaseModule):
         param payload: {cmd: "on"/"off"/"auto"/"brightness_up"/"brightness_down"}
         """
         cmd = payload.get("cmd", "")
+        max_brightness = self.cfg["brightness_max"]
         if cmd == "on":
-            self.set_manual_brightness(50)
+            self.set_manual_brightness(max_brightness)
         elif cmd == "off":
             self.set_manual_brightness(0)
         elif cmd == "auto":
             self.set_auto_mode()
         elif cmd == "brightness_up":
             current = self._data.get("current_brightness", 0)
-            self.set_manual_brightness(min(current + 10, 100))
+            self.set_manual_brightness(min(current + 10, max_brightness))
         elif cmd == "brightness_down":
             current = self._data.get("current_brightness", 0)
             self.set_manual_brightness(max(current - 10, 0))
