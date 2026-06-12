@@ -1,6 +1,14 @@
+"""
+brief BLEService — BLE 推送服务
+note 双线程架构：
+       主线程：收事件 → 缓存 → tick() 拼装 JSON → send_queue.put()
+       后台线程：send_queue.get() → BLEDriver.notify_data()
+      绝不阻塞主循环，与 CloudService/LarkCloudService 相同模式
+"""
 import time
 import json
 import _thread
+
 from core.Base_Module import BaseModule
 from core.config import (
     EVENT_BLE_CONNECTED, EVENT_BLE_DISCONNECTED,
@@ -11,17 +19,22 @@ from core.config import (
     BLE_UPLOAD_INTERVAL_MS, BLE_KEEPALIVE_MS,
 )
 from Drivers.network.thread_queue import ThreadSafeQueue
+
+
 class BLEService(BaseModule):
+
     def __init__(self, event_bus=None, ble_driver=None):
         super().__init__()
         self.event_bus = event_bus
         self.name = "ble_service"
         self._ble = ble_driver
+
         self.cfg = {
             "upload_interval_ms": BLE_UPLOAD_INTERVAL_MS,
             "keepalive_ms": BLE_KEEPALIVE_MS,
             "queue_max_size": 20,
         }
+
         self.ctx = {
             "is_init": False,
             "thread_running": False,
@@ -32,6 +45,7 @@ class BLEService(BaseModule):
             "force_push": False,
             "consecutive_errors": 0,
         }
+
         self._data = {
             "latest_temp": None,
             "latest_humid": None,
@@ -45,10 +59,13 @@ class BLEService(BaseModule):
             "latest_cog": None,
             "latest_lux": None,
         }
+
         self.send_queue = None
+
     def init(self):
         try:
             self.send_queue = ThreadSafeQueue(max_size=self.cfg["queue_max_size"])
+
             if self.event_bus:
                 self.event_bus.subscribe(EVENT_BLE_CONNECTED, self._on_connected)
                 self.event_bus.subscribe(EVENT_BLE_DISCONNECTED, self._on_disconnected)
@@ -59,37 +76,47 @@ class BLEService(BaseModule):
                 self.event_bus.subscribe(EVENT_ALARM_TRIGGERED, self._on_alarm)
                 self.event_bus.subscribe(EVENT_ALARM_CANCELED, self._on_alarm_canceled)
                 self.event_bus.subscribe(EVENT_CONTROL_STATE_CHANGED, self._on_control_state)
+
             self.ctx["thread_running"] = True
             _thread.stack_size(4096)
             _thread.start_new_thread(self._notify_thread, ())
+
             self.ctx["is_init"] = True
             print("[%s] ✓ BLE 推送服务已启动" % self.name)
+
         except Exception as e:
             self.ctx["err_count"] += 1
             print("[%s] ✗ 初始化失败: %s" % (self.name, e))
             raise
+
     def tick(self):
         if not self.ctx["is_init"]:
             return
+
         now = time.ticks_ms()
+
         if self.ctx["force_push"]:
             self.ctx["force_push"] = False
             self.ctx["last_upload"] = now
             self._enqueue_merged()
+
         if time.ticks_diff(now, self.ctx["last_upload"]) < self.cfg["upload_interval_ms"]:
             pass
         else:
             self.ctx["last_upload"] = now
             self._enqueue_merged()
+
         if time.ticks_diff(now, self.ctx["last_keepalive"]) >= self.cfg["keepalive_ms"]:
             self.ctx["last_keepalive"] = now
             if self.ctx["ble_connected"]:
                 self.send_queue.put('{"t":99,"d":{"s":"ok"}}')
+
     def _enqueue_merged(self):
         if not self.ctx["ble_connected"]:
             return
         if not self._ble or not self._ble.ctx["is_connected"]:
             return
+
         d = {}
         if self._data["latest_temp"] is not None:
             d["tmp"] = self._data["latest_temp"]
@@ -103,9 +130,11 @@ class BLEService(BaseModule):
                 d["cog"] = self._data["latest_cog"]
         if self._data["latest_lux"] is not None:
             d["lux"] = self._data["latest_lux"]
+
         if not d:
             return
         self.send_queue.put(json.dumps({"t": 0, "d": d}))
+
     def _notify_thread(self):
         CIRCUIT_BREAKER_THRESHOLD = 10
         while self.ctx["thread_running"]:
@@ -126,25 +155,30 @@ class BLEService(BaseModule):
                 self.ctx["err_count"] += 1
                 self.ctx["consecutive_errors"] += 1
                 print("[%s] 后台线程异常: %s" % (self.name, e))
+
     def _on_connected(self, payload):
         self.ctx["ble_connected"] = True
         self.ctx["consecutive_errors"] = 0
         self.ctx["force_push"] = True
+
     def _on_disconnected(self, payload):
         self.ctx["ble_connected"] = False
         if self.send_queue:
             self.send_queue.clear()
+
     def _on_temp_humid(self, payload):
         if not payload.get("valid", False):
             return
         self._data["latest_temp"] = payload.get("temp")
         self._data["latest_humid"] = payload.get("humid")
+
     def _on_imu(self, payload):
         if not payload.get("valid", False):
             return
         self._data["latest_ax"] = payload.get("acc_x")
         self._data["latest_ay"] = payload.get("acc_y")
         self._data["latest_az"] = payload.get("acc_z")
+
     def _on_gnss(self, payload):
         if not payload.get("valid", False):
             return
@@ -153,22 +187,33 @@ class BLEService(BaseModule):
         self._data["latest_alt"] = payload.get("altitude")
         self._data["latest_spd"] = payload.get("speed_kmh")
         self._data["latest_cog"] = payload.get("cog", 0.0)
+
     def _on_light(self, payload):
         if not payload.get("valid", False):
             return
         self._data["latest_lux"] = payload.get("light_intensity")
+
     def _on_alarm(self, payload):
         alarm_type = payload.get("alarm_type", "collision")
         level = payload.get("level", 1)
+        # 压缩载荷：15 字节（原 46 字节），避免超出 ATT_MTU 导致 +CME ERROR: 53
         type_code = 1 if alarm_type == "collision" else 2
         msg = json.dumps({"t": 5, "a": type_code, "l": level})
         self.send_queue.put(msg)
         self.ctx["force_push"] = False
+
     def _on_alarm_canceled(self, payload):
         self.send_queue.put('{"t":6,"d":{}}')
+
     def _on_control_state(self, payload):
+        """
+        brief 控制状态变更回调
+        param payload: 控制状态字典 {light_mode, light_brightness, volume, power_mode}
+        note 通过 BLE Notify 推送到小程序，type=7
+        """
         msg = json.dumps({"t": 7, "d": payload})
         self.send_queue.put(msg)
+
     def get_data(self):
         return {
             "ble_connected": self.ctx["ble_connected"],
@@ -176,6 +221,7 @@ class BLEService(BaseModule):
             "err_count": self.ctx["err_count"],
             "timestamp": time.ticks_ms(),
         }
+
     def get_status(self):
         return {
             "is_init": self.ctx["is_init"],
@@ -184,7 +230,9 @@ class BLEService(BaseModule):
             "err_count": self.ctx["err_count"],
             "consecutive_errors": self.ctx["consecutive_errors"],
         }
+
     def deinit(self):
         self.ctx["thread_running"] = False
+        # 等待后台线程退出：线程 idle 睡眠 100ms + 熔断睡眠 500ms
         time.sleep_ms(700)
         self.ctx["is_init"] = False

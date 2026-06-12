@@ -54,10 +54,16 @@ EVENT_BLE_CONNECTED         = "BLE_CONNECTED"          # BLE 连接成功
 EVENT_BLE_DISCONNECTED      = "BLE_DISCONNECTED"       # BLE 断开连接
 EVENT_NAV_CMD               = "NAV_CMD"                # 导航指令（手机→头盔）
 EVENT_RIDE_CONTROL          = "RIDE_CONTROL"           # 骑行控制指令
-EVENT_LIGHT_CONTROL         = "LIGHT_CONTROL"          # 灯光控制（远程）
-EVENT_VOLUME_CONTROL        = "VOLUME_CONTROL"         # 音量控制（远程）
-EVENT_ALARM_CONTROL         = "ALARM_CONTROL"          # 报警控制（远程）
 EVENT_BLE_ALARM_ACK         = "BLE_ALARM_ACK"          # 报警确认（手机取消）
+
+# 控制系统事件
+EVENT_CONTROL_STATE_CHANGED = "CONTROL_STATE_CHANGED"  # 控制状态变更（回推到小程序）
+EVENT_VOICE_CMD             = "VOICE_CMD"              # 语音指令（ASRPRO → ControlService）
+
+# 控制指令事件（ControlService → 各模块）
+EVENT_LIGHT_CONTROL         = "LIGHT_CONTROL"           # 灯光控制指令
+EVENT_VOLUME_CONTROL        = "VOLUME_CONTROL"          # 音量控制指令
+EVENT_ALARM_CONTROL         = "ALARM_CONTROL"           # 报警控制指令
 
 # ================= 默认参数配置 =================
 # 传感器采样间隔
@@ -83,7 +89,7 @@ AUDIO_TEST_FILE           = "SD:Test.mp3"         # 测试音频
 
 AUDIO_TTS_SPEED           = 85                     # TTS语速(0-100)
 AUDIO_TTS_VOLUME          = 50                     # TTS音量(0-100)
-AUDIO_SPEAKER_VOLUME      = 5                      # 扬声器音量(0-7)
+AUDIO_SPEAKER_VOLUME      = 5                      # 扬声器音量(0-5)
 AUDIO_ALARM_LOOP_COUNT    = 3                      # 报警音循环次数
 TTS_BATTERY_LOW           = "当前电量不足，请及时充电"
 TTS_BATTERY_CRITICAL      = "电池电量严重不足，请立即充电"
@@ -137,7 +143,7 @@ BATTERY_CRITICAL_THRESHOLD = 10    # 严重不足阈值(%)
 POWER_STATE_ACTIVE        = "ACTIVE"        # 正常工作状态
 POWER_STATE_SUSPENDED     = "SUSPENDED"     # 挂起状态
 POWER_STATE_DEEP_SLEEP    = "DEEP_SLEEP"    # 深度休眠状态
-POWER_STATE_EMERGENCY     = "EMERGENCY"     # 超级省电（仅 GPS+报警+BLE）
+POWER_STATE_EMERGENCY     = "EMERGENCY"     # 超级省电（仅 GPS + 报警 + BLE）
 
 # ================= 网络通信配置 =================
 NETWORK_CONNECT_TIMEOUT_MS = 60000    # 4G网络连接超时时间 (ms)
@@ -211,3 +217,19 @@ BLE_KEEPALIVE_MS          = 5000                    # 心跳间隔 (ms)
 # ================= LBS 基站定位配置 =================
 LBS_TIMEOUT_MS          = 15000    # LBS 定位超时 (ms)
 LBS_SAMPLE_MS           = 30000    # LBS 采样间隔 (ms)
+
+# ================= PWM LED 配置 =================
+EVENT_PWM_LED_ERROR     = "PWM_LED_ERROR"      # PWM控制错误
+PWM_LED_PIN             = "PE11"               # PWM引脚（STM32 PE11, TIM1_CH2）
+PWM_LED_TIMER_ID        = 1                    # Timer1
+PWM_LED_TIMER_CHANNEL   = 2                    # Channel 2
+PWM_LED_FREQ            = 1000                 # PWM频率 (Hz)
+
+# ================= LightService 自适应灯光配置 =================
+LIGHT_DAY_ADC_THRESHOLD    = 30000   # 白天阈值（ADC值 < 此值 → 光照强 → 灯不开）
+LIGHT_NIGHT_ADC_THRESHOLD  = 50000   # 晚上阈值（ADC值 > 此值 → 光照弱 → 灯最亮）
+LIGHT_BRIGHTNESS_MIN       = 5       # 最小亮度（%）
+LIGHT_BRIGHTNESS_MAX       = 50      # 最大亮度（%），18W灯散热限制
+LIGHT_GAMMA                = 1.5     # 非线性映射参数（>1时暗环境更敏感）
+LIGHT_BRIGHTNESS_THRESHOLD = 3       # 亮度变化阈值（小于此值不调节）
+LIGHT_DEBOUNCE_MS          = 50      # 防抖间隔（ms）
