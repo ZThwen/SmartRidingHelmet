@@ -11,7 +11,8 @@ sys.path.append("..")
 from core.Event_Bus import EventBus
 from core.config import (
     EVENT_COLLISION_DETECTED, EVENT_BUTTON_PRESSED, EVENT_GPS_LOST,
-    EVENT_ALARM_TRIGGERED, EVENT_ALARM_CANCELED, EVENT_CONFIG_UPDATE,
+    EVENT_ALARM_TRIGGERED, EVENT_ALARM_CANCELED, EVENT_ALARM_CONTROL,
+    EVENT_CONFIG_UPDATE,
     TTS_GPS_LOST, POWER_STATE_ACTIVE,
     AUDIO_ALARM_FILE_L1, AUDIO_SOS_FILE,
 )
@@ -132,6 +133,49 @@ def test_config_update_flow():
     print("  OK config update flow")
 
 
+def test_events_flow_alarm_sos():
+    """EVENT_ALARM_CONTROL{sos} → LED 快闪 + SOS 音"""
+    svc, bus, led, audio = make_service()
+    bus.publish(EVENT_ALARM_CONTROL, {"cmd": "sos"})
+    bus.pump()
+    assert svc.ctx["alarm_type"] == "sos"
+    assert led.calls[0][2] == 200
+    assert audio.calls[0] == ("play_file", AUDIO_SOS_FILE)
+    print("  OK events_flow_alarm_sos")
+
+
+def test_events_flow_alarm_stealth():
+    """EVENT_ALARM_CONTROL{stealth} → 静默报警"""
+    svc, bus, led, audio = make_service()
+    bus.publish(EVENT_ALARM_CONTROL, {"cmd": "stealth"})
+    bus.pump()
+    assert svc.ctx["alarm_type"] == "stealth"
+    assert svc.ctx["alarm_active"] == True
+    assert len(led.calls) == 0
+    assert len(audio.calls) == 0
+    print("  OK events_flow_alarm_stealth")
+
+
+def test_events_flow_alarm_cancel():
+    """EVENT_ALARM_CONTROL{cancel} → 取消报警"""
+    svc, bus, led, audio = make_service()
+    svc.trigger_sos()
+    bus.publish(EVENT_ALARM_CONTROL, {"cmd": "cancel"})
+    bus.pump()
+    assert svc.ctx["alarm_active"] == False
+    print("  OK events_flow_alarm_cancel")
+
+
+def test_stealth_no_hardware_calls():
+    """stealth 不触发 FakeLED/FakeAudio"""
+    svc, bus, led, audio = make_service()
+    bus.publish(EVENT_ALARM_CONTROL, {"cmd": "stealth"})
+    bus.pump()
+    assert led.calls == []
+    assert audio.calls == []
+    print("  OK stealth_no_hardware_calls")
+
+
 def main():
     print("=== AlarmService Integration Test ===\n")
     tests = [
@@ -141,6 +185,10 @@ def main():
         ("mainloop stability",       test_mainloop_stability),
         ("GPS lost flow",            test_gps_lost_flow),
         ("config update flow",       test_config_update_flow),
+        ("alarm_control SOS",        test_events_flow_alarm_sos),
+        ("alarm_control stealth",    test_events_flow_alarm_stealth),
+        ("alarm_control cancel",     test_events_flow_alarm_cancel),
+        ("stealth no hw calls",      test_stealth_no_hardware_calls),
     ]
     passed = 0
     for name, fn in tests:
