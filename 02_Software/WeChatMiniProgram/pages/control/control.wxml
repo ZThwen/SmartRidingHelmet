@@ -1,0 +1,151 @@
+<!-- 远端控制页 (Tactical Cyan) -->
+<view class="page" style="padding-top: {{statusBarHeight}}px;">
+
+  <!-- 自定义导航栏 -->
+  <view class="nav-bar" style="top: {{statusBarHeight}}px;">
+    <view class="nav-back" bindtap="onBackPress" hover-class="nav-back-hover">‹ 返回</view>
+    <view class="nav-title">
+      <text class="deco">≋</text>
+      <text>远端控制</text>
+      <text class="deco">≋</text>
+    </view>
+    <view class="nav-spacer"></view>
+  </view>
+
+  <!-- 导航状态条（仅导航中显示） -->
+  <view class="ctrl-nav-indicator" wx:if="{{showNavIndicator}}" bindtap="onNavIndicatorTap">
+    <text class="ctrl-nav-icon">→</text>
+    <view class="ctrl-nav-text">
+      <text class="ctrl-nav-instruction">{{navInstruction}}</text>
+      <text class="ctrl-nav-remain">剩余 {{navRemainDistance}}m</text>
+    </view>
+    <text class="ctrl-nav-goto">查看地图 ›</text>
+  </view>
+
+  <!-- 内容区 -->
+  <scroll-view class="ctrl-scroll" scroll-y="{{true}}" enhanced="{{true}}" show-scrollbar="{{false}}">
+
+    <!-- 灯光控制 -->
+    <view class="ctrl-section">
+      <view class="ctrl-section-title">
+        <text>灯光控制</text>
+        <view class="deco-line"></view>
+      </view>
+
+      <!-- 模式切换 -->
+      <view class="toggle-group">
+        <view class="toggle-btn {{lightMode === 'auto' ? 'active' : ''}}"
+              data-mode="auto" bindtap="onLightMode">
+          <text>自动</text>
+        </view>
+        <view class="toggle-btn {{lightMode === 'manual' ? 'active' : ''}}"
+              data-mode="manual" bindtap="onLightMode">
+          <text>手动</text>
+        </view>
+      </view>
+
+      <!-- 开关灯 -->
+      <view class="toggle-group">
+        <view class="toggle-btn {{lightMode === 'auto' ? 'disabled' : ''}}"
+              bindtap="onLightOn">
+          <text>开灯</text>
+        </view>
+        <view class="toggle-btn {{lightMode === 'auto' ? 'disabled' : ''}}"
+              bindtap="onLightOff">
+          <text>关灯</text>
+        </view>
+      </view>
+
+      <!-- 亮度滑条 -->
+      <view class="slider-row {{lightMode === 'auto' ? 'disabled' : ''}}">
+        <view class="slider-btn" bindtap="onBrightnessDown"><text>◀</text></view>
+        <view class="slider-track">
+          <view class="slider-fill" style="width: {{lightBrightness}}%;"></view>
+        </view>
+        <text class="slider-value">{{lightBrightness}}%</text>
+        <view class="slider-btn" bindtap="onBrightnessUp"><text>▶</text></view>
+      </view>
+    </view>
+
+    <!-- 音量控制 -->
+    <view class="ctrl-section">
+      <view class="ctrl-section-title">
+        <text>音量控制</text>
+        <view class="deco-line"></view>
+      </view>
+      <view class="volume-display">
+        <view class="vol-btn {{volume <= 0 ? 'disabled' : ''}}" bindtap="onVolumeDown"><text>▼</text></view>
+        <view class="vol-level">
+          <view class="vol-bar {{volume >= 1 ? 'active' : ''}}" style="height: 16rpx;"></view>
+          <view class="vol-bar {{volume >= 2 ? 'active' : ''}}" style="height: 28rpx;"></view>
+          <view class="vol-bar {{volume >= 3 ? 'active' : ''}}" style="height: 40rpx;"></view>
+          <view class="vol-bar {{volume >= 4 ? 'active' : ''}}" style="height: 52rpx;"></view>
+          <view class="vol-bar {{volume >= 5 ? 'active' : ''}}" style="height: 64rpx;"></view>
+          <view class="vol-bar {{volume >= 6 ? 'active' : ''}}" style="height: 76rpx;"></view>
+          <view class="vol-bar {{volume >= 7 ? 'active' : ''}}" style="height: 88rpx;"></view>
+        </view>
+        <text class="vol-value">{{volume}}/7</text>
+        <view class="vol-btn {{volume >= 7 ? 'disabled' : ''}}" bindtap="onVolumeUp"><text>▲</text></view>
+      </view>
+    </view>
+
+    <!-- 电源模式 -->
+    <view class="ctrl-section">
+      <view class="ctrl-section-title">
+        <text>电源模式</text>
+        <view class="deco-line"></view>
+      </view>
+      <view class="toggle-group">
+        <view class="toggle-btn {{powerMode === 'active' ? 'active' : ''}}"
+              data-mode="active" bindtap="onPowerMode">
+          <text>正常</text>
+        </view>
+        <view class="toggle-btn {{powerMode === 'suspended' ? 'active' : ''}}"
+              data-mode="save" bindtap="onPowerMode">
+          <text>省电</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 连接状态 -->
+    <view class="ctrl-section">
+      <view class="ctrl-section-title">
+        <text>连接状态</text>
+        <view class="deco-line"></view>
+      </view>
+      <view class="conn-status">
+        <view class="conn-dot {{bleConnected ? 'on' : 'off'}}"></view>
+        <view class="conn-info">
+          <text class="conn-name">{{bleConnected ? deviceName : '未连接'}}</text>
+          <text class="conn-detail">{{bleConnected ? 'BLE 已连接' : '请检查蓝牙'}}</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 底部间距（TabBar 遮挡） -->
+    <view style="height: 320rpx;"></view>
+  </scroll-view>
+
+  <!-- BLE 未连接提示 -->
+  <view class="ble-overlay" wx:if="{{!bleConnected}}">
+    <text class="ble-overlay-text">BLE 未连接，请先连接设备</text>
+  </view>
+
+  <!-- 报警弹窗 -->
+  <view class="alarm-popup" wx:if="{{showAlarmPopup}}">
+    <view class="alarm-pulse-border"></view>
+    <view class="alarm-popup-body">
+      <view class="alarm-icon-wrap">
+        <view class="alarm-icon-ring"></view>
+        <text class="alarm-icon">⚡</text>
+      </view>
+      <text class="alarm-type">报警触发</text>
+      <view class="alarm-cancel-btn" bindtap="onCancelAlarm">
+        <text>取消报警</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 自定义 TabBar -->
+  <custom-tab-bar></custom-tab-bar>
+</view>
