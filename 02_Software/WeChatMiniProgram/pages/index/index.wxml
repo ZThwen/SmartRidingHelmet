@@ -1,6 +1,6 @@
 <!-- 智能骑行头盔 — 首页 (Tactical Cyan) -->
 <canvas type="2d" id="dotCanvas" style="width:20px;height:20px;position:fixed;top:-100px;"></canvas>
-<view class="page" style="padding-top: {{statusBarHeight}}px;">
+<view class="page">
 
   <!-- 自定义导航栏 -->
   <view class="nav-bar" style="top: {{statusBarHeight}}px;">
@@ -35,6 +35,9 @@
 
   <!-- 数据卡片区 -->
   <scroll-view class="content-scroll" scroll-y="{{true}}" enhanced="{{true}}" show-scrollbar="{{false}}">
+
+    <!-- 顶部间距（状态栏 + 导航栏） -->
+    <view style="height: {{statusBarHeight}}px;"></view>
 
     <!-- BLE 连接状态 -->
     <view class="ble-status {{bleConnected ? 'connected' : ''}}">
