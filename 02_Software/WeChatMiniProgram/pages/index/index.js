@@ -12,6 +12,7 @@ var app = getApp();
 
 Page({
   data: {
+    statusBarHeight: 44,
     status: '未开始',
     isOnline: false,
     bleStatus: '未连接',
@@ -59,9 +60,10 @@ Page({
   },
 
   onLoad: function() {
+    var sysInfo = wx.getSystemInfoSync();
+    this.setData({ statusBarHeight: sysInfo.statusBarHeight || 44 });
     logger.init();
     logger.log('PAGE', '首页加载');
-    var sysInfo = wx.getSystemInfoSync();
     logger.log('PAGE', '基础库=' + sysInfo.SDKVersion + ' 平台=' + sysInfo.platform + ' 系统=' + sysInfo.system);
     var that = this;
 

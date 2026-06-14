@@ -39,7 +39,6 @@ page {
   align-items: center;
   justify-content: center;
   gap: 12rpx;
-  margin-right: 140rpx;
 }
 
 .nav-title .deco {
@@ -304,7 +303,7 @@ page {
 /* ===== BLE 未连接遮罩 ===== */
 .ble-overlay {
   position: fixed;
-  bottom: 320rpx;
+  bottom: 260rpx;
   left: 20rpx;
   right: 20rpx;
   background: rgba(8, 13, 23, 0.85);
