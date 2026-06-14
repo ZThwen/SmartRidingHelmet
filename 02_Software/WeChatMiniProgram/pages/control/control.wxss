@@ -8,6 +8,7 @@ page {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  overflow-y: auto;
 }
 
 /* ===== 导航栏 ===== */

@@ -25,11 +25,11 @@
     <text class="ctrl-nav-goto">查看地图 ›</text>
   </view>
 
-  <!-- 内容区 -->
-  <scroll-view class="ctrl-scroll" scroll-y="{{true}}" enhanced="{{true}}" show-scrollbar="{{false}}">
+  <!-- 导航栏占位 -->
+  <view style="height: calc({{statusBarHeight}}px + 88rpx);"></view>
 
-    <!-- 顶部间距（状态栏 + 导航栏） -->
-    <view style="height: {{statusBarHeight}}px;"></view>
+  <!-- 内容区 -->
+  <view class="ctrl-scroll">
 
     <!-- 灯光控制 -->
     <view class="ctrl-section">
@@ -130,7 +130,7 @@
 
     <!-- 底部间距（TabBar 遮挡） -->
     <view style="height: 320rpx;"></view>
-  </scroll-view>
+  </view>
 
   <!-- BLE 未连接提示 -->
   <view class="ble-overlay" wx:if="{{!bleConnected}}">

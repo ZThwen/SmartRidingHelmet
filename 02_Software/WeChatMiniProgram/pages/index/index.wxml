@@ -16,6 +16,9 @@
     <view class="nav-spacer"></view>
   </view>
 
+  <!-- 导航栏占位 -->
+  <view style="height: calc({{statusBarHeight}}px + 88rpx);"></view>
+
   <!-- 地图区域 -->
   <view class="map-section">
     <view class="holo-frame">
@@ -37,10 +40,7 @@
   </view>
 
   <!-- 数据卡片区 -->
-  <scroll-view class="content-scroll" scroll-y="{{true}}" enhanced="{{true}}" show-scrollbar="{{false}}">
-
-    <!-- 顶部间距（状态栏 + 导航栏） -->
-    <view style="height: {{statusBarHeight}}px;"></view>
+  <view class="content-scroll">
 
     <!-- BLE 连接状态 -->
     <view class="ble-status {{bleConnected ? 'connected' : ''}}">
@@ -124,7 +124,7 @@
     </view>
 
     <view style="height:320rpx"></view>
-  </scroll-view>
+  </view>
 
   <!-- 报警全屏弹窗 -->
   <view class="alarm-popup {{alarmPopupClass}}" wx:if="{{showAlarmPopup}}">
