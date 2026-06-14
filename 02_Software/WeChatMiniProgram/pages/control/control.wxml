@@ -1,6 +1,9 @@
 <!-- 远端控制页 (Tactical Cyan) -->
 <view class="page">
 
+  <!-- 状态栏占位（刘海到顶部填充） -->
+  <view style="height: {{statusBarHeight}}px; background: rgba(8, 13, 23, 0.92); position: fixed; top: 0; left: 0; right: 0; z-index: 98;"></view>
+
   <!-- 自定义导航栏 -->
   <view class="nav-bar" style="top: {{statusBarHeight}}px;">
     <view class="nav-back" bindtap="onBackPress" hover-class="nav-back-hover">‹ 返回</view>

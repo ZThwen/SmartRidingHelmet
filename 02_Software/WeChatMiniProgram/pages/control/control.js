@@ -31,7 +31,8 @@ Page({
 
   onLoad: function() {
     var sysInfo = wx.getSystemInfoSync();
-    this.setData({ statusBarHeight: sysInfo.statusBarHeight || 44 });
+    var safeTop = sysInfo.safeArea ? sysInfo.safeArea.top : (sysInfo.statusBarHeight || 44);
+    this.setData({ statusBarHeight: safeTop });
     this._syncFromGlobal();
     this._bindEvents();
   },

@@ -61,7 +61,8 @@ Page({
 
   onLoad: function() {
     var sysInfo = wx.getSystemInfoSync();
-    this.setData({ statusBarHeight: sysInfo.statusBarHeight || 44 });
+    var safeTop = sysInfo.safeArea ? sysInfo.safeArea.top : (sysInfo.statusBarHeight || 44);
+    this.setData({ statusBarHeight: safeTop });
     logger.init();
     logger.log('PAGE', '首页加载');
     logger.log('PAGE', '基础库=' + sysInfo.SDKVersion + ' 平台=' + sysInfo.platform + ' 系统=' + sysInfo.system);
