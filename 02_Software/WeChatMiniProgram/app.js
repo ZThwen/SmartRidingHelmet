@@ -21,7 +21,7 @@ App({
     // 控制状态（从 t=7 回推更新）
     ctrlState: {
       lightMode: 'auto',
-      lightBrightness: 0,
+      brightness: 0,
       volume: 5,
       powerMode: 'active',
     },

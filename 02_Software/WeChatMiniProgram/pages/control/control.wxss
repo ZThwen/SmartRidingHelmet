@@ -47,6 +47,7 @@ page {
   color: rgba(102, 204, 255, 0.4);
 }
 
+.nav-back-hover { color: #66ccff; }
 .nav-spacer { min-width: 100rpx; }
 
 /* ===== 导航状态条 ===== */

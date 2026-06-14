@@ -20,5 +20,8 @@
     "chooseLocation",
     "startLocationUpdate",
     "onLocationChange"
-  ]
+  ],
+  "tabBar": {
+    "custom": true
+  }
 }

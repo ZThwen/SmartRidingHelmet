@@ -55,7 +55,7 @@ Page({
       bleStatus: gd.bleStatus,
       deviceName: gd.bleConnected ? 'SmartHelmet-66ccff' : '',
       lightMode: cs.lightMode,
-      lightBrightness: cs.lightBrightness,
+      lightBrightness: cs.brightness,
       volume: cs.volume,
       powerMode: cs.powerMode,
       riding: gd.isRiding,
@@ -138,6 +138,9 @@ Page({
     var mode = e.currentTarget.dataset.mode;
     if (mode === 'auto') {
       CtrlService.lightAuto();
+    } else if (mode === 'manual') {
+      // 切换手动模式：发送 lightOn（固件无独立 manual 指令，lightOn 会自动切 manual）
+      CtrlService.lightOn();
     }
   },
 
@@ -192,10 +195,7 @@ Page({
 
   onCancelAlarm: function() {
     this.setData({ showAlarmPopup: false });
-    var BleService = require('../../services/ble-service');
-    if (BleService.isConnected()) {
-      BleService.sendCtrl('alarm_cancel');
-    }
+    CtrlService.alarmCancel();
   },
 
   // ==================== 导航栏 ====================
