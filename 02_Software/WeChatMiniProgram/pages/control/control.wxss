@@ -26,7 +26,8 @@ page {
   font-size: 32rpx;
   color: #5a7a98;
   padding: 12rpx 20rpx;
-  min-width: 100rpx;
+  width: 120rpx;
+  flex-shrink: 0;
 }
 
 .nav-title {
@@ -47,7 +48,7 @@ page {
 }
 
 .nav-back-hover { color: #66ccff; }
-.nav-spacer { min-width: 100rpx; }
+.nav-spacer { width: 120rpx; flex-shrink: 0; }
 
 /* ===== 导航状态条 ===== */
 .ctrl-nav-indicator {
@@ -303,7 +304,7 @@ page {
 /* ===== BLE 未连接遮罩 ===== */
 .ble-overlay {
   position: fixed;
-  bottom: 260rpx;
+  bottom: 300rpx;
   left: 20rpx;
   right: 20rpx;
   background: rgba(8, 13, 23, 0.85);
