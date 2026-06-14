@@ -224,29 +224,31 @@ idle ──用户选目的地──→ planning ──算路完成──→ navi
 
 ---
 
-## R11 远端控制 *(📅 未实现)*
+## R11 远端控制 *(✅ 已实现)*
 
-**R11.1 控制面板 UI**
-- 首页新增远端控制区域（骑行中显示）
-- 头灯开关按钮（开/关切换）
-- 音量调节（可选）
-- 控制按钮在骑行状态下可用，空闲态隐藏
+**R11.1 控制页面**
+- 独立控制页面（pages/control/control）
+- 自定义底部 TabBar 切换骑行/控制页
+- 灯光控制：自动/手动模式、开/关灯、亮度 0-100%（100%=PWM50%）
+- 音量控制：0-7 级
+- 电源模式：正常/省电
+- BLE 未连接时所有控制禁用
 
 **R11.2 指令下发**
 - 通过 BLE FFF3 `sendCtrl(cmd)` 下发控制指令
-- 指令格式：`{"a":"ctrl","d":{"cmd":"light_on"}}` / `{"a":"ctrl","d":{"cmd":"light_off"}}`
-- 指令下发后等待头盔确认（可选）
+- 指令格式：`{"a":"ctrl","d":{"cmd":"<command>"}}`
+- 固件执行后通过 t=7 回推状态
 
-**R11.3 头盔端执行**
-- 头盔 ControlService 订阅 `EVENT_RIDE_CONTROL` 事件
-- 解析指令并调用对应设备驱动（LightService、Audio 等）
-- 执行结果可选通过 BLE Notify 回传
+**R11.3 状态同步**
+- App.js globalData 持有 ctrlState
+- EventBus 跨页面事件通知
+- 页面 onShow 时从 globalData 同步
 
 **R11.4 依赖**
 - 小程序端：`sendCtrl()` 已实现（ble-service.js）
-- 头盔端：`EVENT_RIDE_CONTROL` 已定义（config.py），BLEDriver 已发布
-- 头盔端：ControlService（✅ 板子端已实现）
-- 头盔端：LightService + PWM_LED（✅ 板子端已实现）
+- 小程序端：`ctrl-service.js` 指令封装
+- 头盔端：ControlService（✅ 已实现）
+- 头盔端：LightService + PWM_LED（✅ 已实现）
 
 ---
 
