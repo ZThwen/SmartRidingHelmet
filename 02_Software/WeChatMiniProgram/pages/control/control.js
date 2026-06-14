@@ -37,9 +37,6 @@ Page({
   },
 
   onShow: function() {
-    // 更新 TabBar 选中态
-    var tabbar = this.getTabBar();
-    if (tabbar) tabbar.setData({ selected: 1 });
     this._syncFromGlobal();
   },
 

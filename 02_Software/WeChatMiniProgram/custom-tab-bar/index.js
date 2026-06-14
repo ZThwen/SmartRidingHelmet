@@ -38,7 +38,18 @@ Component({
   pageLifetimes: {
     show: function() {
       var globalData = app.globalData;
+      var pages = getCurrentPages();
+      var currentPage = pages[pages.length - 1];
+      var currentPath = currentPage ? '/' + currentPage.route : '';
+      var selected = 0;
+      for (var i = 0; i < this.data.tabs.length; i++) {
+        if (this.data.tabs[i].pagePath === currentPath) {
+          selected = i;
+          break;
+        }
+      }
       this.setData({
+        selected: selected,
         riding: globalData.isRiding,
         bleConnected: globalData.bleConnected,
       });

@@ -193,8 +193,6 @@ Page({
   },
 
   onShow: function() {
-    var tabbar = this.getTabBar();
-    if (tabbar) tabbar.setData({ selected: 0 });
     // 从 globalData 同步报警状态（从控制页返回时）
     if (app.globalData.alarmActive && !this.data.showAlarmPopup) {
       this.setData({ showAlarmPopup: true });

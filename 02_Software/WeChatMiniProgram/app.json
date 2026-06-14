@@ -20,18 +20,5 @@
     "chooseLocation",
     "startLocationUpdate",
     "onLocationChange"
-  ],
-  "tabBar": {
-    "custom": true,
-    "list": [
-      {
-        "pagePath": "pages/index/index",
-        "text": "骑行"
-      },
-      {
-        "pagePath": "pages/control/control",
-        "text": "控制"
-      }
-    ]
-  }
+  ]
 }
