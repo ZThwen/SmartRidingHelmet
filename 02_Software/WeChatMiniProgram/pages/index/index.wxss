@@ -9,16 +9,13 @@ page {
 .page {
   display: flex;
   flex-direction: column;
-  height: 100vh;
-  overflow-y: auto;
+  min-height: 100vh;
 }
 
 /* ===== 状态栏填充 ===== */
 .status-fill {
-  position: fixed;
+  position: sticky;
   top: 0;
-  left: 0;
-  right: 0;
   z-index: 98;
   background: rgba(8, 13, 23, 0.9);
 }
@@ -29,9 +26,7 @@ page {
   align-items: center;
   height: 88rpx;
   padding: 0 16rpx;
-  position: fixed;
-  left: 0;
-  right: 0;
+  position: sticky;
   z-index: 99;
   background: rgba(8, 13, 23, 0.9);
 }
