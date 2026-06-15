@@ -250,6 +250,47 @@ idle ──用户选目的地──→ planning ──算路完成──→ navi
 - 头盔端：ControlService（✅ 已实现）
 - 头盔端：LightService + PWM_LED（✅ 已实现）
 
+**R11.5 指令映射表（供语音模块使用）**
+
+BLE 指令格式：`{"a":"ctrl","d":{"cmd":"<cmd>"}}`，通过 FFF3 写入头盔。
+
+| # | BLE cmd | 语音触发词（中文） | 类别 | 功能 | 影响状态 | t=7 回推字段 |
+|---|---------|-------------------|------|------|---------|-------------|
+| 1 | `light_on` | 开灯、打开车灯、车灯开 | 控制 | 头灯开启（默认50%亮度） | light_mode=manual, light_brightness=50 | light_mode, light_brightness |
+| 2 | `light_off` | 关灯、关闭车灯、车灯关 | 控制 | 头灯关闭 | light_mode=manual, light_brightness=0 | light_mode, light_brightness |
+| 3 | `light_auto` | 自动灯光、车灯自动、自动模式 | 控制 | 切换自动感光模式 | light_mode=auto | light_mode |
+| 4 | `brightness_up` | 亮度增加、调亮、再亮一点 | 控制 | 亮度+10%（上限100%=PWM50%） | light_brightness+=10 | light_brightness |
+| 5 | `brightness_down` | 亮度减少、调暗、再暗一点 | 控制 | 亮度-10%（下限0%） | light_brightness-=10 | light_brightness |
+| 6 | `volume_up` | 音量增加、声音大一点、调大音量 | 控制 | 音量+1（上限7） | volume+=1 | volume |
+| 7 | `volume_down` | 音量减少、声音小一点、调小音量 | 控制 | 音量-1（下限0） | volume-=1 | volume |
+| 8 | `alarm_cancel` | 取消报警、关闭报警、报警解除 | 控制 | 取消当前报警 | — | — |
+| 9 | `alarm_sos` | SOS、紧急求助、发出求救 | 控制 | 触发SOS报警 | — | — |
+| 10 | `alarm_stealth` | 静默报警、悄悄报警 | 控制 | 静默报警（不发声） | — | — |
+| 11 | `power_save` | 省电模式、节能模式、关闭省电…开 | 控制 | 切换省电模式 | power_mode=suspended | power_mode |
+| 12 | `power_normal` | 正常模式、退出省电、恢复正常使用 | 控制 | 退出省电模式 | power_mode=active | power_mode |
+| 13 | `power_emergency` | 紧急电源、紧急模式 | 控制 | 紧急电源模式 | power_mode=emergency | power_mode |
+| 14 | `query_status` | 查询状态、当前状态、汇报状态 | 查询 | TTS播报当前全部状态 | — | — |
+| 15 | `query_speed` | 当前速度、速度多少、现在多快 | 查询 | TTS播报当前速度 | — | — |
+| 16 | `query_temp` | 当前温度、温度多少、现在几度 | 查询 | TTS播报当前温度 | — | — |
+| 17 | `query_humid` | 当前湿度、湿度多少 | 查询 | TTS播报当前湿度 | — | — |
+| 18 | `query_location` | 我在哪、当前位置、定位 | 查询 | TTS播报当前位置 | — | — |
+| 19 | `query_battery` | 电量多少、电池、还有多少电 | 查询 | TTS播报电量（暂不可用） | — | — |
+
+**语音→BLE 指令流程：**
+```
+语音输入 → 语音识别(ASRPRO/云端) → 关键词匹配 → BLE FFF3 sendCtrl(cmd)
+                                                         ↓
+头盔 ControlService → 执行命令 → t=7 状态回推 → 小程序 UI 更新
+                                                         ↓
+                                              query_* → TTS 播报
+```
+
+**注意事项：**
+- 语音模块应做模糊匹配（"开灯"≈"打开车灯"≈"车灯开"）
+- query 类指令通过 TTS 在头盔端播报，不更新 t=7 状态
+- 控制指令有 300ms 防抖，连续语音指令需间隔发送
+- `alarm_stealth` 和 `power_emergency` 仅在 thonny 原型固件中实现，production 固件暂不支持
+
 ---
 
 ## R9 语音交互 *(📅 远期)*
