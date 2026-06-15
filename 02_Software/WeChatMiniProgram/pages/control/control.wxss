@@ -13,7 +13,11 @@ page {
 
 /* ===== 状态栏填充 ===== */
 .status-fill {
-  width: 100%;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 98;
   background: rgba(8, 13, 23, 0.92);
 }
 
@@ -23,9 +27,9 @@ page {
   align-items: center;
   height: 88rpx;
   padding: 0 16rpx;
-  position: sticky;
-  top: 0;
-  left: 0; right: 0;
+  position: fixed;
+  left: 0;
+  right: 0;
   z-index: 99;
   background: rgba(8, 13, 23, 0.92);
 }

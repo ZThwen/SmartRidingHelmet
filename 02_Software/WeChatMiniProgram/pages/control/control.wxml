@@ -1,11 +1,11 @@
 <!-- 远端控制页 (Tactical Cyan) -->
-<view class="page" style="padding-top: {{statusBarHeight}}px;">
+<view class="page">
 
-  <!-- 状态栏填充 -->
+  <!-- 状态栏填充（fixed，覆盖刘海） -->
   <view class="status-fill" style="height: {{statusBarHeight}}px;"></view>
 
-  <!-- 自定义导航栏 -->
-  <view class="nav-bar">
+  <!-- 自定义导航栏（fixed，紧贴状态栏下方） -->
+  <view class="nav-bar" style="top: {{statusBarHeight}}px;">
     <view class="nav-back" bindtap="onBackPress" hover-class="nav-back-hover">‹ 返回</view>
     <view class="nav-title">
       <text class="deco">≋</text>
@@ -14,6 +14,9 @@
     </view>
     <view class="nav-spacer"></view>
   </view>
+
+  <!-- 内容起始位（状态栏 + 导航栏高度） -->
+  <view style="height: calc({{statusBarHeight}}px + 88rpx);"></view>
 
   <!-- 导航状态条（仅导航中显示） -->
   <view class="ctrl-nav-indicator" wx:if="{{showNavIndicator}}" bindtap="onNavIndicatorTap">
