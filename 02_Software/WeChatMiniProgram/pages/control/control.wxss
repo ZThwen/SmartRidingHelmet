@@ -11,13 +11,20 @@ page {
   overflow-y: auto;
 }
 
+/* ===== 状态栏填充 ===== */
+.status-fill {
+  width: 100%;
+  background: rgba(8, 13, 23, 0.92);
+}
+
 /* ===== 导航栏 ===== */
 .nav-bar {
   display: flex;
   align-items: center;
   height: 88rpx;
   padding: 0 16rpx;
-  position: fixed;
+  position: sticky;
+  top: 0;
   left: 0; right: 0;
   z-index: 99;
   background: rgba(8, 13, 23, 0.92);
