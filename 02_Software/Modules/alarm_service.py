@@ -97,8 +97,10 @@ class AlarmService(BaseModule):
             return
 
         if self.ctx["alarm_active"]:
-            if time.ticks_diff(now, self.ctx["alarm_start"]) >= self.cfg["alarm_duration_ms"]:
-                self._cancel_alarm()
+            # 只有 collision 类型才自动取消，SOS 和 stealth 需要手动取消
+            if self.ctx["alarm_type"] == "collision":
+                if time.ticks_diff(now, self.ctx["alarm_start"]) >= self.cfg["alarm_duration_ms"]:
+                    self._cancel_alarm()
 
         self.ctx["last_tick"] = now
 

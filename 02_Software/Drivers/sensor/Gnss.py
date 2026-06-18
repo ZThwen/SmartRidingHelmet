@@ -12,7 +12,8 @@ from quectel import GNSS
 
 from core.Base_Module import BaseModule
 from core.config import (EVENT_GNSS_READY, EVENT_SENSOR_ERROR, EVENT_CONFIG_UPDATE,
-                    EVENT_GPS_LOST, GNSS_SAMPLE_MS, POWER_STATE_ACTIVE)
+                    EVENT_GPS_LOST, GNSS_SAMPLE_MS, GNSS_SUSPENDED_MS, GNSS_EMERGENCY_MS,
+                    POWER_STATE_ACTIVE, POWER_STATE_SUSPENDED, POWER_STATE_EMERGENCY)
 
 
 # 定位状态常量
@@ -86,9 +87,6 @@ class GNSSDriver(BaseModule):
 
     def tick(self):
         """周期调度：读取定位 + 状态管理 + 事件发布"""
-        if self.ctx["power_state"] != POWER_STATE_ACTIVE:
-            return
-
         now = time.ticks_ms()
         if time.ticks_diff(now, self.ctx["last_tick"]) < self.cfg["sample_ms"]:
             return
@@ -172,6 +170,12 @@ class GNSSDriver(BaseModule):
 
         if "power_state" in payload:
             self.ctx["power_state"] = payload["power_state"]
+            if payload["power_state"] == POWER_STATE_SUSPENDED:
+                self.cfg["sample_ms"] = GNSS_SUSPENDED_MS
+            elif payload["power_state"] == POWER_STATE_EMERGENCY:
+                self.cfg["sample_ms"] = GNSS_EMERGENCY_MS
+            elif payload["power_state"] == POWER_STATE_ACTIVE:
+                self.cfg["sample_ms"] = GNSS_SAMPLE_MS
             print(f"[{self.name}] 功耗状态: {payload['power_state']}")
 
     # ==================== 辅助方法 ====================

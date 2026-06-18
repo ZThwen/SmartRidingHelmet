@@ -6,7 +6,7 @@ import machine
 import time
 
 from core.Base_Module import BaseModule
-from core.config import EVENT_TEMP_HUMID_READY,EVENT_SENSOR_ERROR, EVENT_CONFIG_UPDATE, TEMP_HUMID_SAMPLE_MS, POWER_STATE_ACTIVE
+from core.config import EVENT_TEMP_HUMID_READY,EVENT_SENSOR_ERROR, EVENT_CONFIG_UPDATE, TEMP_HUMID_SAMPLE_MS, TEMP_HUMID_SUSPENDED_MS, POWER_STATE_ACTIVE, POWER_STATE_SUSPENDED, POWER_STATE_EMERGENCY
 from ahtx0 import AHT20
 
 
@@ -84,7 +84,7 @@ class TempHumidDriver(BaseModule):
         note 主循环每轮调用，必须快速返回（<5ms）
         """
         # 状态守卫：功耗模式控制
-        if self.ctx["power_state"] != POWER_STATE_ACTIVE:
+        if self.ctx["power_state"] == POWER_STATE_EMERGENCY:
             return
 
         # 时间片校验：未到采样间隔立即返回
@@ -141,6 +141,10 @@ class TempHumidDriver(BaseModule):
         if "power_state" in payload:
             old_state = self.ctx["power_state"]
             self.ctx["power_state"] = payload["power_state"]
+            if payload["power_state"] == POWER_STATE_SUSPENDED:
+                self.cfg["sample_ms"] = TEMP_HUMID_SUSPENDED_MS
+            elif payload["power_state"] == POWER_STATE_ACTIVE:
+                self.cfg["sample_ms"] = TEMP_HUMID_SAMPLE_MS
             print(f"[{self.name}] 功耗状态: {old_state} -> {payload['power_state']}")
 
     def get_data(self):

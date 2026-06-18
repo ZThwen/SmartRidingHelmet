@@ -28,7 +28,7 @@ from core.config import (
     POWER_STATE_CUSTOM, EVENT_TTS_REQUEST,
     EVENT_TEMP_HUMID_READY, EVENT_GNSS_READY,
     EVENT_ALARM_TRIGGERED, EVENT_ALARM_CANCELED,
-    LIGHT_BRIGHTNESS_MAX,
+    LIGHT_BRIGHTNESS_MAX, CMD_TTS_MAP,
 )
 
 # CPython 兼容
@@ -60,8 +60,8 @@ class ControlService(BaseModule):
 
         # ===================== 四元组：静态配置 =====================
         self.cfg = {
-            "brightness_step": 10,       # 亮度调节步长 (%)
-            "brightness_max": LIGHT_BRIGHTNESS_MAX,  # 最大亮度（18W灯散热限制）
+            "brightness_step": 5,        # 亮度调节步长（5/50=10% 显示）
+            "brightness_max": LIGHT_BRIGHTNESS_MAX,  # 最大亮度（%），满 PWM
             "volume_step": 1,            # 音量调节步长
             "volume_max": 5,             # 最大音量（对齐 AudioDriver 0-5）
             "volume_min": 0,             # 最小音量
@@ -74,6 +74,7 @@ class ControlService(BaseModule):
             "is_init": False,
             "err_count": 0,
             "last_cmd_tick": 0,          # 上次指令时间戳（防抖）
+            "last_tts_tick": 0,          # 上次 TTS 播报时间戳（防抖）
         }
 
         # ===================== 四元组：当前数据 =====================
@@ -101,6 +102,9 @@ class ControlService(BaseModule):
 
         # 报警状态标志（查询时保护报警不被 TTS 中断）
         self._alarm_active = False
+
+        # 报警前状态快照（报警取消后恢复）
+        self._pre_alarm_state = None
 
         # 指令分发表 — 全部发布事件，不直接调用模块
         self._cmd_handlers = {
@@ -218,13 +222,15 @@ class ControlService(BaseModule):
                 self._data["last_cmd_source"] = source
                 # 乐观更新本地状态缓存
                 self._update_control_state(cmd)
-                self._push_state()
+                self._maybe_tts(cmd)
                 # 手动操作覆盖省电模式
-                if cmd not in ("power_save", "power_normal", "power_emergency") and not cmd.startswith("query_"):
+                if cmd not in ("power_save", "power_normal", "power_emergency",
+                               "alarm_sos", "alarm_cancel", "alarm_stealth") and not cmd.startswith("query_"):
                     if self._control_state["power_mode"] != "active":
                         self._control_state["power_mode"] = "custom"
                         if self.event_bus:
                             self.event_bus.publish(EVENT_POWER_STATE_CHANGE, {"power_state": POWER_STATE_CUSTOM})
+                self._push_state()
                 print("[{}] cmd={} src={}".format(self.name, cmd, source))
             except Exception as e:
                 self.ctx["err_count"] += 1
@@ -267,10 +273,16 @@ class ControlService(BaseModule):
                 self.cfg["volume_min"])
         elif cmd == "power_save":
             self._control_state["power_mode"] = "suspended"
+            self._control_state["light_mode"] = "manual"
+            self._control_state["light_brightness"] = 0
+            self._pub(EVENT_LIGHT_CONTROL, {"cmd": "off"})
         elif cmd == "power_normal":
             self._control_state["power_mode"] = "active"
         elif cmd == "power_emergency":
             self._control_state["power_mode"] = "emergency"
+            self._control_state["light_mode"] = "manual"
+            self._control_state["light_brightness"] = 0
+            self._pub(EVENT_LIGHT_CONTROL, {"cmd": "off"})
 
     # ==================== 传感器缓存回调 ====================
 
@@ -286,10 +298,17 @@ class ControlService(BaseModule):
             self._sensor_cache["longitude"] = payload.get("longitude")
 
     def _on_alarm_triggered(self, payload):
+        """保存报警前状态快照"""
+        self._pre_alarm_state = dict(self._control_state)
         self._alarm_active = True
 
     def _on_alarm_canceled(self, payload):
+        """恢复报警前状态"""
         self._alarm_active = False
+        if self._pre_alarm_state:
+            self._control_state.update(self._pre_alarm_state)
+            self._pre_alarm_state = None
+            self._push_state()  # 推送恢复后的状态到 BLE
 
     # ==================== 查询指令 ====================
 
@@ -347,21 +366,33 @@ class ControlService(BaseModule):
     def _push_state(self):
         """
         brief 推送控制状态到 BLE（通过 EventBus）
-        note 拆分为 3 条消息，每条 ≤20 字节（ATT_MTU 限制）
-             t=7 灯光 {m:mode, b:brightness}
-             t=8 音量 {v:volume}
-             t=9 电源 {p:power_mode}
+        note 合并为 1 条消息，每条 ≤25 字节（ATT_MTU 限制）
         """
         if not self.event_bus:
             return
         cs = self._control_state
         self.event_bus.publish(EVENT_CONTROL_STATE_CHANGED,
             {"t": 7, "m": self._LIGHT_MODE_MAP.get(cs["light_mode"], 0),
-             "b": cs["light_brightness"]})
-        self.event_bus.publish(EVENT_CONTROL_STATE_CHANGED,
-            {"t": 8, "v": cs["volume"]})
-        self.event_bus.publish(EVENT_CONTROL_STATE_CHANGED,
-            {"t": 9, "p": self._POWER_MODE_MAP.get(cs["power_mode"], 0)})
+             "b": cs["light_brightness"],
+             "v": cs["volume"],
+             "p": self._POWER_MODE_MAP.get(cs["power_mode"], 0)})
+
+    # ==================== TTS 反馈 ====================
+
+    def _maybe_tts(self, cmd):
+        """
+        brief 控制指令 TTS 播报（1 秒防抖，只播报最终状态）
+        param cmd: 指令字符串
+        """
+        if self._alarm_active:
+            return
+        now = _ticks_ms()
+        if time.ticks_diff(now, self.ctx["last_tts_tick"]) < 1000:
+            return
+        self.ctx["last_tts_tick"] = now
+        tts_text = CMD_TTS_MAP.get(cmd)
+        if tts_text and self.event_bus:
+            self.event_bus.publish(EVENT_TTS_REQUEST, {"text": tts_text})
 
     # ==================== 数据接口 ====================
 

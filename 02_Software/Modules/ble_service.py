@@ -16,6 +16,7 @@ from core.config import (
     EVENT_GNSS_READY, EVENT_LIGHT_READY,
     EVENT_ALARM_TRIGGERED, EVENT_ALARM_CANCELED,
     EVENT_CONTROL_STATE_CHANGED,
+    EVENT_NAV_CMD, EVENT_RIDE_CONTROL, EVENT_BLE_ALARM_ACK,
     BLE_UPLOAD_INTERVAL_MS, BLE_KEEPALIVE_MS,
 )
 from Drivers.network.thread_queue import ThreadSafeQueue
@@ -60,11 +61,28 @@ class BLEService(BaseModule):
             "latest_lux": None,
         }
 
+        # 控制状态快照（coalescing 缓冲，tick 周期统一推送）
+        self._ctrl_snapshot = {
+            "m": 0, "b": 0,  # t=7: 灯光
+            "v": 5,           # t=8: 音量
+            "p": 0,           # t=9: 电源
+            "dirty": False,   # 是否有未推送的控制状态
+        }
+
+        # 环形缓冲区（BLE 中断写入，tick 中 drain）
+        self.cmd_buffer = ThreadSafeQueue(max_size=16)
+        self.cmd_ready = False
+        self._connected_published = False
+
         self.send_queue = None
 
     def init(self):
         try:
             self.send_queue = ThreadSafeQueue(max_size=self.cfg["queue_max_size"])
+
+            # 注册数据处理器（不覆盖 BLE 回调）
+            if self._ble:
+                self._ble.set_data_handler(self._on_ble_data)
 
             if self.event_bus:
                 self.event_bus.subscribe(EVENT_BLE_CONNECTED, self._on_connected)
@@ -93,6 +111,14 @@ class BLEService(BaseModule):
         if not self.ctx["is_init"]:
             return
 
+        # drain 环形缓冲区
+        if self.cmd_ready:
+            self.cmd_ready = False
+            while self.cmd_buffer.size() > 0:
+                item = self.cmd_buffer.get()
+                if item is not None:
+                    self._parse_and_route(item)
+
         now = time.ticks_ms()
 
         if self.ctx["force_push"]:
@@ -111,10 +137,19 @@ class BLEService(BaseModule):
             if self.ctx["ble_connected"]:
                 self.send_queue.put('{"t":99,"d":{"s":"ok"}}')
 
+        # 控制状态快照推送（合并多条 EVENT_CONTROL_STATE_CHANGED 为 1 条）
+        if self.ctx["ble_connected"] and self._ble:
+            snap = self._ctrl_snapshot
+            if snap["dirty"]:
+                self.send_queue.put(
+                    '{"t":7,"m":%d,"b":%d,"v":%d,"p":%d}' % (
+                        snap["m"], snap["b"], snap["v"], snap["p"]))
+                snap["dirty"] = False
+
     def _enqueue_merged(self):
         if not self.ctx["ble_connected"]:
             return
-        if not self._ble or not self._ble.ctx["is_connected"]:
+        if not self._ble:
             return
 
         d = {}
@@ -144,7 +179,9 @@ class BLEService(BaseModule):
                 if data is None:
                     time.sleep_ms(100)
                     continue
-                if not self._ble or not self._ble.ctx["is_connected"]:
+                if not self._ble:
+                    continue
+                if not self.ctx["ble_connected"]:
                     continue
                 if len(data) > MAX_BLE_PAYLOAD:
                     print("[%s] payload too large (%d > %d), dropped" % (
@@ -212,13 +249,73 @@ class BLEService(BaseModule):
 
     def _on_control_state(self, payload):
         """
-        brief 控制状态变更回调
+        brief 控制状态变更回调 — 快照合并（coalescing）
+        note 不直接入队，改为更新快照；tick() 周期统一推送为 1 条消息
         param payload: EventBus 事件（含 source/timestamp 注入字段）
-        note 剥离 EventBus 自动注入的字段，只保留压缩格式，确保 ≤20 字节
         """
         valid_keys = ("t", "m", "b", "v", "p")
-        msg = json.dumps({k: v for k, v in payload.items() if k in valid_keys})
-        self.send_queue.put(msg)
+        data = {k: v for k, v in payload.items() if k in valid_keys}
+        t = data.get("t")
+        snap = self._ctrl_snapshot
+        if t == 7:
+            snap["m"] = data.get("m", snap["m"])
+            snap["b"] = data.get("b", snap["b"])
+            snap["v"] = data.get("v", snap["v"])
+            snap["p"] = data.get("p", snap["p"])
+        snap["dirty"] = True
+
+    # ==================== BLE 数据处理（modem 线程） ====================
+
+    def _on_ble_data(self, evt):
+        """
+        brief BLE 数据事件处理器（modem 线程上下文）
+        param evt: 事件字典（EVT_VAL_DATA）
+        note 只处理数据写入，连接/断开/MTU 由 BLEDriver._callback 处理并通过 EventBus 通知
+             中断快速返回：只写 buffer + 设 flag，不做 JSON 解析
+        """
+        try:
+            uuid = evt.get("uuid")
+            value = evt.get("value", "")
+            # hex 解码
+            if isinstance(value, str) and len(value) > 2:
+                try:
+                    clean = value.strip().replace(' ', '').replace('\n', '').replace('\r', '')
+                    if len(clean) % 2 == 0 and all(c in '0123456789abcdefABCDEF' for c in clean):
+                        value = bytes.fromhex(clean).decode('utf-8')
+                except:
+                    pass
+            # 写入环形缓冲区，设标志
+            self.cmd_buffer.put({"uuid": uuid, "raw": value})
+            self.cmd_ready = True
+
+        except Exception as e:
+            self.ctx["err_count"] += 1
+            print("[%s] _on_ble_data 异常: %s" % (self.name, e))
+
+    def _parse_and_route(self, item):
+        """
+        brief 解析环形缓冲区中的原始数据并路由到 EventBus
+        param item: {"uuid": str, "raw": str}
+        """
+        try:
+            uuid = item.get("uuid")
+            value = item.get("raw", "")
+
+            if uuid == self._ble.cfg["char_nav"]:
+                if self.event_bus:
+                    self.event_bus.publish(EVENT_NAV_CMD, {"raw": value})
+
+            elif uuid == self._ble.cfg["char_ctrl"]:
+                if self.event_bus:
+                    self.event_bus.publish(EVENT_RIDE_CONTROL, {"raw": value})
+
+            elif uuid == self._ble.cfg["char_ack"]:
+                if self.event_bus:
+                    self.event_bus.publish(EVENT_BLE_ALARM_ACK, {"raw": value})
+
+        except Exception as e:
+            self.ctx["err_count"] += 1
+            print("[%s] _parse_and_route 异常: %s" % (self.name, e))
 
     def get_data(self):
         return {

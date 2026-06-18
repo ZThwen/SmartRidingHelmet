@@ -16,7 +16,7 @@ from core.Base_Module import BaseModule
 from core.config import (
     EVENT_LIGHT_READY, EVENT_LIGHT_CONTROL, EVENT_CONFIG_UPDATE, POWER_STATE_ACTIVE,
     LIGHT_DAY_ADC_THRESHOLD, LIGHT_NIGHT_ADC_THRESHOLD,
-    LIGHT_BRIGHTNESS_MIN, LIGHT_BRIGHTNESS_MAX,
+    LIGHT_BRIGHTNESS_MIN, LIGHT_BRIGHTNESS_MAX, LIGHT_BRIGHTNESS_STEP,
     LIGHT_GAMMA, LIGHT_BRIGHTNESS_THRESHOLD, LIGHT_DEBOUNCE_MS
 )
 
@@ -104,10 +104,10 @@ class LightService(BaseModule):
             self.set_auto_mode()
         elif cmd == "brightness_up":
             current = self._data.get("current_brightness", 0)
-            self.set_manual_brightness(min(current + 10, max_brightness))
+            self.set_manual_brightness(min(current + LIGHT_BRIGHTNESS_STEP, max_brightness))
         elif cmd == "brightness_down":
             current = self._data.get("current_brightness", 0)
-            self.set_manual_brightness(max(current - 10, 0))
+            self.set_manual_brightness(max(current - LIGHT_BRIGHTNESS_STEP, 0))
 
     def _on_light_ready(self, payload):
         """

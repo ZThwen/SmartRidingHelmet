@@ -7,7 +7,7 @@ import time
 from machine import ADC, Pin
 
 from core.Base_Module import BaseModule
-from core.config import EVENT_LIGHT_READY, EVENT_SENSOR_ERROR, EVENT_CONFIG_UPDATE, POWER_STATE_ACTIVE, LIGHT_SAMPLE_MS
+from core.config import EVENT_LIGHT_READY, EVENT_SENSOR_ERROR, EVENT_CONFIG_UPDATE, EVENT_LIGHT_CONTROL, POWER_STATE_ACTIVE, POWER_STATE_SUSPENDED, POWER_STATE_EMERGENCY, LIGHT_SAMPLE_MS, LIGHTSENSOR_MANUAL_MS
 
 
 class LightSensorDriver(BaseModule):
@@ -35,6 +35,7 @@ class LightSensorDriver(BaseModule):
             "last_tick": 0,           # 上次执行时间戳
             "err_count": 0,           # 错误计数
             "power_state": POWER_STATE_ACTIVE,  # 功耗状态
+            "light_mode": "auto",     # 灯光模式（自动/手动）
         }
 
         # ===================== 四元组：当前数据 =====================
@@ -57,8 +58,8 @@ class LightSensorDriver(BaseModule):
             if self.event_bus:
                 # 订阅配置更新事件
                 self.event_bus.subscribe(EVENT_CONFIG_UPDATE, self._on_config_update)
-                # 订阅其他事件（根据业务需求）
-                # self.event_bus.subscribe(EVENT_XXX, self._on_xxx)
+                # 订阅灯光控制事件（用于动态调整采样间隔）
+                self.event_bus.subscribe(EVENT_LIGHT_CONTROL, self._on_light_control)
             
             # ====== 5. 设置初始化标志 ======
             self.ctx["is_init"] = True
@@ -74,8 +75,9 @@ class LightSensorDriver(BaseModule):
         note 主循环每轮调用，必须快速返回（<5ms），不能阻塞
         """
         # ====== 1. 状态守卫 ======
-        if POWER_STATE_ACTIVE != self.ctx["power_state"]:
-            return  # 非活动状态，立即返回
+        if self.ctx["power_state"] == POWER_STATE_EMERGENCY:
+            if self.ctx.get("light_mode") != "auto":
+                return  # EMERGENCY + 手动模式：停止采样
 
         # ====== 2. 时间片校验 ======
         now = time.ticks_ms()
@@ -125,7 +127,30 @@ class LightSensorDriver(BaseModule):
         if "power_state" in payload:
             old_state = self.ctx["power_state"]
             self.ctx["power_state"] = payload["power_state"]
+            self._update_sample_ms()
             print(f"[{self.name}] 功耗状态: {old_state} -> {payload['power_state']}")
+
+    def _on_light_control(self, payload):
+        """
+        brief 灯光模式变化回调（用于动态调整采样间隔）
+        param payload: {cmd: "auto"/"on"/"off"/...}
+        """
+        cmd = payload.get("cmd", "")
+        if cmd == "auto":
+            self.ctx["light_mode"] = "auto"
+        else:
+            self.ctx["light_mode"] = "manual"
+        self._update_sample_ms()
+
+    def _update_sample_ms(self):
+        """根据灯光模式和电源状态动态调整采样间隔"""
+        if self.ctx["power_state"] == POWER_STATE_SUSPENDED:
+            if self.ctx.get("light_mode") == "auto":
+                self.cfg["sample_ms"] = LIGHT_SAMPLE_MS  # 2s
+            else:
+                self.cfg["sample_ms"] = LIGHTSENSOR_MANUAL_MS  # 30s
+        elif self.ctx["power_state"] == POWER_STATE_ACTIVE:
+            self.cfg["sample_ms"] = LIGHT_SAMPLE_MS  # 2s
 
     # ==================== 辅助方法 ====================
     def get_data(self):
