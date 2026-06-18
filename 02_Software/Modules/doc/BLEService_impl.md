@@ -1,7 +1,7 @@
 # BLEService 实现文档
 
 > **所属层次**：Service 层（业务服务层）
-> **实现状态**：✅ v2 已实现（2026-06-16 环形缓冲区 + 快照合并推送）
+> **实现状态**：✅ v3 已实现（2026-06-16 环形缓冲区 + 快照合并 + UUID 分发）
 > **负责人员**：郑皓文
 
 ---
@@ -51,7 +51,7 @@
 │  ble_svc.tick():                                             │
 │    ├─ 检查 cmd_ready                                         │
 │    ├─ drain cmd_buffer → _parse_and_route()                  │
-│    │   └─ json.loads → 按 "a" 字段路由 → EventBus.publish   │
+│    │   └─ 按 UUID 分发 → EventBus.publish                    │
 │    ├─ 快照推送（合并控制状态为 1 条 notify）                  │
 │    └─ force_push（连接后立即推送传感器数据）                  │
 │                                                              │
@@ -67,13 +67,13 @@
 
 **接收流（手机 → 板子）**：
 ```
-手机 BLE 写入 FFF3 → BLEDriver._ble → BLEService._ble_callback()
-  → cmd_buffer.put(raw_hex)
+手机 BLE 写入 → BLEDriver._ble → BLEService._ble_callback()
+  → cmd_buffer.put({"uuid": uuid, "raw": value})
   → cmd_ready = True
   → tick() drain → _parse_and_route()
-    → {"a":"ctrl",...} → EventBus(EVENT_RIDE_CONTROL)
-    → {"a":"nav",...}  → EventBus(EVENT_NAV_CMD)
-    → {"a":"ack",...}  → EventBus(EVENT_BLE_ALARM_ACK)
+    → uuid == char_nav  → EventBus(EVENT_NAV_CMD)
+    → uuid == char_ctrl → EventBus(EVENT_RIDE_CONTROL)
+    → uuid == char_ack  → EventBus(EVENT_BLE_ALARM_ACK)
 ```
 
 **发送流（板子 → 手机）**：
@@ -173,6 +173,34 @@ tick() 周期
 | 1 次 light_on | 3 条 notify（t=7 + t=8 + t=9） | 1 条 notify（合并） |
 | 1 秒 5 次指令 | 15 条 notify 队列堆积 | 最多 1 条（快照覆盖） |
 | 队列压力 | 高（可能爆炸） | 低（恒定 1 条/tick） |
+
+### 7.4 UUID 分发逻辑（v3 新增）
+
+根据 BLE 特征值 UUID 分发到不同事件：
+
+| UUID | 特征值 | 事件 | 说明 |
+|------|--------|------|------|
+| FFF2 | char_nav | EVENT_NAV_CMD | 导航指令 |
+| FFF3 | char_ctrl | EVENT_RIDE_CONTROL | 控制指令 |
+| FFF4 | char_ack | EVENT_BLE_ALARM_ACK | 报警确认 |
+
+```python
+def _parse_and_route(self, item):
+    uuid = item.get("uuid")
+    value = item.get("raw", "")
+
+    if uuid == self._ble.cfg["char_nav"]:
+        self.event_bus.publish(EVENT_NAV_CMD, {"raw": value})
+    elif uuid == self._ble.cfg["char_ctrl"]:
+        self.event_bus.publish(EVENT_RIDE_CONTROL, {"raw": value})
+    elif uuid == self._ble.cfg["char_ack"]:
+        self.event_bus.publish(EVENT_BLE_ALARM_ACK, {"raw": value})
+```
+
+**优势**：
+- 按 UUID 精确路由，无需解析 JSON
+- 新增特征值只需扩展 if/elif 分支
+- 每个特征值独立事件，ControlService/NavigationService/AlarmService 各自处理
 
 ---
 

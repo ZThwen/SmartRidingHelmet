@@ -1,7 +1,7 @@
 # ControlService 实现文档
 
 > **所属层次**：Service 层（业务服务层）
-> **实现状态**：✅ v3 已实现（2026-06-16 电源模式 + 状态快照 + TTS 反馈）
+> **实现状态**：✅ v3 已实现（2026-06-17 远端控制全链路测试通过）
 > **负责人员**：郑皓文
 
 ---
@@ -212,3 +212,34 @@ if cmd 非电源类 and cmd 非查询类:
 ## 13. 报警中 TTS 保护
 
 `_alarm_active` 标志由 EVENT_ALARM_TRIGGERED/CANCELED 维护。`_maybe_tts()` 和 `_tts()` 均检查此标志：如果 `_alarm_active == True`，不发 TTS，避免 `stop()` 中断报警音频。静默报警期间同样阻塞 TTS。
+
+---
+
+## v3 变更记录（2026-06-17）
+
+### 合并 BLE 推送
+- `_push_state()` 从 3 条消息合并为 1 条
+- 格式：`{"t":7,"m":1,"b":50,"v":5,"p":0}`
+- 减少 BLE 传输次数，提高实时性
+
+### TTS 反馈机制
+- `_maybe_tts(cmd)` 方法：控制指令 TTS 播报
+- 1 秒防抖：快速指令只播报最终状态
+- 报警中阻塞：`_alarm_active=True` 时不播报
+- 报警取消后恢复：`_on_alarm_canceled` 中播报 "报警已取消"
+
+### 报警快照保存/恢复
+- `_pre_alarm_state`：报警前保存状态快照
+- `_on_alarm_triggered`：触发时保存当前状态
+- `_on_alarm_canceled`：取消时恢复之前状态
+- 防止报警覆盖用户设置
+
+### 省电模式自动关灯
+- `power_save`：设置 `light_brightness=0` + 发送 `EVENT_LIGHT_CONTROL{off}`
+- `power_emergency`：同上
+- 确保省电模式下灯关闭
+
+### 手动操作覆盖省电
+- 非电源/报警指令在省电模式下执行时
+- 自动将 `power_mode` 改为 `custom`
+- 发布 `EVENT_POWER_STATE_CHANGE{power_state: CUSTOM}`
