@@ -329,6 +329,120 @@ while True:
     time.sleep_ms(10)
 ```
 
+### 3.3 事件常量表
+
+> 所有事件名定义在 `core/config.py`，模块间通信禁止硬编码事件字符串。
+
+| 事件常量 | 说明 | 发布者 | 订阅者 |
+|----------|------|--------|--------|
+| **系统事件** | | | |
+| EVENT_SYSTEM_READY | 系统就绪 | main.py | 各模块 |
+| EVENT_CONFIG_UPDATE | 配置更新 | CloudService | 各模块 |
+| EVENT_SENSOR_ERROR | 传感器错误 | 各传感器驱动 | CloudService |
+| EVENT_LCD_ERROR | LCD 错误 | LCDDriver | DisplayService |
+| EVENT_BUTTON_ERROR | 按键错误 | Button | — |
+| EVENT_BUTTON_PRESSED | 按键按下 | Button | AlarmService |
+| EVENT_LED_ERROR | LED 错误 | LEDDriver | — |
+| EVENT_PWM_LED_ERROR | PWM 控制错误 | PWM_LED | — |
+| **传感器数据就绪** | | | |
+| EVENT_TEMP_HUMID_READY | 温湿度数据就绪 | TempHumidDriver | CloudService, BLEService, DisplayService |
+| EVENT_IMU_READY | IMU 加速度数据就绪 | IMUDriver | CollisionService |
+| EVENT_GNSS_READY | GNSS 定位数据就绪 | GNSSDriver | CloudService, BLEService, NavigationService |
+| EVENT_LIGHT_READY | 光照数据就绪 | LightSensorDriver | DisplayService, LightService |
+| EVENT_LBS_READY | LBS 基站定位就绪 | GNSSDriver | CloudService |
+| **报警事件** | | | |
+| EVENT_COLLISION_DETECTED | 碰撞检测到 | CollisionService | AlarmService, CloudService |
+| EVENT_SOS_TRIGGERED | SOS 按键触发 | Button | AlarmService |
+| EVENT_ALARM_TRIGGERED | 报警触发（通用） | AlarmService | CloudService, BLEService, DisplayService |
+| EVENT_ALARM_CANCELED | 报警取消 | AlarmService | CloudService, BLEService, DisplayService |
+| **音频事件** | | | |
+| EVENT_AUDIO_PLAYBACK_START | 音频开始播放 | AudioDriver | AlarmService |
+| EVENT_AUDIO_PLAYBACK_END | 音频播放结束 | AudioDriver | AlarmService |
+| EVENT_AUDIO_ERROR | 音频播放错误 | AudioDriver | — |
+| EVENT_TTS_REQUEST | TTS 播报请求 | ControlService | AudioDriver |
+| **电源事件** | | | |
+| EVENT_BATTERY_LOW | 低电量警告 | PowerService | AlarmService, CloudService, DisplayService |
+| EVENT_BATTERY_CRITICAL | 电量严重不足 | PowerService | AlarmService, CloudService |
+| EVENT_POWER_STATE_CHANGE | 功耗状态切换 | ControlService | 各传感器, LightService |
+| **GNSS 事件** | | | |
+| EVENT_GPS_LOST | GPS 信号丢失 | GNSSDriver | AlarmService, DisplayService |
+| **网络事件** | | | |
+| EVENT_NETWORK_CONNECTED | 网络连接成功 | Network | CloudService |
+| EVENT_NETWORK_DISCONNECTED | 网络断开 | Network | CloudService |
+| EVENT_DATA_UPLOAD_SUCCESS | 数据上传成功 | CloudService | — |
+| EVENT_DATA_UPLOAD_FAILED | 数据上传失败 | CloudService | — |
+| **BLE 事件（Phase 3 新增）** | | | |
+| EVENT_BLE_CONNECTED | BLE 连接成功 | BLEDriver | BLEService |
+| EVENT_BLE_DISCONNECTED | BLE 断开连接 | BLEDriver | BLEService |
+| EVENT_RIDE_CONTROL | BLE FFF3 控制指令 | BLEService | ControlService |
+| EVENT_NAV_CMD | 导航指令 | BLEService | NavigationService |
+| EVENT_BLE_ALARM_ACK | 报警确认 | BLEService | AlarmService |
+| **控制系统事件（Phase 3 新增）** | | | |
+| EVENT_VOICE_CMD | 语音指令 | VoiceDriver | ControlService |
+| EVENT_CONTROL_STATE_CHANGED | 控制状态变更 | ControlService | BLEService |
+| EVENT_LIGHT_CONTROL | 灯光控制指令 | ControlService | LightService |
+| EVENT_VOLUME_CONTROL | 音量控制指令 | ControlService | AudioDriver |
+| EVENT_ALARM_CONTROL | 报警控制指令 | ControlService | AlarmService |
+
+### 3.4 模块清单
+
+> 所有模块继承 `BaseModule`，实现 `init()` / `tick()` / `get_data()` / `get_status()` 四元组接口。
+
+| 模块 | 文件 | 层级 | 状态 | 说明 |
+|------|------|------|------|------|
+| TempHumidDriver | Drivers/sensor/Temp_Humid.py | Device | ✅ | AHT20 温湿度，I2C1 |
+| IMUDriver | Drivers/sensor/imu.py | Device | ✅ | LIS2DH12TR 加速度/陀螺仪，I2C1 |
+| GNSSDriver | Drivers/sensor/Gnss.py | Device | ✅ | EC200U 内置 GNSS + LBS 基站定位 |
+| LightSensorDriver | Drivers/sensor/Light.py | Device | ✅ | GL5528 光敏电阻，ADC PC5 |
+| Button | Drivers/interface/Button.py | Device | ✅ | SOS 按键，GPIO + IRQ |
+| VoiceDriver | Drivers/interface/Voice.py | Device | ✅ | ASRPRO 语音识别，UART hex 映射 |
+| LEDDriver | Drivers/actuator/LED.py | Device | ✅ | LED_BLUE，Timer1 闪烁 |
+| AudioDriver | Drivers/actuator/Audio.py | Device | ✅ | EC200U 音频，扬声器 J402 |
+| LCDDriver | Drivers/actuator/LCD.py | Device | ✅ | ST7735 LCD，SPI1 |
+| PWM_LED | Drivers/actuator/PWM_LED.py | Device | ✅ | PWM 调光大功率灯，PE11 TIM1_CH2 |
+| BLEDriver | Drivers/network/BLE.py | Device | ✅ | EC200U BLE 4.2 GATT Server |
+| Network | Drivers/network/Network.py | Device | ✅ | 4G 网络模组 |
+| MQTTDriver | Drivers/network/MQTT.py | Device | ✅ | MQTT 协议封装 |
+| CollisionService | Modules/collision_service.py | Service | ✅ | 碰撞检测算法（多级阈值+防误报） |
+| AlarmService | Modules/alarm_service.py | Service | ✅ | 报警联动（声光+BLE+云端） |
+| CloudService | Modules/cloud_service.py | Service | ✅ | MQTT 云端通信与数据上报 |
+| DisplayService | Modules/display_service.py | Service | ✅ | LCD 显示管理 |
+| BLEService | Modules/ble_service.py | Service | ✅ v3 | 环形缓冲区、快照合并推送 |
+| LightService | Modules/light_service.py | Service | ✅ v2 | 自适应灯光（光照→PWM 非线性映射） |
+| ControlService | Modules/control_service.py | Service | ✅ v3 | 纯事件驱动、19 条指令、TTS、报警快照 |
+| NavigationService | Modules/navigation_service.py | Service | ✅ v1 | 导航指令处理（腾讯地图 API） |
+
+### 3.5 初始化顺序
+
+> `main.py` 严格按以下顺序初始化模块。每步失败仅跳过，不阻塞后续模块。
+
+```
+阶段 1 — 传感器（数据源最先就绪）
+  1. Temp_Humid    → I2C1 温湿度
+  2. IMU           → I2C1 加速度/陀螺仪
+  3. GNSS          → EC200U 内置 GNSS
+  4. Light         → ADC 光照
+
+阶段 2 — 执行器（硬件接口就绪）
+  5. Button        → GPIO SOS 按键
+  6. LED           → Timer1 LED 指示灯
+  7. Audio         → EC200U 音频输出
+  8. LCD           → SPI1 显示屏
+  9. PWM_LED       → PE11 PWM 调光灯（v2 新增）
+
+阶段 3 — 业务服务（依赖下层模块）
+  10. CollisionService   → 碰撞检测
+  11. AlarmService       → 报警联动（注入 led, audio）
+  12. CloudService       → MQTT 云端通信
+  13. DisplayService     → LCD 显示管理（注入 lcd_driver, audio_driver）
+  14. LightService       → 自适应灯光（v2 新增）
+  15. BLEService         → BLE 推送服务（注入 ble_driver）
+  16. ControlService     → 统一控制（v3 新增，纯事件驱动）
+  17. NavigationService  → 导航引导（v3 新增）
+```
+
+**依赖注入**：Service 层模块通过构造函数注入 Device 层引用（如 `AlarmService(event_bus, led=led, audio=audio)`），禁止 Service 间直接引用。
+
 ---
 
 ## 4. 目录结构
@@ -357,11 +471,12 @@ SmartRidingHelmet-TeamX/
 │   │   │   ├── led.py           # LED指示灯
 │   │   │   └── PWM_LED.py       # PWM调光LED驱动（18W大功率灯）
 │   │   ├── interface/
-│   │   │   └── Button.py        # SOS按键
+│   │   │   ├── Button.py        # SOS按键
+│   │   │   └── Voice.py         # 语音指令（ASRPRO UART hex 映射）
 │   │   └── network/
 │   │       ├── Network.py       # 4G网络模组
 │   │       ├── MQTT.py          # MQTT协议封装
-│   │       ├── BLE.py           # BLE蓝牙GATT Server
+│   │       ├── BLE.py           # BLE蓝牙GATT Server（纯硬件接口）
 │   │       ├── Qth.py           # 移远云Qth SDK封装
 │   │       └── thread_queue.py  # 线程安全队列
 │   │
@@ -488,7 +603,7 @@ def tick(self):
 
 ---
 
-**文档版本**：v6.2
-**更新日期**：2026-06-02
+**文档版本**：v7.0
+**更新日期**：2026-06-18
 **维护团队**：锦依卫队
-**备注**：v1 完成，v2 导航功能开发中（头盔端 TTS+LCD 已实现，位置播报和远端控制待开发），BLE 直连为主数据通道
+**备注**：Phase 3 完成 — ControlService（19 指令+TTS）、NavigationService、BLEService v3（环形缓冲+快照合并）、LightService v2、PWM_LED、VoiceDriver 已集成。新增事件常量表、模块清单、初始化顺序章节。

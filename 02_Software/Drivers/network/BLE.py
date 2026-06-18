@@ -9,7 +9,6 @@ import time
 from core.Base_Module import BaseModule
 from core.config import (
     EVENT_BLE_CONNECTED, EVENT_BLE_DISCONNECTED,
-    EVENT_NAV_CMD, EVENT_RIDE_CONTROL, EVENT_BLE_ALARM_ACK,
     EVENT_CONFIG_UPDATE, POWER_STATE_ACTIVE,
     BLE_DEVICE_NAME, BLE_SERVICE_UUID, BLE_CHAR_DATA,
     BLE_CHAR_NAV, BLE_CHAR_CTRL, BLE_CHAR_ACK,
@@ -50,6 +49,8 @@ class BLEDriver(BaseModule):
             "connected_addr": "",
             "connected_time": 0,
         }
+
+        self._data_handler = None  # 外部数据处理器（BLEService 注册）
 
         self._ble = None
         self._connected_published = False
@@ -150,6 +151,14 @@ class BLEDriver(BaseModule):
         except Exception as e:
             print("[%s] 停止失败: %s" % (self.name, e))
 
+    def set_data_handler(self, handler):
+        """
+        brief 注册外部数据处理器（BLEService 调用）
+        param handler: 回调函数，接收 evt 字典
+        note BLEService 通过此方法接收 EVT_VAL_DATA 事件，不覆盖 BLE 回调
+        """
+        self._data_handler = handler
+
     def _callback(self, evt):
         """
         brief BLE 事件回调（modem 线程上下文）
@@ -193,28 +202,10 @@ class BLEDriver(BaseModule):
                             "timestamp": time.ticks_ms(),
                         })
 
+            # EVT_VAL_DATA 转发给外部数据处理器（BLEService）
             elif event_id == BLE.EVT_VAL_DATA:
-                uuid = evt.get("uuid")
-                value = evt.get("value", "")
-
-                # hex 解码：清理空格/换行后尝试解码
-                if isinstance(value, str) and len(value) > 2:
-                    try:
-                        clean = value.strip().replace(' ', '').replace('\n', '').replace('\r', '')
-                        if len(clean) % 2 == 0 and all(c in '0123456789abcdefABCDEF' for c in clean):
-                            value = bytes.fromhex(clean).decode('utf-8')
-                    except:
-                        pass  # 解码失败，保持原值
-
-                if uuid == self.cfg["char_nav"]:
-                    if self.event_bus:
-                        self.event_bus.publish(EVENT_NAV_CMD, {"raw": value})
-                elif uuid == self.cfg["char_ctrl"]:
-                    if self.event_bus:
-                        self.event_bus.publish(EVENT_RIDE_CONTROL, {"raw": value})
-                elif uuid == self.cfg["char_ack"]:
-                    if self.event_bus:
-                        self.event_bus.publish(EVENT_BLE_ALARM_ACK, {"raw": value})
+                if self._data_handler:
+                    self._data_handler(evt)
 
         except Exception as e:
             self.ctx["err_count"] += 1

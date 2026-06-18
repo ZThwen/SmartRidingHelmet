@@ -7,9 +7,12 @@ var MapService = require('../../services/map-service');
 var BleService = require('../../services/ble-service');
 var NavService = require('../../services/navigation-service');
 var logger = require('../../utils/logger');
+var CtrlService = require('../../services/ctrl-service');
+var app = getApp();
 
 Page({
   data: {
+    statusBarHeight: 44,
     status: '未开始',
     isOnline: false,
     bleStatus: '未连接',
@@ -57,9 +60,11 @@ Page({
   },
 
   onLoad: function() {
+    var sysInfo = wx.getSystemInfoSync();
+    var safeTop = sysInfo.safeArea ? sysInfo.safeArea.top : (sysInfo.statusBarHeight || 44);
+    this.setData({ statusBarHeight: safeTop });
     logger.init();
     logger.log('PAGE', '首页加载');
-    var sysInfo = wx.getSystemInfoSync();
     logger.log('PAGE', '基础库=' + sysInfo.SDKVersion + ' 平台=' + sysInfo.platform + ' 系统=' + sysInfo.system);
     var that = this;
 
@@ -118,8 +123,13 @@ Page({
     wx.startLocationUpdate({
       success: function() {
         logger.log('PAGE', 'startLocationUpdate 成功，注册 onLocationChange');
+        var _gpsLogIdx = 0;
+        wx.offLocationChange();
         wx.onLocationChange(function(res) {
-          logger.log('PAGE', 'onLocationChange: lat=' + res.latitude + ' lon=' + res.longitude);
+          _gpsLogIdx++;
+          if (_gpsLogIdx % 10 === 0) {
+            logger.log('PAGE', 'onLocationChange: lat=' + res.latitude + ' lon=' + res.longitude);
+          }
           // 未骑行时用手机 GPS 更新地图中心，骑行中用 BLE 坐标
           if (that.data.mapFollowing && !RideService.isActive()) {
             that.setData({ mapLat: res.latitude, mapLon: res.longitude });
@@ -165,11 +175,34 @@ Page({
       }
       that.setData(data);
     });
+
+    // eventBus 监听（报警跨页面同步）
+    var bus = app.eventBus;
+    if (bus) {
+      that._onAlarmTriggered = function() {
+        that.setData({ showAlarmPopup: true, alarmPopupClass: 'alarm-popup' });
+      };
+      that._onAlarmCancelled = function() {
+        that.setData({ showAlarmPopup: false, alarm: '正常' });
+      };
+      bus.on('alarm:triggered', that._onAlarmTriggered);
+      bus.on('alarm:cancelled', that._onAlarmCancelled);
+    }
   },
 
   onUnload: function() {
-    BleService.disconnect();
-    wx.stopLocationUpdate({ success: function(){}, fail: function(){} });
+    var bus = app.eventBus;
+    if (bus) {
+      bus.off('alarm:triggered', this._onAlarmTriggered);
+      bus.off('alarm:cancelled', this._onAlarmCancelled);
+    }
+  },
+
+  onShow: function() {
+    // 从 globalData 同步报警状态（从控制页返回时）
+    if (app.globalData.alarmActive && !this.data.showAlarmPopup) {
+      this.setData({ showAlarmPopup: true });
+    }
   },
 
   onToggleRide: function() {
@@ -427,10 +460,17 @@ Page({
     BleService.init({
       onConnected: function() {
         that.setData({ bleConnected: true, bleStatus: '已连接', status: '骑行中...', isOnline: true });
+        app.globalData.bleConnected = true;
+        app.globalData.bleStatus = '已连接';
+        if (app.eventBus) app.eventBus.emit('ble:connected');
         logger.log('BLE', '连接成功');
       },
       onDisconnected: function() {
         that.setData({ bleConnected: false, bleStatus: '已断开' });
+        app.globalData.bleConnected = false;
+        app.globalData.bleStatus = '已断开';
+        CtrlService.reset();
+        if (app.eventBus) app.eventBus.emit('ble:disconnected');
         logger.log('BLE', '连接断开');
       },
       onData: function(data) {
@@ -519,6 +559,14 @@ Page({
           if (that.data.showAlarmPopup) that.setData({ showAlarmPopup: false });
           // 导航恢复
           if (NavService.getState().state === 'paused') NavService.resume();
+        }
+        else if (data.t === 7 || data.t === 8 || data.t === 9) {
+          // 控制状态回推（t=7灯光/t=8音量/t=9电源）→ 更新全局状态 + 通知控制页
+          var state = CtrlService.parseCtrlState(data);
+          if (state) {
+            app.globalData.ctrlState = state;
+            if (app.eventBus) app.eventBus.emit('ctrl:stateChanged', state);
+          }
         }
       },
       onStatus: function(msg) {

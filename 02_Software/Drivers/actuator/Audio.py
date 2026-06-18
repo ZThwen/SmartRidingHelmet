@@ -9,7 +9,10 @@ from quectel import Audio as Audio
 
 from core.Base_Module import BaseModule
 from core.config import (EVENT_AUDIO_PLAYBACK_START, EVENT_AUDIO_PLAYBACK_END,
-                    EVENT_AUDIO_ERROR, EVENT_CONFIG_UPDATE, POWER_STATE_ACTIVE,
+                    EVENT_AUDIO_ERROR, EVENT_VOLUME_CONTROL,
+                    EVENT_CONFIG_UPDATE, EVENT_TTS_REQUEST,
+                    EVENT_ALARM_TRIGGERED, EVENT_ALARM_CANCELED,
+                    POWER_STATE_ACTIVE,
                     AUDIO_TTS_SPEED, AUDIO_TTS_VOLUME, AUDIO_SPEAKER_VOLUME)
 
 
@@ -46,6 +49,7 @@ class AudioDriver(BaseModule):
             "current_file": None,      # 当前播放文件名
             "err_count": 0,            # 连续操作错误计数
             "power_state": POWER_STATE_ACTIVE,  # 功耗状态
+            "alarm_playing": False,    # 报警音频播放中标志
         }
 
         # ===================== 四元组：当前数据 =====================
@@ -78,6 +82,10 @@ class AudioDriver(BaseModule):
             # 4. 订阅事件
             if self.event_bus:
                 self.event_bus.subscribe(EVENT_CONFIG_UPDATE, self._on_config_update)
+                self.event_bus.subscribe(EVENT_TTS_REQUEST, self._on_tts_request)
+                self.event_bus.subscribe(EVENT_VOLUME_CONTROL, self._on_volume_control)
+                self.event_bus.subscribe(EVENT_ALARM_TRIGGERED, self._on_alarm_triggered)
+                self.event_bus.subscribe(EVENT_ALARM_CANCELED, self._on_alarm_canceled)
 
             self.ctx["is_init"] = True
             print(f"[{self.name}] ✓ 初始化完成 | 音量:{self.cfg['speaker_volume']} TTS语速:{self.cfg['tts_speed']}")
@@ -96,6 +104,18 @@ class AudioDriver(BaseModule):
 
         # Audio 无需周期性采样，保持空实现维持生命周期
         pass
+
+    def _on_volume_control(self, payload):
+        """
+        brief 音量控制指令回调（来自 ControlService）
+        param payload: {cmd: "up"/"down"}
+        """
+        cmd = payload.get("cmd", "")
+        current = self._data.get("volume", AUDIO_SPEAKER_VOLUME)
+        if cmd == "up":
+            self.set_volume(min(current + 1, 5))
+        elif cmd == "down":
+            self.set_volume(max(current - 1, 0))
 
     # ==================== 事件回调 ====================
     def _audio_event_cb(self, event):
@@ -160,6 +180,28 @@ class AudioDriver(BaseModule):
             old_state = self.ctx["power_state"]
             self.ctx["power_state"] = payload["power_state"]
             print(f"[{self.name}] 功耗状态: {old_state} -> {payload['power_state']}")
+
+    def _on_tts_request(self, payload):
+        """
+        brief TTS 播报请求回调
+        param payload: {text: "当前温度28度"}
+        note 先停止当前播报再播放新的，防止重叠
+              报警中拒绝 TTS（报警音优先）
+        """
+        if self.ctx.get("alarm_playing"):
+            return  # 报警中，拒绝 TTS
+        text = payload.get("text", "")
+        if text:
+            self.stop()
+            self.play_tts(text)
+
+    def _on_alarm_triggered(self, payload):
+        """报警触发：标记报警播放中"""
+        self.ctx["alarm_playing"] = True
+
+    def _on_alarm_canceled(self, payload):
+        """报警取消：清除报警播放标志"""
+        self.ctx["alarm_playing"] = False
 
     # ==================== 公共接口（供 Service 层调用）====================
     def play_file(self, file_path):

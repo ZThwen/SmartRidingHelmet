@@ -74,7 +74,9 @@ AuthComponent ──token──→ BleComponent
 | RideComponent | 骑行状态机、Haversine 总结 | `services/ride-service.js` |
 | MapComponent | 轨迹 polyline、marker 生成 | `services/map-service.js` |
 | NavComponent | 路线规划、BLE 写入导航指令 | `services/navigation-service.js` |
-| RemoteControlComponent *📅* | 远端控制 UI + BLE FFF3 指令下发 | 首页控制面板（待实现） |
+| RemoteControlComponent | 远端控制 UI + BLE FFF3 指令下发 | pages/control/control.js |
+| EventBus | 跨页面事件通知（on/off/emit） | utils/event-bus.js |
+| CustomTabBar | 底部骑行/控制切换 | custom-tab-bar/index.js |
 | LogComponent | 日志双写 | `utils/logger.js` |
 
 > **历史方案备注**：`DataComponent`（`services/data-service.js`）为 v1 初期的 HTTP 轮询方案，当前未被 `index.js` 引用。数据采集已由 `BleComponent` 通过 BLE Notify 接管。
@@ -168,7 +170,7 @@ RemoteControlComponent *📅*
 | ADR-1 | 模块化单体 | 单用户、无并发 |
 | ADR-2 | BLE GATT Notify（主通道） | 低延迟、无云端依赖。HTTP 轮询为历史方案，已弃用 |
 | ADR-3 | 零 npm | `require()` 即可 |
-| ADR-4 | globalData 共享 | 5 个状态不需 Redux |
+| ADR-4 | globalData 共享 | 7 个状态不需 Redux |
 | ADR-5 | 导航指令经 BLE FFF2 直连 sendNav 下行 | 低延迟（<100ms）、无云端依赖。已从 writeData REST API 迁移到 BLE 直连 |
 
 ---

@@ -181,6 +181,7 @@ function sendNav(dir, dist, road) {
 
 function sendCtrl(cmd) {
   var json = JSON.stringify({ a: 'ctrl', d: { cmd: cmd } });
+  logger.log('BLE', 'sendCtrl -> FFF3: ' + json + ' connected=' + _state.connected);
   _write(_state.charCtrl, json);
 }
 
@@ -190,14 +191,19 @@ function sendAck(id) {
 }
 
 function _write(charId, json) {
-  if (!_state.connected || !charId) return;
+  if (!_state.connected) { logger.log('BLE', '_write skipped: not connected'); return; }
+  if (!charId) { logger.log('BLE', '_write skipped: no charId'); return; }
+  logger.log('BLE', '_write -> ' + charId.slice(-4) + ': ' + json + ' len=' + json.length);
   wx.writeBLECharacteristicValue({
     deviceId: _state.deviceId,
     serviceId: _state.serviceId,
     characteristicId: charId,
     value: _str2ab(json),
+    success: function() {
+      logger.log('BLE', '_write OK ' + charId.slice(-4) + ': ' + json);
+    },
     fail: function(err) {
-      logger.log('BLE', '写入失败: ' + err.errMsg);
+      logger.log('BLE', '_write FAIL ' + charId.slice(-4) + ': ' + err.errMsg + ' json=' + json);
       if (_callbacks.onStatus) _callbacks.onStatus('BLE 写入失败');
     },
   });

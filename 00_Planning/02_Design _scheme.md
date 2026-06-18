@@ -417,21 +417,23 @@ LCD 内部维护 `display_mode` 状态（normal / alarm），用于防止 Servic
 
 **需求对应**：F-NET-04 BLE 近场通信（新增需求）
 
-**当前状态**：✅ **v1 已实现**（2026-05-27 小程序端验证通过）
+**当前状态**：✅ **v2 已实现**（2026-06-16 环形缓冲区架构）
 
 **模块功能**：
 - 封装 quectel.BLE()，仅 GATT Server 角色（不扫描不连接其他设备）
 - 注册 BLE GATT 服务（0xFFF0）及四个特征值（FFF1~FFF4）
-- 事件驱动：通过 BLE 硬件回调处理连接/断开/MTU/数据写入事件
-- 支持 BLE Notify 推送（FFF1 数据通道）
-- 接收手机端写入数据（FFF2 导航、FFF3 控制、FFF4 报警确认）
+- 提供 `notify_data(json_str)` 接口供 BLEService 调用
+- 提供 BLE 硬件实例供 BLEService 注册回调
+- **不处理数据解析和路由**（由 BLEService 负责）
 
 **发布事件**：
 - `EVENT_BLE_CONNECTED`：手机连接成功，携带数据 `{addr, timestamp}`
 - `EVENT_BLE_DISCONNECTED`：手机断开连接，携带数据 `{timestamp}`
-- `EVENT_NAV_CMD`：收到导航指令（FFF2 写入），携带数据 `{raw}`
-- `EVENT_RIDE_CONTROL`：收到骑行控制指令（FFF3 写入），携带数据 `{raw}`
-- `EVENT_BLE_ALARM_ACK`：收到报警确认（FFF4 写入），携带数据 `{raw}`
+
+**不再发布的事件**（已移至 BLEService）：
+- ~~`EVENT_NAV_CMD`~~：由 BLEService 解析后发布
+- ~~`EVENT_RIDE_CONTROL`~~：由 BLEService 解析后发布
+- ~~`EVENT_BLE_ALARM_ACK`~~：由 BLEService 解析后发布
 
 **订阅事件**：
 - `EVENT_CONFIG_UPDATE`：远程配置更新（MTU、功耗状态）
@@ -460,16 +462,93 @@ LCD 内部维护 `display_mode` 状态（normal / alarm），用于防止 Servic
 - 参考示例：`examples/ble.py`
 
 **技术要点**：
-- 事件驱动：tick() 为空，所有逻辑在 BLE 硬件回调（_callback）中处理
-- MTU 回退：EC200U 可能在 EVT_CONNECTED 之前先发 EVT_MTU，驱动通过 `_connected_published` 标志位防止重复发布 `EVENT_BLE_CONNECTED`
-- 连接回调在 modem 线程执行，`_callback()` 整体包裹 try/except 防止异常崩溃 BLE 协议栈
-- 回调中不做阻塞 I/O
-- Hex 解码：FFF2 写入的导航指令可能是 hex 编码字符串，驱动自动检测（清理空格/换行后校验 hex 格式）并解码为 UTF-8
+- BLE 为纯硬件接口层，不处理业务逻辑
+- BLEService 注册自己的回调到 BLE 硬件实例，接管连接/断开/数据事件处理
+- MTU 回退：EC200U 可能在 EVT_CONNECTED 之前先发 EVT_MTU，BLEService 通过 `_connected_published` 标志位防止重复发布 `EVENT_BLE_CONNECTED`
+- 回调在 modem 线程执行，BLEService 回调整体包裹 try/except 防止异常崩溃 BLE 协议栈
 
 **分层设计说明**：
 - Device 层 BLEDriver 封装底层 BLE API，不包含业务逻辑
-- 不订阅传感器事件，由 Service 层 BLEService 负责数据组装
+- 不订阅传感器事件，由 Service 层 BLEService 负责数据组装和路由
 - Service 层通过调用 `notify_data()` 发送数据
+
+---
+
+#### 2.1.12 语音指令驱动模块（Voice.py）
+
+**所属层次**：Device层（接口驱动层）
+
+**需求对应**：F-CTRL-01 远端控制（语音入口）
+
+**当前状态**：⏳ **基础框架已实现**（2026-06-12），待集成测试
+
+**模块功能**：
+- 监听 ASRPRO 语音模块的 UART 串口
+- 将接收到的 hex 字节映射为指令字符串（查表）
+- 通过 `EVENT_VOICE_CMD` 发送给 ControlService 统一执行
+
+**发布事件**：
+- `EVENT_VOICE_CMD`：语音指令，携带数据 `{cmd: "light_on"}`
+
+**订阅事件**：无（纯数据源）
+
+**公共接口**：
+- `init()`：创建 UART 实例
+- `tick()`：轮询 `uart.any()` → `read(1)` → 查表 → publish
+- `get_data()`：返回最近指令快照 `{last_cmd, last_hex}`
+- `get_status()`：返回运行状态
+
+**指令映射表**（定义在 `config.py` 的 `VOICE_CMD_MAP`）：
+
+| hex | cmd | 功能 |
+|-----|-----|------|
+| 0x01 | `light_on` | 开灯 |
+| 0x02 | `light_off` | 关灯 |
+| 0x03 | `brightness_up` | 亮度+ |
+| 0x04 | `brightness_down` | 亮度- |
+| 0x05 | `light_auto` | 自动模式 |
+| 0x06 | `volume_up` | 音量+ |
+| 0x07 | `volume_down` | 音量- |
+| 0x08 | `alarm_cancel` | 取消报警 |
+| 0x09 | `alarm_sos` | SOS 报警 |
+| 0x0A | `alarm_stealth` | 静默报警 |
+| 0x0B | `power_save` | 省电模式 |
+| 0x0C | `power_normal` | 正常模式 |
+| 0x0D | `power_emergency` | 紧急省电 |
+| 0x0E | `query_status` | 查询状态 |
+| 0x0F | `query_speed` | 查询速度 |
+| 0x10 | `query_temp` | 查询温度 |
+| 0x11 | `query_humid` | 查询湿度 |
+| 0x12 | `query_location` | 查询位置 |
+| 0x13 | `query_battery` | 查询电量 |
+
+**硬件说明**：
+- 语音芯片：ASRPRO（本地语音识别，不依赖云端）
+- 通信接口：UART2（9600 baud）
+- 数据格式：单字节 hex（0x01-0x13）
+- 通信方向：单向（ASRPRO → EC200U，无握手、无应答）
+
+**技术要点**：
+- 使用轮询而非中断：语音指令间隔 1-2 秒（人类说话速度），UART 硬件 FIFO（16 字节）天然缓冲，tick 每 10ms 轮询一次，延迟 < 10ms
+- 手动操作永远优先：任何电源模式下都读取语音指令
+- 不处理 TTS：TTS 由 ControlService 统一调度
+- 不处理执行逻辑：只做 hex → cmd 映射
+
+**数据流**：
+```
+ASRPRO 识别"开灯" → UART 发送 0x01
+  → VoiceDriver.tick() 轮询到 uart.any() > 0
+    → uart.read(1) → hex_val = 0x01
+    → VOICE_CMD_MAP[0x01] → "light_on"
+    → EventBus.publish(EVENT_VOICE_CMD, {cmd: "light_on"})
+      → ControlService._on_voice_cmd()
+        → _execute_cmd("light_on", source="voice")
+```
+
+**分层设计说明**：
+- Device 层负责 UART 硬件交互和 hex 映射
+- 不包含业务逻辑（指令执行、TTS 播报由 ControlService 负责）
+- 纯数据源，不订阅任何事件
 
 ---
 
@@ -656,22 +735,26 @@ LCD 内部维护 `display_mode` 状态（normal / alarm），用于防止 Servic
 
 ---
 
-#### 2.2.9 BLE 推送服务（BLEService）（✅ v1 已实现）
+#### 2.2.9 BLE 推送服务（BLEService）（✅ v2 已实现）
 
 **所属层次**：Service层（业务服务层）
 
 **需求对应**：F-NET-04 BLE 近场通信
 
-**当前状态**：✅ **v1 已实现**（2026-05-27 小程序端验证通过）
+**当前状态**：✅ **v2 已实现**（2026-06-16 环形缓冲区 + 快照合并推送）
 
 **模块功能**：
+- **接收**：注册 BLE 回调，将接收到的原始数据写入环形缓冲区，tick 中解析并路由到 ControlService / NavigationService
+- **发送**：收集传感器数据、控制状态、报警事件，通过 notify 线程推送到手机
 - 订阅传感器事件，缓存最新数据
 - tick() 定时组装合并 JSON → 线程安全队列 → 后台线程调用 BLEDriver.notify_data()
-- 报警事件立即入队推送（不等 tick 周期）
-- 连接后立即推送一次最新数据（force_push）
+- 控制状态快照合并（_ctrl_snapshot）：多条 EVENT_CONTROL_STATE_CHANGED 合并为 1 条推送
 - 心跳保活（5 秒间隔）
 
-**发布事件**：无（纯消费/转发）
+**发布事件**：
+- `EVENT_RIDE_CONTROL`：BLE FFF3 写入的控制指令（解析后）
+- `EVENT_NAV_CMD`：BLE FFF2 写入的导航指令（解析后）
+- `EVENT_BLE_ALARM_ACK`：BLE FFF4 写入的报警确认（解析后）
 
 **订阅事件**：
 - `EVENT_BLE_CONNECTED`：连接成功，设置 force_push
@@ -682,36 +765,70 @@ LCD 内部维护 `display_mode` 状态（normal / alarm），用于防止 Servic
 - `EVENT_LIGHT_READY`：缓存光照数据
 - `EVENT_ALARM_TRIGGERED`：立即推送报警 JSON
 - `EVENT_ALARM_CANCELED`：立即推送报警取消 JSON
-- `EVENT_CONTROL_STATE_CHANGED`：控制状态变更，推送到小程序
+- `EVENT_CONTROL_STATE_CHANGED`：快照合并（不直接入队）
 
 **BLE JSON 协议**（手机端接收）：
 
-| type (t) | 含义 | 数据字段 (d) |
-|:--------:|:-----|:-------------|
-| 0 | 合并传感器数据 | `{tmp, hum, lat, lon, spd, alt, cog, lux}` |
-| 5 | 报警触发 | `{a:1, l:2}` (a: 1=碰撞, 2=SOS; l: 级别) — 压缩格式，15 字节 |
-| 6 | 报警取消 | `{}` |
-| 7 | 控制状态 | `{lm:"auto", lb:50, vol:5, pm:"active"}` |
-| 99 | 心跳 | `{s: "ok"}` |
+| type (t) | 含义 | 数据字段 |
+|:--------:|:-----|:---------|
+| 0 | 合并传感器数据 | `{t:0, d:{tmp, hum, lat, lon, spd, alt, cog, lux}}` |
+| 5 | 报警触发 | `{t:5, a:1/2, l:1-3}` (a: 1=碰撞, 2=SOS; l: 级别) — 15 字节 |
+| 6 | 报警取消 | `{t:6, d:{}}` |
+| 7 | 控制状态（合并） | `{t:7, m:0/1, b:0-100, v:0-5, p:0-3}` — 25 字节 |
+| 99 | 心跳 | `{t:99, d:{s:"ok"}}` |
+
+**架构设计**：
+
+```
+BLE 中断 (modem 线程)
+  → _ble_callback(evt)
+    → EVT_CONNECTED/DISCONNECTED → 更新 ctx["is_connected"]
+    → EVT_VAL_DATA → cmd_buffer.put(raw_hex) + cmd_ready = True
+                      ← 微秒级返回
+
+主循环 (main 线程)
+  → ble_svc.tick()
+    → 检查 cmd_ready → drain cmd_buffer → _parse_and_route()
+      → {"a":"ctrl",...} → EventBus(EVENT_RIDE_CONTROL)
+      → {"a":"nav",...}  → EventBus(EVENT_NAV_CMD)
+      → {"a":"ack",...}  → EventBus(EVENT_BLE_ALARM_ACK)
+    → 快照推送（if _ctrl_snapshot.dirty → send_queue.put 合并消息）
+
+  → event_bus.pump()
+    → ControlService / NavigationService 处理指令
+
+  → notify_thread (后台线程)
+    → send_queue.get() → BLEDriver.notify_data()
+```
+
+**环形缓冲区（cmd_buffer）**：
+- 基于 ThreadSafeQueue（线程安全，满时丢弃最旧元素）
+- 最大 16 条，每条是原始 hex 字符串
+- `cmd_ready` 标志：中断写入时设 True，tick drain 后设 False
+- 中断只写 buffer + 设 flag，不做 JSON 解析，微秒级返回
+
+**快照合并推送（_ctrl_snapshot）**：
+- 内部维护控制状态快照 `{m, b, v, p, dirty}`
+- 每收到 EVENT_CONTROL_STATE_CHANGED 更新快照字段，dirty = True
+- tick 周期统一推送 1 条合并消息（`{"t":7,"m":1,"b":50,"v":5,"p":0}`）
+- 避免密集指令导致 notify 队列爆炸
 
 **依赖关系**：
-- 依赖 BLEDriver（调用 `notify_data()` 接口）
+- 依赖 BLEDriver（调用 `notify_data()` 接口 + 注册回调）
 - 依赖 ThreadSafeQueue（线程安全队列）
 - 依赖 EventBus（订阅传感器和报警事件）
 
 **技术要点**：
-- 双线程架构：主线程（事件回调 → 缓存 → tick() 组装 JSON → 入队）与通知线程（出队 → BLE notify）通过线程安全队列解耦
-- 上传间隔：`BLE_UPLOAD_INTERVAL_MS`（默认 2000ms）
-- 心跳间隔：`BLE_KEEPALIVE_MS`（默认 5000ms）
-- IMU 数据缓存但暂不推送（碰撞结果由 AlarmService 通过 t:5 推送）
+- 中断快速返回：BLE callback 只写 buffer，不做 JSON 解析，不触发 EventBus
+- 快照覆盖：密集指令时最新状态覆盖旧状态，每 tick 只推 1 条
 - 断连时自动清空发送队列，防止重连后发送过期数据
 - 后台线程熔断机制：连续失败 10 次后暂停发送，重连时重置
 - `deinit()` 等待后台线程退出（最多 700ms），避免 use-after-free
 
 **分层设计说明**：
-- Service 层负责数据组装和推送策略
+- Service 层负责数据组装、推送策略、指令解析路由
 - 持有 Device 层 BLEDriver 实例，调用其 `notify_data()` 接口
-- 不直接操作 BLE 硬件，通过 Device 层模块接口实现
+- BLEService 是 BLE 数据的唯一入口和出口
 
 ---
 
@@ -841,57 +958,101 @@ LCD 内部维护 `display_mode` 状态（normal / alarm），用于防止 Servic
 
 ---
 
-#### 2.2.5.2 统一控制服务（ControlService.py）（✅ v1 已实现）
+#### 2.2.5.2 统一控制服务（ControlService.py）（✅ v2 已实现）
 
 **所属层次**：Service层（业务服务层）
 
 **需求对应**：F-CTRL-01 远端控制
 
-**当前状态**：✅ **v1 已实现**（2026-06-10）
+**当前状态**：✅ **v2 已实现**（2026-06-16 纯事件驱动 + TTS 反馈）
 
 **模块职责**：
-- 订阅 `EVENT_RIDE_CONTROL` 事件（来自 BLE FFF3 写入）
-- 订阅 `EVENT_VOICE_CMD` 事件（来自 VoiceDriver，预留）
+- 订阅 `EVENT_RIDE_CONTROL` 事件（来自 BLE FFF3 写入 → BLEService buffer → tick 解析）
+- 订阅 `EVENT_VOICE_CMD` 事件（来自 VoiceDriver UART 轮询）
 - 解析 JSON 控制指令，路由到对应设备驱动
-- 控制状态回推（`EVENT_CONTROL_STATE_CHANGED`）
+- 乐观更新控制状态
+- 控制状态回推（`EVENT_CONTROL_STATE_CHANGED`，合并为 1 条）
+- TTS 反馈播报（`EVENT_TTS_REQUEST`，1 秒防抖）
 
 **指令格式**：`{"a":"ctrl", "d":{"cmd":"light_on"}}`
 
-**支持指令**：
+**支持指令**（19 条）：
 
-| 指令 | 功能 | 调用目标 |
+控制指令（13 条）：
+
+| 指令 | 功能 | 发布事件 | 响应模块 |
+|------|------|----------|----------|
+| `light_on` | 开灯 | `EVENT_LIGHT_CONTROL{on}` | LightService |
+| `light_off` | 关灯 | `EVENT_LIGHT_CONTROL{off}` | LightService |
+| `brightness_up` | 亮度+ | `EVENT_LIGHT_CONTROL{brightness_up}` | LightService |
+| `brightness_down` | 亮度- | `EVENT_LIGHT_CONTROL{brightness_down}` | LightService |
+| `light_auto` | 自动模式 | `EVENT_LIGHT_CONTROL{auto}` | LightService |
+| `volume_up` | 音量+ | `EVENT_VOLUME_CONTROL{up}` | AudioDriver |
+| `volume_down` | 音量- | `EVENT_VOLUME_CONTROL{down}` | AudioDriver |
+| `alarm_cancel` | 取消报警 | `EVENT_ALARM_CONTROL{cancel}` | AlarmService |
+| `alarm_sos` | SOS 报警 | `EVENT_ALARM_CONTROL{sos}` | AlarmService |
+| `alarm_stealth` | 静默报警 | `EVENT_ALARM_CONTROL{stealth}` | AlarmService |
+| `power_save` | 省电模式 | `EVENT_POWER_STATE_CHANGE{SUSPENDED}` | 全系统 |
+| `power_normal` | 正常模式 | `EVENT_POWER_STATE_CHANGE{ACTIVE}` | 全系统 |
+| `power_emergency` | 紧急省电 | `EVENT_POWER_STATE_CHANGE{EMERGENCY}` | 全系统 |
+
+查询指令（6 条）：
+
+| 指令 | 功能 | TTS 播报 |
 |------|------|----------|
-| `light_on` | 头灯开 | `light_service.set_manual_brightness(50)` |
-| `light_off` | 头灯关 | `light_service.set_manual_brightness(0)` |
-| `brightness_up` | 亮度+ | `light_service.set_manual_brightness(current+10)` |
-| `brightness_down` | 亮度- | `light_service.set_manual_brightness(current-10)` |
-| `light_auto` | 自动模式 | `light_service.set_auto_mode()` |
-| `volume_up` | 音量+ | `audio_driver.set_volume(current+1)` |
-| `volume_down` | 音量- | `audio_driver.set_volume(current-1)` |
-| `alarm_cancel` | 取消报警 | `alarm_service.cancel_alarm()` |
-| `power_save` | 省电模式 | `EVENT_POWER_STATE_CHANGE(SUSPENDED)` |
-| `power_normal` | 恢复正常 | `EVENT_POWER_STATE_CHANGE(ACTIVE)` |
+| `query_status` | 查询状态 | "灯光亮度百分之50，音量3，正常模式" |
+| `query_speed` | 查询速度 | "当前时速25公里" |
+| `query_temp` | 查询温度 | "当前温度28度" |
+| `query_humid` | 查询湿度 | "当前湿度百分之65" |
+| `query_location` | 查询位置 | "当前位置北纬31.23东经121.47" |
+| `query_battery` | 查询电量 | "电量信息暂不可用" |
 
 **发布事件**：
-- `EVENT_CONTROL_STATE_CHANGED`：控制状态变更，携带数据 `{light_mode, light_brightness, volume, power_mode}`
+- `EVENT_LIGHT_CONTROL`：灯光控制指令
+- `EVENT_VOLUME_CONTROL`：音量控制指令
+- `EVENT_ALARM_CONTROL`：报警控制指令
+- `EVENT_POWER_STATE_CHANGE`：电源状态切换
+- `EVENT_CONTROL_STATE_CHANGED`：控制状态变更（合并为 1 条 `{t:7, m, b, v, p}`）
+- `EVENT_TTS_REQUEST`：TTS 播报请求
 
 **订阅事件**：
 - `EVENT_RIDE_CONTROL`：BLE 远端控制指令
-- `EVENT_VOICE_CMD`：语音指令（预留，等 VoiceDriver 就绪后启用）
+- `EVENT_VOICE_CMD`：语音指令
+- `EVENT_TEMP_HUMID_READY`：缓存温湿度数据（供查询）
+- `EVENT_GNSS_READY`：缓存速度/位置数据（供查询）
+- `EVENT_ALARM_TRIGGERED`：标记报警状态（保护 TTS）
+- `EVENT_ALARM_CANCELED`：清除报警状态
+
+**数据流**：
+```
+BLE 指令 → BLEService buffer → tick 解析 → EVENT_RIDE_CONTROL → _execute_cmd("ble")
+语音指令 → VoiceDriver UART → tick 轮询 → EVENT_VOICE_CMD → _execute_cmd("voice")
+按键取消 → Button IRQ → EVENT_ALARM_CANCELED → 直接到 AlarmService
+                                        ↓
+                              _execute_cmd(cmd, source)
+                                ├── handler() → 发布控制事件
+                                ├── _update_control_state() → 乐观更新
+                                ├── _push_state() → 合并回推 1 条
+                                └── _maybe_tts() → TTS 播报（1s 防抖）
+```
 
 **依赖**：
 - LightService（灯光控制）
-- AudioDriver（音量控制）
+- AudioDriver（音量控制 + TTS 播报）
 - AlarmService（报警取消）
 
 **技术要点**：
 - 纯事件驱动，tick() 为空实现
 - 指令防抖（300ms），防止快速重复触发
+- BLE 回推合并为 1 条消息（原 3 条 t=7/t=8/t=9 → 1 条 `{t:7,m,b,v,p}`）
+- TTS 反馈：所有控制指令执行后触发 TTS 播报（1 秒防抖，快速连按只播报最终状态）
+- 报警中 TTS 保护：`_alarm_active == True` 时不发 TTS，避免中断报警音频
 - 依赖可为 None，降级运行不崩溃
-- 与 NavigationService 相同的架构模式
 
-**数据流**：
-  小程序 UI → sendCtrl() → BLE FFF3 → EVENT_RIDE_CONTROL → ControlService → 设备驱动
+**分层设计说明**：
+- Service 层负责指令路由、状态管理、TTS 调度
+- 不直接操作硬件，通过 EventBus 发布事件让各模块自行响应
+- 统一入口：BLE 指令和语音指令走同一个 `_execute_cmd()` 方法
 
 ---
 
@@ -942,43 +1103,6 @@ LCD 内部维护 `display_mode` 状态（normal / alarm），用于防止 Servic
 
 ---
 
-#### 2.2.6.1 统一控制服务（ControlService.py）（✅ 板子端已实现）
-
-**所属层次**：Service层（业务服务层）
-
-**需求对应**：F-CTRL-01 远端控制
-
-**当前状态**：✅ **板子端已实现**（2026-06-11），小程序控制 UI 待开发
-
-**模块职责**：
-- 订阅 `EVENT_RIDE_CONTROL` 事件（来自 BLE FFF3 写入）
-- 解析 JSON 控制指令，路由到对应设备驱动
-- 控制状态回推（`EVENT_CONTROL_STATE_CHANGED`）
-- 预留 `EVENT_VOICE_CMD`（等 VoiceDriver 就绪后启用）
-
-**支持指令**：light_on/off, brightness_up/down, light_auto, volume_up/down, alarm_cancel, power_save/normal
-
-**数据流**：
-  小程序 UI（控制面板）→ sendCtrl() → BLE FFF3 → EVENT_RIDE_CONTROL → ControlService → 设备驱动
-
-**已有基础设施**：
-- 小程序端：`sendCtrl(cmd)` — ble-service.js 已实现
-- 头盔端：`EVENT_RIDE_CONTROL` — config.py 已定义，BLEDriver FFF3 写入时已发布
-- ControlService — 板子端已实现并真机验证通过
-- BLE 回调 → EventBus → ControlService 全链路已通
-
-**待实现**：
-- 小程序端：远端控制 UI 面板（头灯开关、音量调节等按钮）
-- main.py 集成（BLEDriver + BLEService + LightService + ControlService 等 v2 模块）
-
-**依赖**：
-- BLEDriver（接收 FFF3 写入数据）
-- LightService（灯光控制）
-- Audio 驱动（音量控制）
-- AlarmService（报警取消）
-
----
-
 #### 2.2.7 微信小程序（WeChatMiniProgram）【v2 新增，Step A 已完成】
 
 **所属层次**：外部应用层
@@ -995,14 +1119,15 @@ LCD 内部维护 `display_mode` 状态（normal / alarm），用于防止 Servic
 | Step B | 导航路线规划 + 指令推送（腾讯地图 API + BLE FFF2 sendNav） | ✅ 已实现 |
 | | polyline 前向差分解压 + act_desc 方向映射修复 | ✅ 已修复 |
 | | 导航位置播报（头盔根据 GNSS 位置自主播报，替代 5s 推流） | 📅 规划中 |
-| | 远端控制 UI（头灯开关、音量调节等控制面板，BLE FFF3 sendCtrl） | 📅 小程序端待开发 |
-| | 统一控制服务（头盔端 ControlService 板子端已实现） | ✅ 板子端已实现 |
-| Step C | 语音交互（微信语音识别 → BLE FFF3 命令下发） | 📅 后续 |
+| | 远端控制 UI（头灯开关、音量调节等控制面板，BLE FFF3 sendCtrl） | ✅ 已实现 |
+| | 统一控制服务（头盔端 ControlService v2 已实现） | ✅ 已实现 |
+| | 语音指令驱动（VoiceDriver UART 轮询 + hex 映射） | ⏳ 基础框架已实现 |
+| Step C | 语音交互（ASRPRO → UART → ControlService） | ⏳ 待集成 |
 
 **通信方式**：
   头盔 → BLE GATT Notify (FFF1) → 微信小程序（BLE Central）→ 实时接收传感器数据推送
 
-> BLE 为主要近场数据通道，每 2 秒推送合并传感器 JSON（t=0），报警事件立即推送（t=5/t=6）。
+> BLE 为主要近场数据通道，每 2 秒推送合并传感器 JSON（t=0），报警事件立即推送（t=5/t=6），控制状态合并推送（t=7，含灯光+音量+电源）。
 >
 > **历史方案备注**：v1 初期（5/17-5/28）曾采用 HTTP 轮询方案（小程序 → 移远云 OpenAPI → 查询 TSL 数据），后于 5/28 改为 BLE 直连以降低延迟、减少云端依赖。`services/data-service.js` 和 `utils/ws-client.js` 保留作为历史参考，当前未被 `index.js` 引用。
 
@@ -1086,7 +1211,8 @@ LCD 内部维护 `display_mode` 状态（normal / alarm），用于防止 Servic
 ├── LCD               # LCD 显示
 ├── Network           # 4G 网络模组
 ├── MQTT              # MQTT 协议封装
-├── BLEDriver         # BLE GATT Server（EC200U 内置 BLE 4.2）
+├── BLEDriver         # BLE GATT Server（纯硬件接口，不处理数据路由）
+├── Voice             # 语音指令（UART 轮询 + hex 映射）
 └── Qth               # 移远云 Qth SDK 封装
 
 服务层（依赖驱动层，部分模块间也有依赖）
@@ -1095,13 +1221,94 @@ LCD 内部维护 `display_mode` 状态（normal / alarm），用于防止 Servic
 ├── AlarmService      # 依赖 LED、Audio（LCD 已解耦给 DisplayService）
 ├── CloudService      # 依赖 Network、MQTT、所有传感器驱动
 ├── LarkCloudService  # 依赖 Qth、所有传感器驱动
-├── BLEService        # 依赖 BLEDriver、ThreadSafeQueue、EventBus
+├── BLEService        # 依赖 BLEDriver（回调注册 + notify）、ThreadSafeQueue、EventBus
 ├── DisplayService    # 依赖 Light、LCD、Audio
+├── LightService      # 依赖 PWM LED
+├── ControlService    # 无直接依赖，纯事件驱动（EVENT_RIDE_CONTROL + EVENT_VOICE_CMD → EVENT_xxx_CONTROL）
 └── NavigationService # 依赖 BLEDriver（FFF2 接收）、Audio（TTS 播报）
 
 注：服务层模块间依赖关系在开发时进一步细化
 
-### 2.3.1 事件流总览
+### 2.3.1 电源模式行为矩阵
+
+系统支持 4 种电源模式：ACTIVE（正常）、SUSPENDED（省电）、EMERGENCY（紧急省电）、STEALTH_ALARM（静默报警）。
+
+#### 传感器层
+
+| 模块 | ACTIVE | SUSPENDED | EMERGENCY |
+|------|:------:|:---------:|:---------:|
+| TempHumid | 2s | 30s | ❌ 停止 |
+| LightSensor | 2s | 自动→2s / 手动→❌ | 自动→2s / 手动→❌ |
+| GNSS | 2s | 10s | 10s（降频） |
+| IMU | 100ms | 100ms | 100ms |
+
+#### 输出层
+
+| 模块 | ACTIVE | SUSPENDED | EMERGENCY | STEALTH_ALARM |
+|------|:------:|:---------:|:---------:|:-------------:|
+| PWM 灯 | ✅ | 默认关灯；自动正常 | 默认关灯；自动正常 | 不变 |
+| VoiceDriver | ✅ | ✅ | ✅ | ✅（可用） |
+| TTS | ✅ | ✅ | ✅ | ❌ 完全静默 |
+| 报警音频 | ✅ | ✅ | ✅ | ❌ 不播放 |
+| LED 闪烁 | ✅ | ❌ | ❌ | ❌ 不闪 |
+| Display | ✅ | ❌ | ❌ | ✅ |
+| LCD | ✅ | ❌ | ❌ | ✅ |
+
+#### 导航与通信层
+
+| 模块 | ACTIVE | SUSPENDED | EMERGENCY | STEALTH_ALARM |
+|------|:------:|:---------:|:---------:|:-------------:|
+| Navigation | ✅ LCD+TTS+小程序 | ✅ TTS+小程序（LCD 关） | ⏸ 暂停 | ✅ 小程序（TTS 静默） |
+| BLE | ✅ | ✅ | ✅ | ✅ |
+| Cloud | ✅ | ✅ | ✅ | ✅ |
+
+#### 安全与交互层
+
+| 模块 | ACTIVE | SUSPENDED | EMERGENCY |
+|------|:------:|:---------:|:---------:|
+| CollisionService | ✅ | ✅ | ✅ |
+| Button | ✅ | ✅ | ✅ |
+
+#### 报警规则
+
+| 报警类型 | 自动取消 | 触发方式 | TTS 行为 |
+|----------|:--------:|----------|----------|
+| Level 1-2 碰撞 | 30s 自动解除 | CollisionService / 手动 | 报警音播放，TTS 阻塞 |
+| Level 3 碰撞（升级 SOS） | ❌ | CollisionService | 报警音播放，TTS 阻塞 |
+| SOS 按键 | ❌ | Button | 报警音播放，TTS 阻塞 |
+| SOS BLE/语音 | ❌ | ControlService | 报警音播放，TTS 阻塞 |
+| 静默报警 | ❌ | BLE / 语音 | 完全静默，TTS 阻塞 |
+
+#### 报警状态快照
+
+| 阶段 | 报警相关模块 | 无关模块 |
+|------|------------|---------|
+| 报警前 | 保存快照 | 保存快照 |
+| 报警中 | 正常响应（不受电源模式限制） | 继续省电模式 |
+| 报警取消 | 恢复到报警前状态 | 继续省电模式 |
+
+#### TTS 优先级
+
+| 优先级 | 类型 | 行为 |
+|:------:|------|------|
+| 1（最高） | 报警音（play_file） | 不能被 TTS 打断 |
+| 2 | 导航 TTS | 报警中被阻塞 |
+| 3 | 命令 TTS | 报警中被阻塞，1 秒防抖 |
+
+#### 电源模式进入/退出
+
+| 转换 | 动作 |
+|------|------|
+| ACTIVE → SUSPENDED | 传感器降频，LCD 关，LED 关，默认关灯 |
+| SUSPENDED → ACTIVE | 传感器恢复，LCD 开，LED 开 |
+| ACTIVE → EMERGENCY | TempHumid 停止，GNSS 10s，默认关灯，导航暂停 |
+| EMERGENCY → ACTIVE | 传感器恢复，导航恢复 |
+| 任意 → STEALTH_ALARM | TTS 静默，报警音不播放，LED 不闪，灯光不变 |
+| STEALTH_ALARM → 取消 | 恢复报警前状态 |
+
+---
+
+### 2.3.2 事件流总览
 
 **阅读说明**：每个场景按时间从上到下展开，箭头表示事件流向。`[S]`=同步调用，`[E]`=事件驱动（异步）。
 
@@ -1242,12 +1449,13 @@ gnss.get_location() 返回有效数据
  │
  └── 每 5 秒 BLE FFF2 写入 {"a":"nav","d":{"dir":"right","dist":200,"road":"中山路"}}
       │
-      └── BLEDriver._callback() hex 解码
-           └── [E] EVENT_NAV_CMD {raw}
-                 └──→ NavigationService._on_nav_cmd()
-                        ├── JSON 解析 → 提取 dir/dist/road
-                        ├── [S] TTS 播报(子线程): "前方200米右转进入中山路"
-                        └── [S] LCD 显示(y=110): "> 200m 中山路"
+      └── BLEService._ble_callback() → cmd_buffer.put()
+           └── BLEService.tick() drain → _parse_and_route()
+                └── [E] EVENT_NAV_CMD {raw}
+                      └──→ NavigationService._on_nav_cmd()
+                             ├── JSON 解析 → 提取 dir/dist/road
+                             ├── [S] TTS 播报(子线程): "前方200米右转进入中山路"
+                             └── [S] LCD 显示(y=110): "> 200m 中山路"
 
 到达/取消:
 小程序 → sendNav("arrive"/"cancel") → NavigationService → TTS "已到达目的地" / "导航已结束"
@@ -1255,18 +1463,41 @@ gnss.get_location() 返回有效数据
 
 ---
 
-#### 场景七：远端控制（✅ 板子端已实现）
+#### 场景七：远端控制（✅ v2 已实现）
 
 ```
 小程序 UI（控制面板，如头灯按钮）
  │
  └── sendCtrl("light_on") → BLE FFF3 写入
       │
-      └── BLEDriver._callback()
-           └── [E] EVENT_RIDE_CONTROL {raw}
-                 └──→ ControlService（✅ 板子端已实现）
-                        ├── JSON 解析 → 提取 cmd
-                        └── [S] 调用设备驱动（LightService.set_manual_brightness）
+      └── BLEService._ble_callback()
+           → cmd_buffer.put(raw_hex) + cmd_ready = True
+           │
+           └── BLEService.tick() drain buffer
+                → _parse_and_route(raw)
+                  → JSON 解析 → {"a":"ctrl", "d":{"cmd":"light_on"}}
+                  → EventBus.publish(EVENT_RIDE_CONTROL, {cmd: "light_on"})
+                    │
+                    └── ControlService._on_ride_control()
+                         → _execute_cmd("light_on", source="ble")
+                           ├── handler() → EVENT_LIGHT_CONTROL{on} → LightService 开灯
+                           ├── _update_control_state() → 乐观更新 {light_mode:"manual", brightness:50}
+                           ├── _push_state() → EVENT_CONTROL_STATE_CHANGED {t:7, m:1, b:50, v:5, p:0}
+                           │    └── BLEService._on_control_state() → 快照合并
+                           └── _maybe_tts() → EVENT_TTS_REQUEST {text: "灯光已开启"}
+                                              └── AudioDriver.play_tts("灯光已开启")
+```
+
+**语音指令场景**：
+```
+用户说"开灯"
+ → ASRPRO 识别 → UART 发送 0x01
+   → VoiceDriver.tick() 轮询到 uart.any() > 0
+     → uart.read(1) → 0x01 → VOICE_CMD_MAP[0x01] → "light_on"
+     → EventBus.publish(EVENT_VOICE_CMD, {cmd: "light_on"})
+       → ControlService._on_voice_cmd()
+         → _execute_cmd("light_on", source="voice")
+           → 同上（handler + 状态更新 + 回推 + TTS）
 ```
 
 ---
@@ -1297,6 +1528,7 @@ gnss.get_location() 返回有效数据
 2. IMU 驱动（IMU）（✅已实现）
 3. GNSS 驱动（GNSS）（✅已实现）
 4. 光照驱动（Light）（✅已实现）
+4.1. 语音指令驱动（Voice）（⏳ 基础框架已实现，待集成）
 5. SOS 按键驱动（Button）（✅已实现）
 6. LED 驱动（LED）（✅已实现）
 7. 音频驱动（Audio）（✅已实现）
@@ -1304,7 +1536,7 @@ gnss.get_location() 返回有效数据
 8.1. PWM LED 驱动（PWM_LED）（✅ v1 已实现）
 9. 网络驱动：Network → MQTT（✅已实现）
 10. 网络驱动：Qth（✅ v1 已实现）
-11. BLE 驱动（BLEDriver）（✅ v1 已实现，待集成到 main.py）
+11. BLE 驱动（BLEDriver）（✅ v2 已实现，待集成到 main.py）
 12. 碰撞检测服务（CollisionService）（✅ v1 已实现）
 13. 电源管理服务（PowerService）（⏳ v2 计划，等电池硬件）
 14. 报警联动服务（AlarmService）（✅ v1 已实现）
@@ -1312,8 +1544,9 @@ gnss.get_location() 返回有效数据
 16. 移远云通信服务（LarkCloudService）（✅ v1 已实现）
 17. 显示管理服务（DisplayService）（✅ v1 已实现）
 17.1. 自适应灯光服务（LightService）（✅ v1 已实现）
-18. BLE 推送服务（BLEService）（✅ v1 已实现，待集成到 main.py）
-18.1. 统一控制服务（ControlService）（✅ v1 已实现，待集成到 main.py）
+17.2. 导航引导服务（NavigationService）（✅ v1 已实现）
+18. BLE 推送服务（BLEService）（✅ v2 已实现，待集成到 main.py）
+18.1. 统一控制服务（ControlService）（✅ v2 已实现，待集成到 main.py）
 
 **v2 新增模块**：
 
@@ -1559,6 +1792,33 @@ gnss.get_location() 返回有效数据
 
 ---
 
+## 3.5 开发日志
+
+> 基于 git 提交记录，按时间顺序记录 Phase 3 关键变更
+
+| 日期 | 提交 | 变更类型 | 说明 |
+|------|------|----------|------|
+| 2026-06-18 | b16ef07 | feat(config) | 添加 CMD_TTS_MAP、电源模式常量、亮度步长 |
+| 2026-06-18 | 6270df0 | feat(control) | v3 远端控制：合并 BLE 推送、TTS 反馈、报警快照 |
+| 2026-06-18 | 0a3eac3 | test | 添加/更新 ControlService、电源、报警、Phase3 E2E 测试 |
+| 2026-06-18 | ef3aed4 | feat(miniprogram) | 小程序远端控制页 + TabBar + BLE 服务集成 |
+| 2026-06-18 | cbf8f04 | docs | 更新架构文档、设计方案、AGENTS.md |
+| 2026-06-18 | 3122432 | fix(control,miniprogram,test) | 亮度同步、报警 TTS、E2E 调试输出 |
+| 2026-06-18 | ab3c773 | test | 移除单独的报警取消测试，用户手动处理 |
+| 2026-06-18 | 358e4d3 | test | 添加结果追踪和总结报告到 E2E 测试 |
+| 2026-06-18 | a4f03b8 | test | 增强 Phase3 集成测试（8→23 个用例） |
+| 2026-06-18 | 9694b07 | fix(test) | 修复 MicroPython __doc__ AttributeError |
+| 2026-06-18 | c75c0e1 | fix(test) | 修复 TTS 防抖测试问题 |
+
+**Phase 3 开发总结**：
+- **核心功能**：ControlService v3（纯事件驱动、19 条指令、TTS 反馈、报警快照）
+- **BLE 优化**：环形缓冲区、快照合并、UUID 分发
+- **小程序**：控制页 UI、TabBar、BLE 服务集成
+- **测试覆盖**：43 个单元测试 + 23 个集成测试 + E2E 测试
+- **文档同步**：架构文档、模块实现文档、测试指南
+
+---
+
 ## 4. 里程碑规划
 
 ### 里程碑总览
@@ -1648,7 +1908,7 @@ M1: 起步验证 ──→ M2: 本地闭环 ──→ M3: 云端打通 ──→
 
 **里程碑目标**：电源管理、心率监测、灯光驱动、导航引导、语音交互、微信小程序
 
-**当前状态**：📅 **进行中**
+**当前状态**：🔵 **进行中（远端控制已完成）**
 
 **子里程碑**：
 
@@ -1660,7 +1920,7 @@ M1: 起步验证 ──→ M2: 本地闭环 ──→ M3: 云端打通 ──→
 | M5.4 微信小程序 | Step A: 登录+实时数据+骑行控制+总结+地图+报警取消 ✅ | 🟢 完成 (2026-06-01) |
 | | Step B: 导航推送（腾讯地图 API + BLE FFF2 sendNav + polyline 修复） | ✅ 已实现 (2026-06-09) |
 | | Step B: 导航位置播报（头盔 GNSS 位置自主播报） | 📅 规划中 |
-| | Step B: 远端控制（小程序 UI + BLE FFF3 + 头盔 Service） | 🔜 板子端已实现，小程序端待开发 |
+| | Step B: 远端控制（小程序 UI + BLE FFF3 + 头盔 Service） | ✅ 已完成 (2026-06-17) |
 | | Step C: 语音交互（微信语音识别 → BLE FFF3 命令下发） | 📅 第三步 |
 | M5.5 导航+语音 | NavigationService ✅ + ControlService ✅（板子端） | 🔜 板子端已实现，位置播报和小程序 UI 待开发 |
 | M5.6 移远云通道 | LarkCloudService + QthDriver，Qth SDK 接入移远云 | ✅ v1 已完成（2026-5-22） |

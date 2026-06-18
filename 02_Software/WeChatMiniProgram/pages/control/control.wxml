@@ -1,7 +1,10 @@
 <!-- 远端控制页 (Tactical Cyan) -->
-<view class="page" style="padding-top: {{statusBarHeight}}px;">
+<view class="page">
 
-  <!-- 自定义导航栏 -->
+  <!-- 状态栏填充（fixed，覆盖刘海） -->
+  <view class="status-fill" style="height: {{statusBarHeight}}px;"></view>
+
+  <!-- 自定义导航栏（fixed，紧贴状态栏下方） -->
   <view class="nav-bar" style="top: {{statusBarHeight}}px;">
     <view class="nav-back" bindtap="onBackPress" hover-class="nav-back-hover">‹ 返回</view>
     <view class="nav-title">
@@ -11,6 +14,9 @@
     </view>
     <view class="nav-spacer"></view>
   </view>
+
+  <!-- 内容起始位（状态栏 + 导航栏高度） -->
+  <view style="height: calc({{statusBarHeight}}px + 88rpx);"></view>
 
   <!-- 导航状态条（仅导航中显示） -->
   <view class="ctrl-nav-indicator" wx:if="{{showNavIndicator}}" bindtap="onNavIndicatorTap">
@@ -23,7 +29,7 @@
   </view>
 
   <!-- 内容区 -->
-  <scroll-view class="ctrl-scroll" scroll-y="{{true}}" enhanced="{{true}}" show-scrollbar="{{false}}">
+  <view class="ctrl-scroll">
 
     <!-- 灯光控制 -->
     <view class="ctrl-section">
@@ -80,12 +86,10 @@
           <view class="vol-bar {{volume >= 2 ? 'active' : ''}}" style="height: 28rpx;"></view>
           <view class="vol-bar {{volume >= 3 ? 'active' : ''}}" style="height: 40rpx;"></view>
           <view class="vol-bar {{volume >= 4 ? 'active' : ''}}" style="height: 52rpx;"></view>
-          <view class="vol-bar {{volume >= 5 ? 'active' : ''}}" style="height: 64rpx;"></view>
-          <view class="vol-bar {{volume >= 6 ? 'active' : ''}}" style="height: 76rpx;"></view>
-          <view class="vol-bar {{volume >= 7 ? 'active' : ''}}" style="height: 88rpx;"></view>
+          <view class="vol-bar {{volume >= 5 ? 'active' : ''}}" style="height: 76rpx;"></view>
         </view>
-        <text class="vol-value">{{volume}}/7</text>
-        <view class="vol-btn {{volume >= 7 ? 'disabled' : ''}}" bindtap="onVolumeUp"><text>▲</text></view>
+        <text class="vol-value">{{volume}}/5</text>
+        <view class="vol-btn {{volume >= 5 ? 'disabled' : ''}}" bindtap="onVolumeUp"><text>▲</text></view>
       </view>
     </view>
 
@@ -100,10 +104,35 @@
               data-mode="active" bindtap="onPowerMode">
           <text>正常</text>
         </view>
-        <view class="toggle-btn {{powerMode === 'suspended' ? 'active' : ''}}"
+        <view class="toggle-btn {{powerMode === 'suspended' ? 'save-active' : ''}}"
               data-mode="save" bindtap="onPowerMode">
           <text>省电</text>
         </view>
+        <view class="toggle-btn {{powerMode === 'emergency' ? 'emergency-active' : ''}}"
+              data-mode="emergency" bindtap="onPowerMode">
+          <text>紧急</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 报警控制 -->
+    <view class="ctrl-section">
+      <view class="ctrl-section-title">
+        <text>报警控制</text>
+        <view class="deco-line"></view>
+      </view>
+      <view class="toggle-group">
+        <view class="toggle-btn {{alarmMode === 'normal' ? 'active' : ''}}"
+              data-mode="normal" bindtap="onAlarmMode">
+          <text>正常</text>
+        </view>
+        <view class="toggle-btn {{alarmMode === 'stealth' ? 'active' : ''}}"
+              data-mode="stealth" bindtap="onAlarmMode">
+          <text>静默</text>
+        </view>
+      </view>
+      <view class="alarm-btn {{alarmActive ? 'active' : ''}} {{alarmMode === 'stealth' ? 'stealth' : 'danger'}}" bindtap="onAlarmSos">
+        <text>{{alarmActive ? '✔ 报警已触发' : (alarmMode === 'stealth' ? '静默报警' : 'SOS 报警')}}</text>
       </view>
     </view>
 
@@ -124,12 +153,9 @@
 
     <!-- 底部间距（TabBar 遮挡） -->
     <view style="height: 320rpx;"></view>
-  </scroll-view>
-
-  <!-- BLE 未连接提示 -->
-  <view class="ble-overlay" wx:if="{{!bleConnected}}">
-    <text class="ble-overlay-text">BLE 未连接，请先连接设备</text>
   </view>
+
+  <!-- BLE 未连接提示（已移除，连接状态已在区块中展示） -->
 
   <!-- 报警弹窗 -->
   <view class="alarm-popup" wx:if="{{showAlarmPopup}}">

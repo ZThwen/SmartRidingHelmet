@@ -2,8 +2,11 @@
 <canvas type="2d" id="dotCanvas" style="width:20px;height:20px;position:fixed;top:-100px;"></canvas>
 <view class="page">
 
-  <!-- 自定义导航栏 -->
-  <view class="nav-bar">
+  <!-- 状态栏填充（fixed，覆盖刘海） -->
+  <view class="status-fill" style="height: {{statusBarHeight}}px;"></view>
+
+  <!-- 自定义导航栏（fixed，紧贴状态栏下方） -->
+  <view class="nav-bar" style="top: {{statusBarHeight}}px;">
     <view class="nav-back" catchtap="onBackPress" hover-class="nav-back-hover">‹ 返回</view>
     <view class="nav-title">
       <text class="deco">≋</text>
@@ -12,6 +15,9 @@
     </view>
     <view class="nav-spacer"></view>
   </view>
+
+  <!-- 内容起始位（状态栏 + 导航栏高度） -->
+  <view style="height: calc({{statusBarHeight}}px + 88rpx);"></view>
 
   <!-- 地图区域 -->
   <view class="map-section">
@@ -34,7 +40,7 @@
   </view>
 
   <!-- 数据卡片区 -->
-  <scroll-view class="content-scroll" scroll-y="{{true}}" enhanced="{{true}}" show-scrollbar="{{false}}">
+  <view class="content-scroll">
 
     <!-- BLE 连接状态 -->
     <view class="ble-status {{bleConnected ? 'connected' : ''}}">
@@ -117,8 +123,8 @@
       <view class="corner bl"></view><view class="corner br"></view>
     </view>
 
-    <view style="height:180rpx"></view>
-  </scroll-view>
+    <view style="height:320rpx"></view>
+  </view>
 
   <!-- 报警全屏弹窗 -->
   <view class="alarm-popup {{alarmPopupClass}}" wx:if="{{showAlarmPopup}}">
@@ -212,14 +218,6 @@
     </view>
   </view>
 
-  <!-- 底部按钮 -->
-  <view class="bottom-bar">
-    <button class="ride-btn {{btnClass}}" bindtap="onToggleRide">
-      <text>{{btnText}}</text>
-      <view class="btn-glow"></view>
-    </button>
-  </view>
-
   <!-- 总结弹窗 -->
   <view class="modal-overlay" hidden="{{!showSummary}}">
     <view class="modal-content">
@@ -251,5 +249,7 @@
       </button>
     </view>
   </view>
+
+  <custom-tab-bar></custom-tab-bar>
 
 </view>

@@ -12,7 +12,8 @@ sys.path.append("..")
 from core.Event_Bus import EventBus
 from core.config import (
     EVENT_COLLISION_DETECTED, EVENT_BUTTON_PRESSED, EVENT_GPS_LOST,
-    EVENT_ALARM_TRIGGERED, EVENT_ALARM_CANCELED, EVENT_CONFIG_UPDATE,
+    EVENT_ALARM_TRIGGERED, EVENT_ALARM_CANCELED, EVENT_ALARM_CONTROL,
+    EVENT_CONFIG_UPDATE,
     TTS_BATTERY_LOW, TTS_BATTERY_CRITICAL, TTS_GPS_LOST,
 )
 from Drivers.actuator.LED import LEDDriver
@@ -129,7 +130,7 @@ def main():
     #  场景 1 — 碰撞报警 Lv2
     # ======================================================================
     prompt_and_watch(
-        "[场景 1/5] 碰撞报警 — Level 2",
+        "[场景 1/8] 碰撞报警 — Level 2",
         "即将触发碰撞报警 (Level 2)\n"
         "  → 眼睛看 LED: 应该以约 500ms 间隔闪烁\n"
         "  → 耳朵听 TTS: 即将播报 '碰撞测试警告'"
@@ -176,7 +177,7 @@ def main():
     #  场景 2 — SOS 按钮
     # ======================================================================
     prompt_and_watch(
-        "[场景 2/5] SOS 手动触发",
+        "[场景 2/8] SOS 手动触发",
         "即将等待你按下 SW 按钮:\n"
         "  → 按下后 LED 应以 200ms 快速闪烁 (明显比场景1快)\n"
         "  → TTS 将播报 'SOS求救测试'"
@@ -207,7 +208,7 @@ def main():
     #  场景 3 — 手动取消
     # ======================================================================
     prompt_and_watch(
-        "[场景 3/5] 手动取消报警",
+        "[场景 3/8] 手动取消报警",
         "如果报警还在响，即将等待你再次按下 SW 按钮:\n"
         "  → LED 应该立即熄灭\n"
         "  → 扬声器应该停止"
@@ -238,7 +239,7 @@ def main():
     #  场景 4 — 超时自动取消
     # ======================================================================
     prompt_and_watch(
-        "[场景 4/5] 超时自动取消 (3 秒后自动停)",
+        "[场景 4/8] 超时自动取消 (3 秒后自动停)",
         "即将触发碰撞报警 Level 1，已设置 3 秒后自动取消:\n"
         "  → LED 应以 1000ms 闪烁 (慢速)\n"
         "  → 3 秒后 LED 应自动熄灭\n"
@@ -270,7 +271,7 @@ def main():
     #  场景 5 — GPS 丢失 + 电池 stub + 稳定性
     # ======================================================================
     prompt_and_watch(
-        "[场景 5/5] GPS 丢失 TTS + 稳定性 30s",
+        "[场景 5/8] GPS 丢失 TTS + 稳定性 30s",
         "接下来:\n"
         "  1. TTS 播报 'GPS信号已丢失' — 请听扬声器\n"
         "  2. TTS 播报 '当前电量不足，请及时充电' — 电池 stub 验证\n"
@@ -317,6 +318,101 @@ def main():
 
     print("  ✓ 30 秒稳定性通过 (无崩溃)")
 
+    # ======================================================================
+    #  场景 6 — EVENT_ALARM_CONTROL: SOS 远端触发
+    # ======================================================================
+    prompt_and_watch(
+        "[场景 6/8] 远端 SOS 报警 (EVENT_ALARM_CONTROL{sos})",
+        "即将通过 EventBus 注入 EVENT_ALARM_CONTROL cmd=sos:\n"
+        "  → LED 应以 200ms 快速闪烁\n"
+        "  → TTS 将播报 '远端SOS测试'"
+    )
+    input("  按 Enter 开始场景 6...")
+    pump_sleep(event_bus, svc, 2000)
+
+    alarm_triggered_count = 0
+    event_bus.publish(EVENT_ALARM_CONTROL, {"cmd": "sos"})
+    pump_loop(event_bus, 10)
+
+    if svc.ctx["alarm_active"] and svc.ctx["alarm_type"] == "sos":
+        print("  ✓ 远端 SOS 报警已触发 (LED 快闪 200ms)")
+    else:
+        print("  ✗ 远端 SOS 未触发 (active=%s, type=%s)"
+              % (svc.ctx["alarm_active"], svc.ctx["alarm_type"]))
+
+    if audio:
+        audio.play_tts("远端SOS测试")
+
+    print("  → 观察 LED 5 秒...")
+    pump_sleep(event_bus, svc, 5000)
+
+    svc._cancel_alarm()
+    pump_loop(event_bus, 10)
+    pump_sleep(event_bus, svc, 2000)
+
+    # ======================================================================
+    #  场景 7 — EVENT_ALARM_CONTROL: 静默报警
+    # ======================================================================
+    prompt_and_watch(
+        "[场景 7/8] 远端静默报警 (EVENT_ALARM_CONTROL{stealth})",
+        "即将通过 EventBus 注入 EVENT_ALARM_CONTROL cmd=stealth:\n"
+        "  → LED 应保持熄灭（无闪烁）\n"
+        "  → 扬声器应保持安静（无声音）\n"
+        "  → 但 alarm_active 应为 True"
+    )
+    input("  按 Enter 开始场景 7...")
+    pump_sleep(event_bus, svc, 2000)
+
+    alarm_triggered_count = 0
+    event_bus.publish(EVENT_ALARM_CONTROL, {"cmd": "stealth"})
+    pump_loop(event_bus, 10)
+
+    if svc.ctx["alarm_active"] and svc.ctx["alarm_type"] == "stealth":
+        print("  ✓ 静默报警已触发 (alarm_active=True, 无声光)")
+    else:
+        print("  ✗ 静默报警未触发 (active=%s, type=%s)"
+              % (svc.ctx["alarm_active"], svc.ctx["alarm_type"]))
+
+    print("  → 观察 LED 和扬声器 5 秒 — 应无任何反应...")
+    pump_sleep(event_bus, svc, 5000)
+
+    svc._cancel_alarm()
+    pump_loop(event_bus, 10)
+    pump_sleep(event_bus, svc, 2000)
+
+    # ======================================================================
+    #  场景 8 — EVENT_ALARM_CONTROL: 远端取消
+    # ======================================================================
+    prompt_and_watch(
+        "[场景 8/8] 远端取消报警 (EVENT_ALARM_CONTROL{cancel})",
+        "即将触发 SOS 报警，然后通过 EventBus 注入 cancel:\n"
+        "  → 先看到 LED 快闪\n"
+        "  → cancel 后 LED 应立即熄灭"
+    )
+    input("  按 Enter 开始场景 8...")
+    pump_sleep(event_bus, svc, 2000)
+
+    # 先触发 SOS
+    event_bus.publish(EVENT_ALARM_CONTROL, {"cmd": "sos"})
+    pump_loop(event_bus, 10)
+
+    if svc.ctx["alarm_active"]:
+        print("  ✓ SOS 报警已启动 — 观察 LED 快闪...")
+        pump_sleep(event_bus, svc, 3000)
+
+        # 远端取消
+        event_bus.publish(EVENT_ALARM_CONTROL, {"cmd": "cancel"})
+        pump_loop(event_bus, 10)
+
+        if not svc.ctx["alarm_active"]:
+            print("  ✓ 远端取消成功 (LED 灭, Audio 停)")
+        else:
+            print("  ✗ 远端取消失败 (alarm_active=%s)" % svc.ctx["alarm_active"])
+    else:
+        print("  ✗ SOS 未启动，跳过取消测试")
+
+    pump_sleep(event_bus, svc, 2000)
+
     # ====== 清理 ======
     svc._cancel_alarm()
     led.off()
@@ -347,6 +443,19 @@ def main():
     print("")
     print("  [5] 稳定性:")
     print("      30s 无崩溃卡死?           □ Yes / □ No")
+    print("")
+    print("  [6] 远端 SOS:")
+    print("      LED 快闪 ~200ms?          □ Yes / □ No")
+    print("      听到 TTS 播报?            □ Yes / □ No")
+    print("")
+    print("  [7] 静默报警:")
+    print("      LED 无闪烁?               □ Yes / □ No")
+    print("      扬声器安静?               □ Yes / □ No")
+    print("      alarm_active=True?        □ Yes / □ No")
+    print("")
+    print("  [8] 远端取消:")
+    print("      先看到 LED 快闪?          □ Yes / □ No")
+    print("      cancel 后 LED 熄灭?       □ Yes / □ No")
     print("")
     print("  终端输出:")
     print("    ALARM_TRIGGERED: %d" % alarm_triggered_count)

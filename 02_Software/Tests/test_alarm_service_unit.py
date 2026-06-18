@@ -10,7 +10,7 @@ sys.path.append("..")
 
 from core.Event_Bus import EventBus
 from core.config import (
-    EVENT_ALARM_TRIGGERED, EVENT_ALARM_CANCELED,
+    EVENT_ALARM_TRIGGERED, EVENT_ALARM_CANCELED, EVENT_ALARM_CONTROL,
     EVENT_COLLISION_DETECTED, EVENT_BUTTON_PRESSED, EVENT_GPS_LOST,
     TTS_GPS_LOST,
     AUDIO_ALARM_FILE_L1, AUDIO_ALARM_FILE_L2, AUDIO_ALARM_FILE_L3,
@@ -205,6 +205,76 @@ def test_power_guard():
     print("  OK power guard")
 
 
+def test_trigger_sos():
+    """trigger_sos → SOS 报警（LED 快闪 + SOS 音）"""
+    svc, bus, led, audio = make_service()
+    svc.trigger_sos()
+    assert svc.ctx["alarm_active"] == True
+    assert svc.ctx["alarm_type"] == "sos"
+    assert svc.ctx["alarm_level"] == 3
+    assert led.calls[0][0] == "blink"
+    assert led.calls[0][2] == 200
+    assert audio.calls[0] == ("play_file", AUDIO_SOS_FILE)
+    print("  OK trigger_sos")
+
+
+def test_trigger_stealth_alarm():
+    """trigger_stealth_alarm → 静默报警（无声光）"""
+    svc, bus, led, audio = make_service()
+    svc.trigger_stealth_alarm()
+    assert svc.ctx["alarm_active"] == True
+    assert svc.ctx["alarm_type"] == "stealth"
+    assert len(led.calls) == 0
+    assert len(audio.calls) == 0
+    print("  OK trigger_stealth_alarm")
+
+
+def test_stealth_does_not_trigger_audio_or_led():
+    """stealth 模式不触发任何声光"""
+    svc, bus, led, audio = make_service()
+    svc.trigger_stealth_alarm()
+    assert led.calls == []
+    assert audio.calls == []
+    print("  OK stealth_no_hardware")
+
+
+def test_on_alarm_control_sos():
+    """_on_alarm_control(cmd:sos) → SOS 报警"""
+    svc, bus, led, audio = make_service()
+    svc._on_alarm_control({"cmd": "sos"})
+    assert svc.ctx["alarm_type"] == "sos"
+    assert led.calls[0][2] == 200
+    print("  OK on_alarm_control_sos")
+
+
+def test_on_alarm_control_stealth():
+    """_on_alarm_control(cmd:stealth) → 静默报警"""
+    svc, bus, led, audio = make_service()
+    svc._on_alarm_control({"cmd": "stealth"})
+    assert svc.ctx["alarm_type"] == "stealth"
+    assert len(led.calls) == 0
+    print("  OK on_alarm_control_stealth")
+
+
+def test_on_alarm_control_cancel():
+    """_on_alarm_control(cmd:cancel) → 取消报警"""
+    svc, bus, led, audio = make_service()
+    svc.trigger_sos()
+    assert svc.ctx["alarm_active"] == True
+    svc._on_alarm_control({"cmd": "cancel"})
+    assert svc.ctx["alarm_active"] == False
+    print("  OK on_alarm_control_cancel")
+
+
+def test_cancel_alarm_public():
+    """cancel_alarm() 公开接口正常工作"""
+    svc, bus, led, audio = make_service()
+    svc.trigger_sos()
+    svc.cancel_alarm()
+    assert svc.ctx["alarm_active"] == False
+    print("  OK cancel_alarm_public")
+
+
 # ==================== 主函数 ====================
 
 def main():
@@ -221,6 +291,13 @@ def main():
         ("GPS lost TTS",              test_gps_lost_tts),
         ("battery stubs",             test_battery_stubs),
         ("power guard",               test_power_guard),
+        ("trigger_sos",               test_trigger_sos),
+        ("trigger_stealth_alarm",     test_trigger_stealth_alarm),
+        ("stealth_no_hardware",       test_stealth_does_not_trigger_audio_or_led),
+        ("on_alarm_control_sos",      test_on_alarm_control_sos),
+        ("on_alarm_control_stealth",  test_on_alarm_control_stealth),
+        ("on_alarm_control_cancel",   test_on_alarm_control_cancel),
+        ("cancel_alarm_public",       test_cancel_alarm_public),
     ]
     passed = 0
     for name, fn in tests:

@@ -10,7 +10,7 @@ sys.path.append("..")
 
 from core.Event_Bus import EventBus
 from core.config import (EVENT_AUDIO_PLAYBACK_START, EVENT_AUDIO_PLAYBACK_END,
-                    EVENT_AUDIO_ERROR, AUDIO_TEST_FILE)
+                    EVENT_AUDIO_ERROR, EVENT_VOLUME_CONTROL, AUDIO_TEST_FILE)
 from Drivers.actuator.Audio import AudioDriver
 
 # ==================== 回调日志记录 ====================
@@ -168,6 +168,64 @@ def test_audio():
         event_bus.pump()
         stopped_events = [e for e in event_log if e[0] == "END" and e[1].get("stopped")]
         print(f"  收到 stopped 事件: {len(stopped_events)} 次")
+
+    # ==================== 测试 7：远程音量控制 ====================
+    print("\n" + "-" * 60)
+    print("[测试 7] 远程音量控制测试（EVENT_VOLUME_CONTROL）")
+    print("-" * 60)
+    print("说明：通过事件总线发布音量控制指令，验证远端控制功能")
+
+    input("\n按回车开始测试远程音量控制...")
+
+    # 设置音量为 3
+    audio.set_volume(3)
+    print(f"\n  [7-1] 初始音量: {audio.get_volume()}")
+    assert audio.get_volume() == 3, f"FAIL: 初始音量应为3, 实际{audio.get_volume()}"
+    print("    PASS: 音量已设为3")
+    input("    按回车继续...")
+
+    # cmd: up → 3+1=4
+    print("\n  [7-2] 发布 EVENT_VOLUME_CONTROL {cmd: up}")
+    event_bus.publish(EVENT_VOLUME_CONTROL, {"cmd": "up"})
+    event_bus.pump()
+    vol = audio.get_volume()
+    print(f"    音量: {vol}")
+    assert vol == 4, f"FAIL: up 后音量应为4, 实际{vol}"
+    print("    PASS: up → 音量4")
+    input("    按回车继续...")
+
+    # cmd: down → 4-1=3
+    print("\n  [7-3] 发布 EVENT_VOLUME_CONTROL {cmd: down}")
+    event_bus.publish(EVENT_VOLUME_CONTROL, {"cmd": "down"})
+    event_bus.pump()
+    vol = audio.get_volume()
+    print(f"    音量: {vol}")
+    assert vol == 3, f"FAIL: down 后音量应为3, 实际{vol}"
+    print("    PASS: down → 音量3")
+    input("    按回车继续...")
+
+    # 上限测试: 5→up→仍5
+    print("\n  [7-4] 上限测试: 音量5 → up → 仍为5")
+    audio.set_volume(5)
+    event_bus.publish(EVENT_VOLUME_CONTROL, {"cmd": "up"})
+    event_bus.pump()
+    vol = audio.get_volume()
+    print(f"    音量: {vol}")
+    assert vol == 5, f"FAIL: 上限测试应为5, 实际{vol}"
+    print("    PASS: 上限5不溢出")
+    input("    按回车继续...")
+
+    # 下限测试: 0→down→仍0
+    print("\n  [7-5] 下限测试: 音量0 → down → 仍为0")
+    audio.set_volume(0)
+    event_bus.publish(EVENT_VOLUME_CONTROL, {"cmd": "down"})
+    event_bus.pump()
+    vol = audio.get_volume()
+    print(f"    音量: {vol}")
+    assert vol == 0, f"FAIL: 下限测试应为0, 实际{vol}"
+    print("    PASS: 下限0不溢出")
+
+    print("\n  远程音量控制测试全部通过!")
 
     # ==================== 测试总结 ====================
     print("\n" + "=" * 60)

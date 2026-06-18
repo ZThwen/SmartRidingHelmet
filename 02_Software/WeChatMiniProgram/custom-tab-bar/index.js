@@ -23,27 +23,46 @@ Component({
     },
 
     onRideBtn: function() {
-      // 控制页点击骑行按钮 → 跳回骑行页
       if (this.data.selected === 1) {
         wx.redirectTo({ url: '/pages/index/index' });
         return;
       }
-      // 骑行页 → 触发页面的 onToggleRide
       var pages = getCurrentPages();
       var current = pages[pages.length - 1];
       if (current && current.onToggleRide) {
         current.onToggleRide();
       }
     },
+
+    _syncSelected: function() {
+      var globalData = app.globalData;
+      var pages = getCurrentPages();
+      var currentPage = pages[pages.length - 1];
+      var currentPath = currentPage ? '/' + currentPage.route : '';
+      var selected = 0;
+      for (var i = 0; i < this.data.tabs.length; i++) {
+        if (this.data.tabs[i].pagePath === currentPath) {
+          selected = i;
+          break;
+        }
+      }
+      this.setData({
+        selected: selected,
+        riding: globalData.isRiding,
+        bleConnected: globalData.bleConnected,
+      });
+    },
+  },
+
+  lifetimes: {
+    attached: function() {
+      this._syncSelected();
+    },
   },
 
   pageLifetimes: {
     show: function() {
-      var globalData = app.globalData;
-      this.setData({
-        riding: globalData.isRiding,
-        bleConnected: globalData.bleConnected,
-      });
+      this._syncSelected();
     },
   },
 });

@@ -24,7 +24,7 @@
   line-height: 1;
 }
 
-.ride-btn text {
+.ride-btn-text {
   font-size: 30rpx;
   font-weight: 700;
   letter-spacing: 4rpx;
@@ -35,7 +35,7 @@
   border: 2rpx solid #66ccff;
 }
 
-.ride-btn.start text {
+.ride-btn.start .ride-btn-text {
   color: #66ccff;
 }
 
@@ -43,7 +43,7 @@
   background: linear-gradient(90deg, #ff4444, #cc0000);
 }
 
-.ride-btn.end text {
+.ride-btn.end .ride-btn-text {
   color: #fff;
 }
 

@@ -14,9 +14,9 @@ import time
 
 from core.Base_Module import BaseModule
 from core.config import (
-    EVENT_LIGHT_READY, EVENT_CONFIG_UPDATE, POWER_STATE_ACTIVE,
+    EVENT_LIGHT_READY, EVENT_LIGHT_CONTROL, EVENT_CONFIG_UPDATE, POWER_STATE_ACTIVE,
     LIGHT_DAY_ADC_THRESHOLD, LIGHT_NIGHT_ADC_THRESHOLD,
-    LIGHT_BRIGHTNESS_MIN, LIGHT_BRIGHTNESS_MAX,
+    LIGHT_BRIGHTNESS_MIN, LIGHT_BRIGHTNESS_MAX, LIGHT_BRIGHTNESS_STEP,
     LIGHT_GAMMA, LIGHT_BRIGHTNESS_THRESHOLD, LIGHT_DEBOUNCE_MS
 )
 
@@ -72,6 +72,7 @@ class LightService(BaseModule):
         try:
             if self.event_bus:
                 self.event_bus.subscribe(EVENT_LIGHT_READY, self._on_light_ready)
+                self.event_bus.subscribe(EVENT_LIGHT_CONTROL, self._on_light_control)
                 self.event_bus.subscribe(EVENT_CONFIG_UPDATE, self._on_config_update)
 
             self.ctx["is_init"] = True
@@ -87,6 +88,26 @@ class LightService(BaseModule):
         note 事件驱动，tick()为空实现
         """
         pass
+
+    def _on_light_control(self, payload):
+        """
+        brief 灯光控制指令回调（来自 ControlService）
+        param payload: {cmd: "on"/"off"/"auto"/"brightness_up"/"brightness_down"}
+        """
+        cmd = payload.get("cmd", "")
+        max_brightness = self.cfg["brightness_max"]
+        if cmd == "on":
+            self.set_manual_brightness(max_brightness)
+        elif cmd == "off":
+            self.set_manual_brightness(0)
+        elif cmd == "auto":
+            self.set_auto_mode()
+        elif cmd == "brightness_up":
+            current = self._data.get("current_brightness", 0)
+            self.set_manual_brightness(min(current + LIGHT_BRIGHTNESS_STEP, max_brightness))
+        elif cmd == "brightness_down":
+            current = self._data.get("current_brightness", 0)
+            self.set_manual_brightness(max(current - LIGHT_BRIGHTNESS_STEP, 0))
 
     def _on_light_ready(self, payload):
         """

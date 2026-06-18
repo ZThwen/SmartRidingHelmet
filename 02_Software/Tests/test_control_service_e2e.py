@@ -104,8 +104,7 @@ def main():
     light_svc = LightService(event_bus, pwm_led=pwm_led)
     alarm = AlarmService(event_bus, led=led, audio=audio)
     ble_svc = BLEService(event_bus, ble_driver=ble_driver)
-    ctrl = ControlService(event_bus, light_service=light_svc,
-                          audio_driver=audio, alarm_service=alarm)
+    ctrl = ControlService(event_bus)
 
     # 初始化
     init_order = [led, audio, pwm_led, light_sensor, ble_driver,
@@ -148,13 +147,10 @@ def main():
             ctrl._control_state["light_brightness"],
             ctrl._control_state["light_mode"],
             ctrl._control_state["volume"]))
-        # 打印被调用模块的状态
-        if ctrl.light_service:
-            print("    → LightService: auto_mode={}, brightness={}".format(
-                ctrl.light_service.ctx["auto_mode"],
-                ctrl.light_service._data["current_brightness"]))
-        if ctrl.pwm_led if hasattr(ctrl, 'pwm_led') else pwm_led:
-            print("    → PWM_LED: duty={}".format(pwm_led._data["duty_cycle"]))
+        print("    → LightService: auto_mode={}, brightness={}".format(
+            light_svc.ctx["auto_mode"],
+            light_svc._data["current_brightness"]))
+        print("    → PWM_LED: duty={}".format(pwm_led._data["duty_cycle"]))
     ctrl._execute_cmd = _debug_execute
 
     # 等待 BLE 连接

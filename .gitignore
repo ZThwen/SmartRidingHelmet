@@ -5,12 +5,17 @@
 .opencode/
 .reasonix/
 CLAUDE.md
-AGENTS.md
-.superpowers/
+
+# 本地工作流数据
+.omo/
+.codegraph/
 
 # Python 缓存
 __pycache__/
 *.pyc
+
+# Thonny 同步文件（从源码派生，不提交）
+02_Software/thonny/
 
 # 参考文档（工具生成，不需要提交）
 LEARN_OPencode.md

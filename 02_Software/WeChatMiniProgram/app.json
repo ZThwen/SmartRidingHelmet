@@ -1,7 +1,8 @@
 {
   "pages": [
     "pages/login/login",
-    "pages/index/index"
+    "pages/index/index",
+    "pages/control/control"
   ],
   "window": {
     "navigationBarTitleText": "智能骑行头盔",

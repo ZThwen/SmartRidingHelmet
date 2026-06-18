@@ -2,7 +2,7 @@
   <!-- 浮动骑行按钮 -->
   <view class="ride-btn-wrap">
     <button class="ride-btn {{riding ? 'end' : 'start'}}" bindtap="onRideBtn">
-      <text>{{riding ? '结束骑行' : '开始骑行'}}</text>
+      <text class="ride-btn-text">{{riding ? '结束骑行' : '开始骑行'}}</text>
     </button>
   </view>
   <!-- Tab 栏 -->

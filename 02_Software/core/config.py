@@ -60,6 +60,12 @@ EVENT_BLE_ALARM_ACK         = "BLE_ALARM_ACK"          # 报警确认（手机�
 EVENT_CONTROL_STATE_CHANGED = "CONTROL_STATE_CHANGED"  # 控制状态变更（回推到小程序）
 EVENT_VOICE_CMD             = "VOICE_CMD"              # 语音指令（ASRPRO → ControlService）
 
+# 控制指令事件（ControlService → 各模块）
+EVENT_LIGHT_CONTROL         = "LIGHT_CONTROL"           # 灯光控制指令
+EVENT_VOLUME_CONTROL        = "VOLUME_CONTROL"          # 音量控制指令
+EVENT_ALARM_CONTROL         = "ALARM_CONTROL"           # 报警控制指令
+EVENT_TTS_REQUEST           = "TTS_REQUEST"             # TTS 播报请求
+
 # ================= 默认参数配置 =================
 # 传感器采样间隔
 TEMP_HUMID_SAMPLE_MS   = 2000    # 温湿度传感器采样间隔 (ms)
@@ -84,7 +90,7 @@ AUDIO_TEST_FILE           = "SD:Test.mp3"         # 测试音频
 
 AUDIO_TTS_SPEED           = 85                     # TTS语速(0-100)
 AUDIO_TTS_VOLUME          = 50                     # TTS音量(0-100)
-AUDIO_SPEAKER_VOLUME      = 5                      # 扬声器音量(0-7)
+AUDIO_SPEAKER_VOLUME      = 5                      # 扬声器音量(0-5)
 AUDIO_ALARM_LOOP_COUNT    = 3                      # 报警音循环次数
 TTS_BATTERY_LOW           = "当前电量不足，请及时充电"
 TTS_BATTERY_CRITICAL      = "电池电量严重不足，请立即充电"
@@ -138,6 +144,8 @@ BATTERY_CRITICAL_THRESHOLD = 10    # 严重不足阈值(%)
 POWER_STATE_ACTIVE        = "ACTIVE"        # 正常工作状态
 POWER_STATE_SUSPENDED     = "SUSPENDED"     # 挂起状态
 POWER_STATE_DEEP_SLEEP    = "DEEP_SLEEP"    # 深度休眠状态
+POWER_STATE_EMERGENCY     = "EMERGENCY"     # 超级省电（仅 GPS + 报警 + BLE）
+POWER_STATE_CUSTOM        = "CUSTOM"        # 自定义（手动操作覆盖省电模式）
 
 # ================= 网络通信配置 =================
 NETWORK_CONNECT_TIMEOUT_MS = 60000    # 4G网络连接超时时间 (ms)
@@ -223,7 +231,53 @@ PWM_LED_FREQ            = 1000                 # PWM频率 (Hz)
 LIGHT_DAY_ADC_THRESHOLD    = 30000   # 白天阈值（ADC值 < 此值 → 光照强 → 灯不开）
 LIGHT_NIGHT_ADC_THRESHOLD  = 50000   # 晚上阈值（ADC值 > 此值 → 光照弱 → 灯最亮）
 LIGHT_BRIGHTNESS_MIN       = 5       # 最小亮度（%）
-LIGHT_BRIGHTNESS_MAX       = 50      # 最大亮度（%），18W灯散热限制
+LIGHT_BRIGHTNESS_MAX       = 50      # 最大亮度（%），50%PWM上限
 LIGHT_GAMMA                = 1.5     # 非线性映射参数（>1时暗环境更敏感）
 LIGHT_BRIGHTNESS_THRESHOLD = 3       # 亮度变化阈值（小于此值不调节）
 LIGHT_DEBOUNCE_MS          = 50      # 防抖间隔（ms）
+LIGHT_BRIGHTNESS_STEP      = 5       # 亮度调节步长（PWM 单位，5/50=10%显示）
+
+# ================= 电源模式采样间隔 =================
+TEMP_HUMID_SUSPENDED_MS    = 30000   # 省电模式温湿度采样间隔
+LIGHTSENSOR_MANUAL_MS      = 30000   # 省电模式+手动灯光：光照采样间隔
+GNSS_SUSPENDED_MS          = 10000   # 省电模式 GNSS 采样间隔
+GNSS_EMERGENCY_MS          = 10000   # 紧急省电 GNSS 采样间隔（降频）
+
+# ================= 语音指令映射表（ASRPRO hex → ControlService cmd）=================
+VOICE_CMD_MAP = {
+    0x01: "light_on",
+    0x02: "light_off",
+    0x03: "brightness_up",
+    0x04: "brightness_down",
+    0x05: "light_auto",
+    0x06: "volume_up",
+    0x07: "volume_down",
+    0x08: "alarm_cancel",
+    0x09: "alarm_sos",
+    0x0A: "alarm_stealth",
+    0x0B: "power_save",
+    0x0C: "power_normal",
+    0x0D: "power_emergency",
+    0x0E: "query_status",
+    0x0F: "query_speed",
+    0x10: "query_temp",
+    0x11: "query_humid",
+    0x12: "query_location",
+    0x13: "query_battery",
+}
+
+# ================= 控制指令 TTS 播报映射表 =================
+CMD_TTS_MAP = {
+    "light_on": "灯光已开启",
+    "light_off": "灯光已关闭",
+    "brightness_up": "亮度增加",
+    "brightness_down": "亮度降低",
+    "light_auto": "灯光自动模式",
+    "volume_up": "音量增加",
+    "volume_down": "音量降低",
+    "alarm_sos": "报警已触发",
+    "alarm_cancel": "报警已取消",
+    "power_save": "省电模式",
+    "power_normal": "正常模式",
+    "power_emergency": "紧急省电模式",
+}

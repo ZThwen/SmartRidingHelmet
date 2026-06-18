@@ -9,7 +9,17 @@ page {
 .page {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  min-height: 100vh;
+}
+
+/* ===== 状态栏填充 ===== */
+.status-fill {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 98;
+  background: #080d17;
 }
 
 /* ===== 自定义导航栏 ===== */
@@ -18,10 +28,11 @@ page {
   align-items: center;
   height: 88rpx;
   padding: 0 16rpx;
-  position: sticky;
-  top: 0;
+  position: fixed;
+  left: 0;
+  right: 0;
   z-index: 99;
-  background: rgba(8, 13, 23, 0.9);
+  background: #080d17;
 }
 
 .nav-back {
