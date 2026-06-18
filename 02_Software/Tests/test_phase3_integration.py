@@ -499,7 +499,7 @@ def main():
     print("| # | %-30s | %-20s | %s |" % ("测试", "场景", "结果"))
     print("|---|%s|%s|%s|" % ("-" * 30, "-" * 20, "-" * 4))
     for i, (t, result) in enumerate(zip(tests, results)):
-        doc = t.__doc__ or ""
+        doc = getattr(t, '__doc__', '') or ""
         print("| %d | %-30s | %-20s | %s |" % (
             i + 1, t.__name__, doc[:20], "PASS" if result else "FAIL"))
     print("=" * 60)
