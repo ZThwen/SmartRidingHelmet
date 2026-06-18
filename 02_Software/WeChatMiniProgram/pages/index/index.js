@@ -123,8 +123,13 @@ Page({
     wx.startLocationUpdate({
       success: function() {
         logger.log('PAGE', 'startLocationUpdate 成功，注册 onLocationChange');
+        var _gpsLogIdx = 0;
+        wx.offLocationChange();
         wx.onLocationChange(function(res) {
-          logger.log('PAGE', 'onLocationChange: lat=' + res.latitude + ' lon=' + res.longitude);
+          _gpsLogIdx++;
+          if (_gpsLogIdx % 10 === 0) {
+            logger.log('PAGE', 'onLocationChange: lat=' + res.latitude + ' lon=' + res.longitude);
+          }
           // 未骑行时用手机 GPS 更新地图中心，骑行中用 BLE 坐标
           if (that.data.mapFollowing && !RideService.isActive()) {
             that.setData({ mapLat: res.latitude, mapLon: res.longitude });
@@ -186,8 +191,6 @@ Page({
   },
 
   onUnload: function() {
-    BleService.disconnect();
-    wx.stopLocationUpdate({ success: function(){}, fail: function(){} });
     var bus = app.eventBus;
     if (bus) {
       bus.off('alarm:triggered', this._onAlarmTriggered);
@@ -557,8 +560,8 @@ Page({
           // 导航恢复
           if (NavService.getState().state === 'paused') NavService.resume();
         }
-        else if (data.t === 7) {
-          // 控制状态回推 → 更新全局状态 + 通知控制页
+        else if (data.t === 7 || data.t === 8 || data.t === 9) {
+          // 控制状态回推（t=7灯光/t=8音量/t=9电源）→ 更新全局状态 + 通知控制页
           var state = CtrlService.parseCtrlState(data);
           if (state) {
             app.globalData.ctrlState = state;

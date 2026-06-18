@@ -27,8 +27,14 @@
   "simulatorPluginLibVersion": {},
   "packOptions": {
     "ignore": [
-      { "type": "folder", "value": "doc" },
-      { "type": "folder", "value": "android_iot_sdk_1.12.0" }
+      {
+        "value": "doc",
+        "type": "folder"
+      },
+      {
+        "value": "android_iot_sdk_1.12.0",
+        "type": "folder"
+      }
     ],
     "include": []
   },

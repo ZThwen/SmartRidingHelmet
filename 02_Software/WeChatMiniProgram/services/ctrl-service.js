@@ -19,8 +19,16 @@ var CMD = {
   VOLUME_DOWN: 'volume_down',
   ALARM_CANCEL: 'alarm_cancel',
   ALARM_SOS: 'alarm_sos',
+  ALARM_STEALTH: 'alarm_stealth',
   POWER_SAVE: 'power_save',
   POWER_NORMAL: 'power_normal',
+  POWER_EMERGENCY: 'power_emergency',
+  QUERY_STATUS: 'query_status',
+  QUERY_SPEED: 'query_speed',
+  QUERY_TEMP: 'query_temp',
+  QUERY_HUMID: 'query_humid',
+  QUERY_LOCATION: 'query_location',
+  QUERY_BATTERY: 'query_battery',
 };
 
 // 控制状态缓存（type=7 回推时更新）
@@ -88,23 +96,80 @@ function alarmCancel() {
   logger.log('CTRL', 'alarm_cancel sent');
 }
 
+function alarmStealth() {
+  BleService.sendCtrl(CMD.ALARM_STEALTH);
+  logger.log('CTRL', 'alarm_stealth sent');
+}
+
+function powerEmergency() {
+  BleService.sendCtrl(CMD.POWER_EMERGENCY);
+  logger.log('CTRL', 'power_emergency sent');
+}
+
+function queryStatus() {
+  BleService.sendCtrl(CMD.QUERY_STATUS);
+  logger.log('CTRL', 'query_status sent');
+}
+
+function querySpeed() {
+  BleService.sendCtrl(CMD.QUERY_SPEED);
+  logger.log('CTRL', 'query_speed sent');
+}
+
+function queryTemp() {
+  BleService.sendCtrl(CMD.QUERY_TEMP);
+  logger.log('CTRL', 'query_temp sent');
+}
+
+function queryHumid() {
+  BleService.sendCtrl(CMD.QUERY_HUMID);
+  logger.log('CTRL', 'query_humid sent');
+}
+
+function queryLocation() {
+  BleService.sendCtrl(CMD.QUERY_LOCATION);
+  logger.log('CTRL', 'query_location sent');
+}
+
+function queryBattery() {
+  BleService.sendCtrl(CMD.QUERY_BATTERY);
+  logger.log('CTRL', 'query_battery sent');
+}
+
 // ==================== 状态解析 ====================
 
 /**
- * 解析 type=7 控制状态回推
- * @param {object} data - 已解析的 JSON 对象 {t:7, d:{light_mode,light_brightness,volume,power_mode}}
+ * 解析控制状态回推（硬件扁平格式）
+ * @param {object} data - 旧格式: {t:7,m:0,b:50} / {t:8,v:5} / {t:9,p:1}
+ *                       新格式: {t:7,m:0,b:50,v:5,p:0}（合并推送）
  * @returns {object|null} {lightMode, brightness, volume, powerMode} or null
  */
 function parseCtrlState(data) {
   try {
-    if (!data || data.t !== 7 || !data.d) return null;
-    var d = data.d;
-    _state.lightMode = d.light_mode || 'auto';
-    _state.brightness = d.light_brightness || 0;
-    _state.volume = d.volume || 0;
-    _state.powerMode = d.power_mode || 'active';
-    logger.log('CTRL', 'state recv: mode=' + _state.lightMode +
-      ' bri=' + _state.brightness + ' vol=' + _state.volume);
+    if (!data) return null;
+    // t=7: 灯光 {m:0=auto/1=manual, b:brightness}
+    if (data.t === 7) {
+      if (data.m != null) _state.lightMode = data.m === 1 ? 'manual' : 'auto';
+      if (data.b != null) _state.brightness = data.b * 2;
+    }
+    // t=8: 音量 {v:volume}
+    if (data.t === 8) {
+      if (data.v != null) _state.volume = data.v;
+    }
+    // t=9: 电源 {p:0=active/1=suspended/2=emergency/3=custom}
+    if (data.t === 9) {
+      var pMap = {0: 'active', 1: 'suspended', 2: 'emergency', 3: 'custom'};
+      if (data.p != null) _state.powerMode = pMap[data.p] || 'active';
+    }
+    // 合并格式：t=7 但包含 v 和 p 字段
+    if (data.t === 7 && data.v != null) _state.volume = data.v;
+    if (data.t === 7 && data.p != null) {
+      var pMap = {0: 'active', 1: 'suspended', 2: 'emergency', 3: 'custom'};
+      _state.powerMode = pMap[data.p] || 'active';
+    }
+    logger.log('CTRL', 'state recv: t=' + data.t +
+      ' light=' + _state.lightMode + '/' + _state.brightness +
+      ' vol=' + _state.volume + ' power=' + _state.powerMode);
     return getState();
   } catch (e) {
     console.error('[ctrl-service] parseCtrlState error:', e);
@@ -139,6 +204,14 @@ module.exports = {
   powerNormal: powerNormal,
   alarmSos: alarmSos,
   alarmCancel: alarmCancel,
+  alarmStealth: alarmStealth,
+  powerEmergency: powerEmergency,
+  queryStatus: queryStatus,
+  querySpeed: querySpeed,
+  queryTemp: queryTemp,
+  queryHumid: queryHumid,
+  queryLocation: queryLocation,
+  queryBattery: queryBattery,
   parseCtrlState: parseCtrlState,
   getState: getState,
   reset: reset,

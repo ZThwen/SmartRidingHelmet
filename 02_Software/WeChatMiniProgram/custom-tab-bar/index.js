@@ -33,10 +33,8 @@ Component({
         current.onToggleRide();
       }
     },
-  },
 
-  pageLifetimes: {
-    show: function() {
+    _syncSelected: function() {
       var globalData = app.globalData;
       var pages = getCurrentPages();
       var currentPage = pages[pages.length - 1];
@@ -53,6 +51,18 @@ Component({
         riding: globalData.isRiding,
         bleConnected: globalData.bleConnected,
       });
+    },
+  },
+
+  lifetimes: {
+    attached: function() {
+      this._syncSelected();
+    },
+  },
+
+  pageLifetimes: {
+    show: function() {
+      this._syncSelected();
     },
   },
 });
