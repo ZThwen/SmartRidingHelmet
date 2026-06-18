@@ -347,6 +347,7 @@ def test_tts_after_alarm_cancel():
     send_cmd(bus, "alarm_cancel", ctrl)
     assert alarm.ctx["alarm_active"] == False
     tts_received.clear()
+    ctrl.ctx["last_tts_tick"] = 0  # 重置 TTS 防抖，允许立即播报
     # 取消后发送 light_on，TTS 应恢复
     send_cmd(bus, "light_on", ctrl)
     assert len(tts_received) >= 1  # TTS "灯光已开启"
