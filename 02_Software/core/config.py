@@ -231,10 +231,17 @@ PWM_LED_FREQ            = 1000                 # PWM频率 (Hz)
 LIGHT_DAY_ADC_THRESHOLD    = 30000   # 白天阈值（ADC值 < 此值 → 光照强 → 灯不开）
 LIGHT_NIGHT_ADC_THRESHOLD  = 50000   # 晚上阈值（ADC值 > 此值 → 光照弱 → 灯最亮）
 LIGHT_BRIGHTNESS_MIN       = 5       # 最小亮度（%）
-LIGHT_BRIGHTNESS_MAX       = 50      # 最大亮度（%），18W灯散热限制
+LIGHT_BRIGHTNESS_MAX       = 50      # 最大亮度（%），50%PWM上限
 LIGHT_GAMMA                = 1.5     # 非线性映射参数（>1时暗环境更敏感）
 LIGHT_BRIGHTNESS_THRESHOLD = 3       # 亮度变化阈值（小于此值不调节）
 LIGHT_DEBOUNCE_MS          = 50      # 防抖间隔（ms）
+LIGHT_BRIGHTNESS_STEP      = 5       # 亮度调节步长（PWM 单位，5/50=10%显示）
+
+# ================= 电源模式采样间隔 =================
+TEMP_HUMID_SUSPENDED_MS    = 30000   # 省电模式温湿度采样间隔
+LIGHTSENSOR_MANUAL_MS      = 30000   # 省电模式+手动灯光：光照采样间隔
+GNSS_SUSPENDED_MS          = 10000   # 省电模式 GNSS 采样间隔
+GNSS_EMERGENCY_MS          = 10000   # 紧急省电 GNSS 采样间隔（降频）
 
 # ================= 语音指令映射表（ASRPRO hex → ControlService cmd）=================
 VOICE_CMD_MAP = {
@@ -257,4 +264,20 @@ VOICE_CMD_MAP = {
     0x11: "query_humid",
     0x12: "query_location",
     0x13: "query_battery",
+}
+
+# ================= 控制指令 TTS 播报映射表 =================
+CMD_TTS_MAP = {
+    "light_on": "灯光已开启",
+    "light_off": "灯光已关闭",
+    "brightness_up": "亮度增加",
+    "brightness_down": "亮度降低",
+    "light_auto": "灯光自动模式",
+    "volume_up": "音量增加",
+    "volume_down": "音量降低",
+    "alarm_sos": "报警已触发",
+    "alarm_cancel": "报警已取消",
+    "power_save": "省电模式",
+    "power_normal": "正常模式",
+    "power_emergency": "紧急省电模式",
 }
