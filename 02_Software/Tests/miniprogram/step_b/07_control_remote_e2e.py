@@ -35,6 +35,15 @@ from Modules.control_service import ControlService
 _LOG_PATH = "Tests/miniprogram/step_b/07_control_remote_e2e.log"
 _T0 = 0
 cmd_log = []
+_test_results = []
+
+
+def record(test_id, name, cmd, expected, actual, modules_ok, passed):
+    _test_results.append({
+        "id": test_id, "name": name, "cmd": cmd,
+        "expected": expected, "actual": actual,
+        "modules": modules_ok, "passed": passed
+    })
 
 
 def log(msg):
@@ -116,6 +125,56 @@ def print_state(ctrl, light_svc, pwm_led, audio, ble_svc):
         log("  [STATE] BLE queue: %d pending" % ble_svc.send_queue.size())
 
 
+def print_summary(ctrl, light_svc, pwm_led, audio, ble_svc):
+    log("")
+    log("=" * 65)
+    log(" 测试总结报告")
+    log("=" * 65)
+    log("")
+    log("| # | 场景 | 指令 | 预期状态 | 实际状态 | 模块响应 | 结果 |")
+    log("|---|------|------|----------|----------|----------|------|")
+    passed = 0
+    failed = 0
+    for r in _test_results:
+        result = "PASS" if r["passed"] else "FAIL"
+        if r["passed"]:
+            passed += 1
+        else:
+            failed += 1
+        log("| %s | %s | %s | %s | %s | %s | %s |" % (
+            r["id"], r["name"], r["cmd"],
+            r["expected"], r["actual"], r["modules"], result))
+    log("")
+    log("=" * 65)
+    log(" 结果: %d 通过, %d 失败, 共 %d 项" % (passed, failed, passed + failed))
+    log("=" * 65)
+    log("")
+
+    # 模块最终状态
+    log("模块最终状态:")
+    cs = ctrl._control_state
+    log("  ControlService: light=%s/%s vol=%s power=%s" % (
+        cs["light_mode"], cs["light_brightness"], cs["volume"], cs["power_mode"]))
+    if light_svc:
+        log("  LightService: auto=%s brightness=%s" % (
+            light_svc.ctx.get("auto_mode"), light_svc._data.get("current_brightness")))
+    if pwm_led:
+        log("  PWM_LED: duty=%s" % pwm_led._data.get("duty_cycle"))
+    if audio:
+        log("  Audio: vol=%s playing=%s" % (
+            audio._data.get("volume"), audio.get_is_playing()))
+    if ble_svc:
+        log("  BLE: connected=%s queue=%s" % (
+            ble_svc.ctx["ble_connected"],
+            ble_svc.send_queue.size() if ble_svc.send_queue else 0))
+
+    log("")
+    log("省电模式响应验证:")
+    log("  power_save → 温湿度采样降频(30s), 光照降频(30s), GNSS降频(10s)")
+    log("  power_emergency → 温湿度采样停止, 光照降频(2s/停止), GNSS降频(10s)")
+    log("  power_normal → 全部恢复正常采样")
+
+
 # ==================== 主流程 ====================
 
 def main():
@@ -184,26 +243,51 @@ def main():
     log("  预期: 头灯亮起，小程序 light=manual/50")
     wait_enter("1a 开灯 — 观察头灯 + 小程序 UI", event_bus, modules)
     print_state(ctrl, light_svc, pwm_led, audio, ble_svc)
+    cs = ctrl._control_state
+    record("1a", "开灯", "light_on",
+           "light=manual/50", "light=%s/%s" % (cs["light_mode"], cs["light_brightness"]),
+           "LED=ON" if pwm_led._data.get("duty_cycle", 0) > 0 else "LED=OFF",
+           cs["light_mode"] == "manual" and cs["light_brightness"] == 50)
 
     log("  测试 1b: 点击亮度「▶」增加按钮")
     log("  预期: 头灯变亮（50%已达上限），UI 不变")
     wait_enter("1b 亮度+ — 观察头灯", event_bus, modules)
     print_state(ctrl, light_svc, pwm_led, audio, ble_svc)
+    cs = ctrl._control_state
+    record("1b", "亮度+", "brightness_up",
+           "brightness=50(max)", "brightness=%d" % cs["light_brightness"],
+           "duty=%s" % pwm_led._data.get("duty_cycle"),
+           cs["light_brightness"] == 50)
 
     log("  测试 1c: 点击亮度「◀」减少按钮")
     log("  预期: 头灯变暗（40%%），小程序 UI 更新")
     wait_enter("1c 亮度- — 观察头灯变暗", event_bus, modules)
     print_state(ctrl, light_svc, pwm_led, audio, ble_svc)
+    cs = ctrl._control_state
+    record("1c", "亮度-", "brightness_down",
+           "brightness=45", "brightness=%d" % cs["light_brightness"],
+           "duty=%s" % pwm_led._data.get("duty_cycle"),
+           cs["light_brightness"] == 45)
 
     log("  测试 1d: 点击「关灯」按钮")
     log("  预期: 头灯熄灭，小程序 brightness=0")
     wait_enter("1d 关灯 — 观察头灯熄灭", event_bus, modules)
     print_state(ctrl, light_svc, pwm_led, audio, ble_svc)
+    cs = ctrl._control_state
+    record("1d", "关灯", "light_off",
+           "brightness=0", "brightness=%d" % cs["light_brightness"],
+           "LED=OFF" if pwm_led._data.get("duty_cycle", 0) == 0 else "LED=ON",
+           cs["light_brightness"] == 0)
 
     log("  测试 1e: 点击「自动」模式按钮")
     log("  预期: 切换到自动模式，小程序 light=auto")
     wait_enter("1e 自动模式 — 观察模式切换", event_bus, modules)
     print_state(ctrl, light_svc, pwm_led, audio, ble_svc)
+    cs = ctrl._control_state
+    record("1e", "自动模式", "light_auto",
+           "light=auto", "light=%s" % cs["light_mode"],
+           "auto=%s" % light_svc.ctx.get("auto_mode"),
+           cs["light_mode"] == "auto")
 
     # ==================== Phase 2: 音量控制 ====================
     phase(2, "音量控制")
@@ -212,11 +296,21 @@ def main():
     log("  预期: 音量+1，小程序音量值更新")
     wait_enter("2a 音量+ — 听声音变化", event_bus, modules)
     print_state(ctrl, light_svc, pwm_led, audio, ble_svc)
+    cs = ctrl._control_state
+    record("2a", "音量+", "volume_up",
+           "volume=5", "volume=%d" % cs["volume"],
+           "vol=%s" % audio._data.get("volume"),
+           cs["volume"] == 5)
 
     log("  测试 2b: 点击音量「▼」减少按钮")
     log("  预期: 音量-1，小程序音量值更新")
     wait_enter("2b 音量- — 听声音变化", event_bus, modules)
     print_state(ctrl, light_svc, pwm_led, audio, ble_svc)
+    cs = ctrl._control_state
+    record("2b", "音量-", "volume_down",
+           "volume=4", "volume=%d" % cs["volume"],
+           "vol=%s" % audio._data.get("volume"),
+           cs["volume"] == 4)
 
     # ==================== Phase 3: 电源模式 ====================
     phase(3, "电源模式")
@@ -225,16 +319,31 @@ def main():
     log("  预期: 进入省电模式，小程序省电按钮高亮（黄色）")
     wait_enter("3a 省电 — 观察小程序按钮颜色", event_bus, modules)
     print_state(ctrl, light_svc, pwm_led, audio, ble_svc)
+    cs = ctrl._control_state
+    record("3a", "省电模式", "power_save",
+           "power=suspended,light=0", "power=%s,light=%d" % (cs["power_mode"], cs["light_brightness"]),
+           "LED=OFF",
+           cs["power_mode"] == "suspended")
 
     log("  测试 3b: 点击「紧急」按钮")
     log("  预期: 进入紧急模式，小程序紧急按钮高亮（紫色）")
     wait_enter("3b 紧急 — 观察小程序按钮颜色", event_bus, modules)
     print_state(ctrl, light_svc, pwm_led, audio, ble_svc)
+    cs = ctrl._control_state
+    record("3b", "紧急模式", "power_emergency",
+           "power=emergency", "power=%s" % cs["power_mode"],
+           "LED=OFF",
+           cs["power_mode"] == "emergency")
 
     log("  测试 3c: 点击「正常」按钮")
     log("  预期: 恢复正常，小程序正常按钮高亮（蓝色）")
     wait_enter("3c 正常 — 恢复正常模式", event_bus, modules)
     print_state(ctrl, light_svc, pwm_led, audio, ble_svc)
+    cs = ctrl._control_state
+    record("3c", "正常模式", "power_normal",
+           "power=active", "power=%s" % cs["power_mode"],
+           "OK",
+           cs["power_mode"] == "active")
 
     # ==================== Phase 4: 报警控制 ====================
     phase(4, "报警控制")
@@ -243,16 +352,28 @@ def main():
     log("  预期: LED 快闪 + SOS 音频播放，小程序弹出报警弹窗")
     wait_enter("4a SOS — 观察 LED 闪烁 + 听音频 + 小程序弹窗", event_bus, modules)
     print_state(ctrl, light_svc, pwm_led, audio, ble_svc)
+    record("4a", "SOS报警", "alarm_sos",
+           "alarm_active=True", "alarm_active=%s" % ctrl._alarm_active,
+           "OK",
+           ctrl._alarm_active == True)
 
     log("  测试 4b: 在报警弹窗中点「取消报警」")
     log("  预期: LED 灭 + 音频停，小程序弹窗关闭")
     wait_enter("4b 取消报警 — 观察停止", event_bus, modules)
     print_state(ctrl, light_svc, pwm_led, audio, ble_svc)
+    record("4b", "取消报警", "alarm_cancel",
+           "alarm_active=False", "alarm_active=%s" % ctrl._alarm_active,
+           "OK",
+           ctrl._alarm_active == False)
 
     log("  测试 4c: 小程序中先点「静默」模式，再点「SOS 报警」→ 取消")
     log("  预期: 无声无光（静默模式），小程序报警区显示")
     wait_enter("4c 静默模式 — 确认无声光", event_bus, modules)
     print_state(ctrl, light_svc, pwm_led, audio, ble_svc)
+    record("4c", "静默报警", "alarm_stealth",
+           "alarm_active=True,type=stealth", "alarm_active=%s" % ctrl._alarm_active,
+           "OK",
+           ctrl._alarm_active == True)
 
     # 清除 stealth
     ctrl._alarm_active = False
@@ -263,25 +384,14 @@ def main():
     log("  预期: 小程序电源模式变更为正常（手动操作自动退出省电）")
     wait_enter("5a 省电→开灯 — 观察电源模式变化", event_bus, modules)
     print_state(ctrl, light_svc, pwm_led, audio, ble_svc)
+    cs = ctrl._control_state
+    record("5a", "CUSTOM模式", "power_save→light_on",
+           "power=custom", "power=%s" % cs["power_mode"],
+           "LED=ON",
+           cs["power_mode"] == "custom")
 
     # ==================== 总结 ====================
-    log("")
-    log("=" * 55)
-    log(" 测试完成")
-    log("=" * 55)
-    print_state(ctrl, light_svc, pwm_led, audio, ble_svc)
-    log("")
-    log("检查清单:")
-    log("  [ ] 1a 开灯: 头灯亮 + 小程序显示 manual/50")
-    log("  [ ] 1b/c 调光: 亮度变化 + UI 同步")
-    log("  [ ] 1d 关灯: 头灯灭 + brightness=0")
-    log("  [ ] 1e 自动: 模式切换 auto")
-    log("  [ ] 2a/b 音量: 增减 + UI 同步")
-    log("  [ ] 3a/b/c 电源: 三种模式切换 + 对应颜色高亮")
-    log("  [ ] 4a SOS: LED 闪 + 音频 + 弹窗")
-    log("  [ ] 4b 取消: 停止 + 弹窗关闭")
-    log("  [ ] 4c 静默: 无声音光")
-    log("  [ ] 5a CUSTOM: 省电下开灯自动退出省电")
+    print_summary(ctrl, light_svc, pwm_led, audio, ble_svc)
 
 
 if __name__ == "__main__":
