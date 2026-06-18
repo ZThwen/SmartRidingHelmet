@@ -312,23 +312,14 @@ def main():
                   tts_events[-1]["text"] if tts_events else "",
                   alarm.ctx["alarm_active"] == True)
 
-    print("\n  FFF3 发送: {\"a\":\"ctrl\",\"d\":{\"cmd\":\"alarm_cancel\"}}")
-    print("  预期: LED 灭 + 音频停，FFF1 推送 t=6")
-    prompt_and_watch("alarm_cancel — 观察报警停止", event_bus, modules, 8)
-    print_scene_state(10, "报警取消", ctrl, alarm, ble_svc)
-    record_result(10, "报警取消", "alarm_cancel",
-                  "alarm_active=False,TTS=报警已取消",
-                  "alarm_active=%s,TTS=%s" % (
-                      alarm.ctx["alarm_active"],
-                      tts_events[-1]["text"] if tts_events else ""),
-                  tts_events[-1]["text"] if tts_events else "",
-                  alarm.ctx["alarm_active"] == False)
+    print("\n  [请手动在小程序点取消报警]")
+    input("  按 Enter 继续...")
 
     print("\n  FFF3 发送: {\"a\":\"ctrl\",\"d\":{\"cmd\":\"alarm_stealth\"}}")
     print("  预期: 无声光，但 alarm_active=True，FFF1 推送 t=5")
     prompt_and_watch("alarm_stealth — 确认无声无光", event_bus, modules, 8)
-    print_scene_state(11, "静默报警", ctrl, alarm, ble_svc)
-    record_result(11, "静默报警", "alarm_stealth",
+    print_scene_state(10, "静默报警", ctrl, alarm, ble_svc)
+    record_result(10, "静默报警", "alarm_stealth",
                   "alarm_active=True,type=stealth",
                   "alarm_active=%s,type=%s" % (
                       alarm.ctx["alarm_active"], alarm.ctx["alarm_type"]),
@@ -353,8 +344,8 @@ def main():
     prompt_and_watch("CUSTOM — 省电下开灯应变 custom", event_bus, modules, 8)
     cs = ctrl._control_state
     print("  power_mode: %s (应为 custom)" % cs["power_mode"])
-    print_scene_state(12, "CUSTOM状态", ctrl, alarm, ble_svc)
-    record_result(12, "CUSTOM状态", "light_on(in suspended)",
+    print_scene_state(11, "CUSTOM状态", ctrl, alarm, ble_svc)
+    record_result(11, "CUSTOM状态", "light_on(in suspended)",
                   "power=custom,brightness=50",
                   "power=%s,brightness=%d" % (cs["power_mode"], cs["light_brightness"]),
                   tts_events[-1]["text"] if tts_events else "",
@@ -378,8 +369,8 @@ def main():
     print("\n  FFF3 发送: {\"a\":\"ctrl\",\"d\":{\"cmd\":\"query_status\"}}")
     print("  预期: TTS 播报当前灯光+音量+电源模式")
     prompt_and_watch("query_status — 听 TTS 播报状态", event_bus, modules, 8)
-    print_scene_state(13, "查询状态", ctrl, alarm, ble_svc)
-    record_result(13, "查询状态", "query_status",
+    print_scene_state(12, "查询状态", ctrl, alarm, ble_svc)
+    record_result(12, "查询状态", "query_status",
                   "TTS播报", "TTS=%s" % ("有" if tts_events else "无"),
                   tts_events[-1]["text"] if tts_events else "",
                   len(tts_events) > 0)
@@ -387,8 +378,8 @@ def main():
     print("\n  FFF3 发送: {\"a\":\"ctrl\",\"d\":{\"cmd\":\"query_temp\"}}")
     print("  预期: TTS 播报\"当前温度28度\"")
     prompt_and_watch("query_temp — 听 TTS 播报温度", event_bus, modules, 8)
-    print_scene_state(14, "查询温度", ctrl, alarm, ble_svc)
-    record_result(14, "查询温度", "query_temp",
+    print_scene_state(13, "查询温度", ctrl, alarm, ble_svc)
+    record_result(13, "查询温度", "query_temp",
                   "TTS=当前温度28度", "TTS=%s" % (tts_events[-1]["text"] if tts_events else ""),
                   tts_events[-1]["text"] if tts_events else "",
                   len(tts_events) > 0)
@@ -396,8 +387,8 @@ def main():
     print("\n  FFF3 发送: {\"a\":\"ctrl\",\"d\":{\"cmd\":\"query_speed\"}}")
     print("  预期: TTS 播报\"当前时速25公里\"")
     prompt_and_watch("query_speed — 听 TTS 播报速度", event_bus, modules, 8)
-    print_scene_state(15, "查询速度", ctrl, alarm, ble_svc)
-    record_result(15, "查询速度", "query_speed",
+    print_scene_state(14, "查询速度", ctrl, alarm, ble_svc)
+    record_result(14, "查询速度", "query_speed",
                   "TTS=当前时速25公里", "TTS=%s" % (tts_events[-1]["text"] if tts_events else ""),
                   tts_events[-1]["text"] if tts_events else "",
                   len(tts_events) > 0)
@@ -405,8 +396,8 @@ def main():
     print("\n  FFF3 发送: {\"a\":\"ctrl\",\"d\":{\"cmd\":\"query_location\"}}")
     print("  预期: TTS 播报经纬度")
     prompt_and_watch("query_location — 听 TTS 播报位置", event_bus, modules, 8)
-    print_scene_state(16, "查询位置", ctrl, alarm, ble_svc)
-    record_result(16, "查询位置", "query_location",
+    print_scene_state(15, "查询位置", ctrl, alarm, ble_svc)
+    record_result(15, "查询位置", "query_location",
                   "TTS播报经纬度", "TTS=%s" % (tts_events[-1]["text"] if tts_events else ""),
                   tts_events[-1]["text"] if tts_events else "",
                   len(tts_events) > 0)
@@ -423,8 +414,8 @@ def main():
     print("  FFF3 发送: {\"a\":\"ctrl\",\"d\":{\"cmd\":\"query_temp\"}}")
     print("  预期: TTS 被阻止（不播报），报警不受影响")
     prompt_and_watch("报警中查询 — 确认无 TTS 播报", event_bus, modules, 8)
-    print_scene_state(17, "报警中查询保护", ctrl, alarm, ble_svc)
-    record_result(17, "报警中查询保护", "query_temp(in alarm)",
+    print_scene_state(16, "报警中查询保护", ctrl, alarm, ble_svc)
+    record_result(16, "报警中查询保护", "query_temp(in alarm)",
                   "TTS被阻止", "TTS=%s" % ("有" if tts_events else "无"),
                   tts_events[-1]["text"] if tts_events else "",
                   len(tts_events) == 0)
@@ -458,8 +449,8 @@ def main():
     print("  预期: 报警后灯光亮度恢复到报警前的值")
     prompt_and_watch("快照恢复 — 确认亮度恢复", event_bus, modules, 8)
     cs = ctrl._control_state
-    print_scene_state(18, "报警快照恢复", ctrl, alarm, ble_svc)
-    record_result(18, "报警快照恢复", "alarm_cancel(restore)",
+    print_scene_state(17, "报警快照恢复", ctrl, alarm, ble_svc)
+    record_result(17, "报警快照恢复", "alarm_cancel(restore)",
                   "brightness=45", "brightness=%d" % cs["light_brightness"],
                   tts_events[-1]["text"] if tts_events else "",
                   cs["light_brightness"] == 45)
@@ -487,8 +478,8 @@ def main():
     print("  预期: 报警正常触发，取消后恢复省电模式")
     prompt_and_watch("省电下报警 — 确认模式恢复", event_bus, modules, 8)
     cs = ctrl._control_state
-    print_scene_state(19, "省电下报警", ctrl, alarm, ble_svc)
-    record_result(19, "省电下报警", "alarm_cancel(in suspended)",
+    print_scene_state(18, "省电下报警", ctrl, alarm, ble_svc)
+    record_result(18, "省电下报警", "alarm_cancel(in suspended)",
                   "power=suspended", "power=%s" % cs["power_mode"],
                   tts_events[-1]["text"] if tts_events else "",
                   cs["power_mode"] == "suspended")
@@ -507,8 +498,8 @@ def main():
     event_bus.publish(EVENT_NAV_CMD, {"raw": nav_cmd})
     event_bus.pump()
     prompt_and_watch("导航指令 — 听 TTS 播报导航", event_bus, modules, 8)
-    print_scene_state(20, "导航指令", ctrl, alarm, ble_svc)
-    record_result(20, "导航指令", "nav(right,200m)",
+    print_scene_state(19, "导航指令", ctrl, alarm, ble_svc)
+    record_result(19, "导航指令", "nav(right,200m)",
                   "TTS播报导航", "TTS=%s" % (tts_events[-1]["text"] if tts_events else ""),
                   tts_events[-1]["text"] if tts_events else "",
                   len(tts_events) > 0)
