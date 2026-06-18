@@ -16,6 +16,7 @@ from core.config import (
     EVENT_RIDE_CONTROL, EVENT_CONTROL_STATE_CHANGED,
     EVENT_POWER_STATE_CHANGE, EVENT_TTS_REQUEST,
     EVENT_TEMP_HUMID_READY, EVENT_GNSS_READY,
+    EVENT_NAV_CMD,
     POWER_STATE_ACTIVE, POWER_STATE_SUSPENDED, POWER_STATE_EMERGENCY,
 )
 from Drivers.actuator.LED import LEDDriver
@@ -27,6 +28,7 @@ from Modules.light_service import LightService
 from Modules.alarm_service import AlarmService
 from Modules.ble_service import BLEService
 from Modules.control_service import ControlService
+from Modules.navigation_service import NavigationService
 
 
 state_pushes = []
@@ -125,11 +127,12 @@ def main():
     alarm = AlarmService(event_bus, led=led, audio=audio)
     ble_svc = BLEService(event_bus, ble_driver=ble_driver)
     ctrl = ControlService(event_bus)
+    nav = NavigationService(event_bus, audio_driver=audio, lcd_driver=None)
 
     init_order = [led, audio, pwm_led, light_sensor, ble_driver,
-                  light_svc, alarm, ble_svc, ctrl]
+                  light_svc, alarm, ble_svc, ctrl, nav]
     modules = [led, audio, pwm_led, light_sensor, ble_driver,
-               light_svc, alarm, ble_svc, ctrl]
+               light_svc, alarm, ble_svc, ctrl, nav]
 
     print("\n[初始化]")
     for mod in init_order:
@@ -271,6 +274,69 @@ def main():
     send_json(event_bus, "alarm_cancel")
     pump_loop(event_bus, modules, 2)
 
+    # ==================== 场景 8: 报警快照恢复 ====================
+    print("\n" + "=" * 60)
+    print("场景 8: 报警快照恢复")
+    print("=" * 60)
+    print("  1. 设置灯光亮度到 30")
+    send_json(event_bus, "light_on")
+    pump_loop(event_bus, modules, 1)
+    send_json(event_bus, "brightness_down")
+    pump_loop(event_bus, modules, 1)
+    send_json(event_bus, "brightness_down")
+    pump_loop(event_bus, modules, 1)
+    print("  亮度: %d (应为 30)" % ctrl._control_state["light_brightness"])
+
+    print("  2. 触发报警")
+    send_json(event_bus, "alarm_sos")
+    pump_loop(event_bus, modules, 2)
+
+    print("  3. 取消报警，检查快照恢复")
+    send_json(event_bus, "alarm_cancel")
+    pump_loop(event_bus, modules, 2)
+    print("  亮度: %d (应恢复到 30)" % ctrl._control_state["light_brightness"])
+
+    print("  FFF3 发送: alarm_sos → alarm_cancel")
+    print("  预期: 报警后灯光亮度恢复到报警前的值")
+    prompt_and_watch("快照恢复 — 确认亮度恢复", event_bus, modules, 8)
+
+    # ==================== 场景 9: 省电下报警 ====================
+    print("\n" + "=" * 60)
+    print("场景 9: 省电下报警")
+    print("=" * 60)
+    print("  1. 切换到省电模式")
+    send_json(event_bus, "power_save")
+    pump_loop(event_bus, modules, 1)
+    print("  power_mode: %s" % ctrl._control_state["power_mode"])
+
+    print("  2. 触发报警")
+    send_json(event_bus, "alarm_sos")
+    pump_loop(event_bus, modules, 2)
+
+    print("  3. 取消报警，检查电源模式恢复")
+    send_json(event_bus, "alarm_cancel")
+    pump_loop(event_bus, modules, 2)
+    print("  power_mode: %s (应恢复到 suspended)" % ctrl._control_state["power_mode"])
+
+    print("  FFF3 发送: power_save → alarm_sos → alarm_cancel")
+    print("  预期: 报警正常触发，取消后恢复省电模式")
+    prompt_and_watch("省电下报警 — 确认模式恢复", event_bus, modules, 8)
+
+    # 恢复正常模式
+    send_json(event_bus, "power_normal")
+    pump_loop(event_bus, modules, 1)
+
+    # ==================== 场景 10: 导航指令 ====================
+    print("\n" + "=" * 60)
+    print("场景 10: 导航指令")
+    print("=" * 60)
+    print("  FFF3 发送导航指令")
+    print("  预期: TTS 播报导航 + LCD 更新")
+    nav_cmd = json.dumps({"a": "nav", "d": {"dir": "right", "dist": 200, "road": "测试路"}})
+    event_bus.publish(EVENT_NAV_CMD, {"raw": nav_cmd})
+    event_bus.pump()
+    prompt_and_watch("导航指令 — 听 TTS 播报导航", event_bus, modules, 8)
+
     # ==================== 总结 ====================
     print("\n" + "=" * 60)
     print("测试完成")
@@ -286,6 +352,9 @@ def main():
     print("  [ ] CUSTOM: 省电下手动操作自动切换")
     print("  [ ] 查询: TTS 播报正确内容")
     print("  [ ] 报警中查询: TTS 被阻止")
+    print("  [ ] 报警快照: 取消后亮度恢复")
+    print("  [ ] 省电下报警: 报警正常 + 恢复 suspended")
+    print("  [ ] 导航指令: TTS 播报 + 数据更新")
     print("  [ ] FFF1 notify: 手机收到 t=7 状态回推")
 
 

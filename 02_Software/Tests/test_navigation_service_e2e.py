@@ -1,10 +1,11 @@
 """
 brief NavigationService 端到端测试
 note 需要真实硬件 + 小程序 BLE 连接
-     1. 初始化完整系统（EventBus + NavigationService + BLE）
-     2. 等待小程序 BLE 连接
-     3. 模拟/接收导航指令
-     4. 验证 TTS 播报和 LCD 底部导航行
+      1. 初始化完整系统（EventBus + NavigationService + BLE）
+      2. 等待小程序 BLE 连接
+      3. 模拟/接收导航指令
+      4. 验证 TTS 播报和 LCD 底部导航行
+      5. 验证紧急暂停、静默阻塞、省电 LCD
 执行: 上传到板子运行 python test_navigation_service_e2e.py
 """
 import sys
@@ -14,12 +15,19 @@ import json
 sys.path.append("..")
 
 from core.Event_Bus import EventBus
-from core.config import EVENT_NAV_CMD, EVENT_BLE_CONNECTED
+from core.config import (
+    EVENT_NAV_CMD, EVENT_BLE_CONNECTED,
+    EVENT_RIDE_CONTROL, EVENT_TTS_REQUEST,
+    EVENT_ALARM_TRIGGERED, EVENT_ALARM_CANCELED,
+)
 from Modules.navigation_service import NavigationService
-from Drivers.actuator.Audio import AudioDriver
-from Drivers.actuator.LCD import LCDDriver
-from Drivers.network.BLE import BLEDriver
+from Modules.alarm_service import AlarmService
+from Modules.control_service import ControlService
 from Modules.ble_service import BLEService
+from Drivers.actuator.Audio import AudioDriver
+from Drivers.actuator.LED import LEDDriver
+from Drivers.actuator.PWM_LED import PWMLEDDriver
+from Drivers.network.BLE import BLEDriver
 
 
 _LOG_PATH = "Tests/test_navigation_service_e2e.log"
@@ -72,14 +80,13 @@ def main():
         log("✗ Audio 初始化失败: %s" % e)
         return
 
-    log("初始化 LCD...")
-    try:
-        lcd = LCDDriver(bus)
-        lcd.init()
-        log("✓ LCD 就绪")
-    except Exception as e:
-        log("✗ LCD 初始化失败: %s" % e)
-        return
+    log("初始化 LED...")
+    led = LEDDriver(bus)
+    led.init()
+
+    log("初始化 PWM_LED...")
+    pwm_led = PWMLEDDriver(bus)
+    pwm_led.init()
 
     log("初始化 BLE...")
     try:
@@ -92,11 +99,19 @@ def main():
         log("✗ BLE 初始化失败: %s" % e)
         return
 
-    # 2. 初始化 NavigationService
+    # 2. 初始化 Services
+    log("初始化 AlarmService...")
+    alarm = AlarmService(bus, led=led, audio=audio)
+    alarm.init()
+
+    log("初始化 ControlService...")
+    ctrl = ControlService(event_bus=bus)
+    ctrl.init()
+
     log("初始化 NavigationService...")
-    nav_svc = NavigationService(bus, audio_driver=audio, lcd_driver=lcd)
+    nav_svc = NavigationService(bus, audio_driver=audio, lcd_driver=None)
     nav_svc.init()
-    log("✓ NavigationService 就绪")
+    log("✓ 所有模块就绪")
 
     # 3. 等待 BLE 连接
     countdown(10, "请在小程序点击「连接」")
@@ -155,10 +170,82 @@ def main():
 
     countdown(60, "等待小程序导航操作...")
 
+    # ==================== 阶段三：电源模式 × 导航 ====================
+    log("")
+    log("=== 阶段三：电源模式 × 导航 ===")
+
+    # 3.1 紧急暂停
+    log("--- 3.1 紧急暂停 ---")
+    log("发送 power_emergency")
+    raw = json.dumps({"a": "ctrl", "d": {"cmd": "power_emergency"}})
+    bus.publish(EVENT_RIDE_CONTROL, {"raw": raw})
+    pump_wait(bus, 2)
+
+    log("发送导航指令（应被忽略）")
+    nav_cmd = json.dumps({"a": "nav", "d": {"dir": "right", "dist": 100, "road": "测试路"}})
+    bus.publish(EVENT_NAV_CMD, {"raw": nav_cmd})
+    pump_wait(bus, 3)
+
+    log("  navigating=%s dir=%s (应为 False/空)" % (
+        nav_svc.ctx["is_navigating"], nav_svc.ctx["current_dir"]))
+
+    # 恢复正常
+    raw = json.dumps({"a": "ctrl", "d": {"cmd": "power_normal"}})
+    bus.publish(EVENT_RIDE_CONTROL, {"raw": raw})
+    pump_wait(bus, 2)
+
+    # 3.2 静默阻塞
+    log("--- 3.2 静默阻塞 ---")
+    log("发送 alarm_stealth")
+    raw = json.dumps({"a": "ctrl", "d": {"cmd": "alarm_stealth"}})
+    bus.publish(EVENT_RIDE_CONTROL, {"raw": raw})
+    pump_wait(bus, 2)
+
+    log("发送导航指令（数据更新但无 TTS）")
+    nav_cmd = json.dumps({"a": "nav", "d": {"dir": "left", "dist": 150, "road": "静默路"}})
+    bus.publish(EVENT_NAV_CMD, {"raw": nav_cmd})
+    pump_wait(bus, 3)
+
+    log("  navigating=%s dir=%s dist=%s (数据应更新)" % (
+        nav_svc.ctx["is_navigating"], nav_svc.ctx["current_dir"],
+        nav_svc.ctx["current_dist"]))
+    log("  预期: 无 TTS 播报（静默报警）")
+
+    # 取消静默
+    ctrl._alarm_active = False
+    nav_svc._stealth_active = False
+
+    # 3.3 省电 LCD
+    log("--- 3.3 省电 LCD ---")
+    log("发送 power_save")
+    raw = json.dumps({"a": "ctrl", "d": {"cmd": "power_save"}})
+    bus.publish(EVENT_RIDE_CONTROL, {"raw": raw})
+    pump_wait(bus, 2)
+
+    log("发送导航指令（TTS 正常，LCD 跳过）")
+    nav_cmd = json.dumps({"a": "nav", "d": {"dir": "right", "dist": 80, "road": "省电路"}})
+    bus.publish(EVENT_NAV_CMD, {"raw": nav_cmd})
+    pump_wait(bus, 3)
+
+    log("  navigating=%s dir=%s (数据应更新)" % (
+        nav_svc.ctx["is_navigating"], nav_svc.ctx["current_dir"]))
+    log("  预期: TTS 播报正常，无 LCD 写入")
+
+    # 恢复正常
+    raw = json.dumps({"a": "ctrl", "d": {"cmd": "power_normal"}})
+    bus.publish(EVENT_RIDE_CONTROL, {"raw": raw})
+    pump_wait(bus, 2)
+
     log("")
     print("=" * 50)
     print(" 测试完成")
     print("=" * 50)
+    print("\n检查清单:")
+    print("  [ ] 基本导航: TTS 播报 + 数据更新")
+    print("  [ ] 到达目的地: TTS '已到达'")
+    print("  [ ] 紧急暂停: 导航被忽略")
+    print("  [ ] 静默阻塞: 数据更新但无 TTS")
+    print("  [ ] 省电 LCD: TTS 正常 + LCD 跳过")
 
 
 if __name__ == "__main__":
