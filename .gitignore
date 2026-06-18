@@ -27,6 +27,7 @@ skills-guide.md
 # 小程序参考项目和文档（体积大，不需要提交）
 02_Software/WeChatMiniProgram/doc/example
 02_Software/WeChatMiniProgram/doc/.brainstorms
+02_Software/WeChatMiniProgram/doc/ctrl-panel-preview.html
 02_Software/WeChatMiniProgram/android_iot_sdk_1.12.0/
 
 # 敏感配置（含 API 密钥）
