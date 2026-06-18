@@ -357,11 +357,12 @@ SmartRidingHelmet-TeamX/
 │   │   │   ├── led.py           # LED指示灯
 │   │   │   └── PWM_LED.py       # PWM调光LED驱动（18W大功率灯）
 │   │   ├── interface/
-│   │   │   └── Button.py        # SOS按键
+│   │   │   ├── Button.py        # SOS按键
+│   │   │   └── Voice.py         # 语音指令（ASRPRO UART hex 映射）
 │   │   └── network/
 │   │       ├── Network.py       # 4G网络模组
 │   │       ├── MQTT.py          # MQTT协议封装
-│   │       ├── BLE.py           # BLE蓝牙GATT Server
+│   │       ├── BLE.py           # BLE蓝牙GATT Server（纯硬件接口）
 │   │       ├── Qth.py           # 移远云Qth SDK封装
 │   │       └── thread_queue.py  # 线程安全队列
 │   │
