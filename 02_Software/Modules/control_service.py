@@ -305,6 +305,7 @@ class ControlService(BaseModule):
     def _on_alarm_canceled(self, payload):
         """恢复报警前状态"""
         self._alarm_active = False
+        self._tts("报警已取消")  # alarm_active 已清除，TTS 不被阻塞
         if self._pre_alarm_state:
             self._control_state.update(self._pre_alarm_state)
             self._pre_alarm_state = None

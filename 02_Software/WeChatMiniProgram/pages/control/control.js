@@ -156,7 +156,7 @@ Page({
     var mode = e.currentTarget.dataset.mode;
     logger.log('CTRL', 'lightMode -> ' + mode);
     // 乐观更新：点击后立即切换模式高亮，不等硬件回推
-    this.setData({ lightMode: mode });
+    this.setData({ lightMode: mode, lightBrightness: mode === 'manual' ? 100 : this.data.lightBrightness });
     if (mode === 'auto') {
       CtrlService.lightAuto();
     } else if (mode === 'manual') {
