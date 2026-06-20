@@ -371,13 +371,13 @@ while True:
 | EVENT_NETWORK_DISCONNECTED | 网络断开 | Network | CloudService |
 | EVENT_DATA_UPLOAD_SUCCESS | 数据上传成功 | CloudService | — |
 | EVENT_DATA_UPLOAD_FAILED | 数据上传失败 | CloudService | — |
-| **BLE 事件（Phase 3 新增）** | | | |
+| **BLE 事件（Phase 4 新增）** | | | |
 | EVENT_BLE_CONNECTED | BLE 连接成功 | BLEDriver | BLEService |
 | EVENT_BLE_DISCONNECTED | BLE 断开连接 | BLEDriver | BLEService |
 | EVENT_RIDE_CONTROL | BLE FFF3 控制指令 | BLEService | ControlService |
 | EVENT_NAV_CMD | 导航指令 | BLEService | NavigationService |
 | EVENT_BLE_ALARM_ACK | 报警确认 | BLEService | AlarmService |
-| **控制系统事件（Phase 3 新增）** | | | |
+| **控制系统事件（Phase 4 新增）** | | | |
 | EVENT_VOICE_CMD | 语音指令 | VoiceDriver | ControlService |
 | EVENT_CONTROL_STATE_CHANGED | 控制状态变更 | ControlService | BLEService |
 | EVENT_LIGHT_CONTROL | 灯光控制指令 | ControlService | LightService |
@@ -408,7 +408,7 @@ while True:
 | CloudService | Modules/cloud_service.py | Service | ✅ | MQTT 云端通信与数据上报 |
 | DisplayService | Modules/display_service.py | Service | ✅ | LCD 显示管理 |
 | BLEService | Modules/ble_service.py | Service | ✅ v3 | 环形缓冲区、快照合并推送 |
-| LightService | Modules/light_service.py | Service | ✅ v2 | 自适应灯光（光照→PWM 非线性映射） |
+| LightService | Modules/light_service.py | Service | ✅ v1 | 自适应灯光（光照→PWM 非线性映射） |
 | ControlService | Modules/control_service.py | Service | ✅ v3 | 纯事件驱动、19 条指令、TTS、报警快照 |
 | NavigationService | Modules/navigation_service.py | Service | ✅ v1 | 导航指令处理（腾讯地图 API） |
 
@@ -458,8 +458,7 @@ SmartRidingHelmet-TeamX/
 │   │   ├── main.py              # 系统入口 & 主循环调度
 │   │   ├── config.py            # 全局配置（阈值、网络参数、事件名常量）
 │   │   ├── Event_Bus.py         # 事件总线实现
-│   │   ├── Base_Module.py       # 四元组模块基类（规范契约）
-│   │   └── utils/               # 工具函数（日志封装、数据校验、时间处理）
+│   │   └── Base_Module.py       # 四元组模块基类（规范契约）
 │   │
 │   ├── Drivers/                 # 设备适配层（Device层）
 │   │   ├── sensor/
@@ -492,10 +491,9 @@ SmartRidingHelmet-TeamX/
 │   │   ├── power_service.py     # 【v2】电源管理（等电池硬件）
 │   │   └── navigation_service.py# 【v2】导航引导服务
 │   │
-│   └── Tests/                   # 单元测试与Mock
-│       ├── test_drivers/        # 驱动层独立测试
-│       ├── test_modules/        # 业务层逻辑测试
-│       └── mocks/               # 模拟硬件/MQTT服务器（供离线调试）
+│   └── Tests/                   # 单元测试与集成测试
+│       ├── test_*.py             # 各模块测试脚本（单模块/集成/E2E）
+│       └── miniprogram/          # 小程序端测试
 │
 |—— 03_Integration/              # 🌟 系统集成与验证
 │   ├── Integration_Plans.md     # 集成测试方案（定义步骤与验收标准）
@@ -603,7 +601,7 @@ def tick(self):
 
 ---
 
-**文档版本**：v7.0
-**更新日期**：2026-06-18
+**文档版本**：v7.1
+**更新日期**：2026-06-20
 **维护团队**：锦依卫队
-**备注**：Phase 3 完成 — ControlService（19 指令+TTS）、NavigationService、BLEService v3（环形缓冲+快照合并）、LightService v2、PWM_LED、VoiceDriver 已集成。新增事件常量表、模块清单、初始化顺序章节。
+**备注**：Phase 4 代码完成 — ControlService v3（19 指令+TTS+报警快照）、NavigationService、BLEService v3（环形缓冲+快照合并）、LightService、PWM_LED、VoiceDriver 已实现，待集成 main.py。
