@@ -108,7 +108,8 @@ class ControlService(BaseModule):
 
         # 指令分发表 — 全部发布事件，不直接调用模块
         self._cmd_handlers = {
-            "light_on":        lambda: self._pub(EVENT_LIGHT_CONTROL, {"cmd": "on"}),
+            "wake":           lambda: None,  # 空操作，TTS 由 _maybe_tts 从 CMD_TTS_MAP 自动获取
+            "light_on":       lambda: self._pub(EVENT_LIGHT_CONTROL, {"cmd": "on"}),
             "light_off":       lambda: self._pub(EVENT_LIGHT_CONTROL, {"cmd": "off"}),
             "light_auto":      lambda: self._pub(EVENT_LIGHT_CONTROL, {"cmd": "auto"}),
             "brightness_up":   lambda: self._pub(EVENT_LIGHT_CONTROL, {"cmd": "brightness_up"}),

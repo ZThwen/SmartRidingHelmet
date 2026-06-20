@@ -13,7 +13,7 @@ from core.config import EVENT_VOICE_CMD, VOICE_CMD_MAP
 
 class VoiceDriver(BaseModule):
 
-    def __init__(self, event_bus=None, uart_id=2, baudrate=9600):
+    def __init__(self, event_bus=None, uart_id=2, baudrate=115200):
         super().__init__()
         self.event_bus = event_bus
         self.name = "voice"

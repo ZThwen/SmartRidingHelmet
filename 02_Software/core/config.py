@@ -243,8 +243,13 @@ LIGHTSENSOR_MANUAL_MS      = 30000   # 省电模式+手动灯光：光照采样�
 GNSS_SUSPENDED_MS          = 10000   # 省电模式 GNSS 采样间隔
 GNSS_EMERGENCY_MS          = 10000   # 紧急省电 GNSS 采样间隔（降频）
 
+# ================= 语音模块UART配置 =================
+VOICE_UART_ID       = 2        # UART总线编号（UART2，对应D52/D53引脚）
+VOICE_UART_BAUDRATE = 115200   # 波特率（ASRPRO固定115200）
+
 # ================= 语音指令映射表（ASRPRO hex → ControlService cmd）=================
 VOICE_CMD_MAP = {
+    0x00: "wake",              # 唤醒指令（语音："小洛包"）
     0x01: "light_on",
     0x02: "light_off",
     0x03: "brightness_up",
@@ -268,6 +273,7 @@ VOICE_CMD_MAP = {
 
 # ================= 控制指令 TTS 播报映射表 =================
 CMD_TTS_MAP = {
+    "wake": "小洛包在，有什么指示",
     "light_on": "灯光已开启",
     "light_off": "灯光已关闭",
     "brightness_up": "亮度增加",
