@@ -480,7 +480,7 @@ LCD 内部维护 `display_mode` 状态（normal / alarm），用于防止 Servic
 
 **需求对应**：F-CTRL-01 远端控制（语音入口）
 
-**当前状态**：⏳ **基础框架已实现**（2026-06-12），待集成测试
+**当前状态**：✅ **已实现**（2026-06-20），待集成 main.py
 
 **模块功能**：
 - 监听 ASRPRO 语音模块的 UART 串口
@@ -524,7 +524,7 @@ LCD 内部维护 `display_mode` 状态（normal / alarm），用于防止 Servic
 
 **硬件说明**：
 - 语音芯片：ASRPRO（本地语音识别，不依赖云端）
-- 通信接口：UART2（9600 baud）
+- 通信接口：UART2（115200 baud）
 - 数据格式：单字节 hex（0x01-0x13）
 - 通信方向：单向（ASRPRO → EC200U，无握手、无应答）
 
@@ -735,13 +735,13 @@ ASRPRO 识别"开灯" → UART 发送 0x01
 
 ---
 
-#### 2.2.9 BLE 推送服务（BLEService）（✅ v2 已实现）
+#### 2.2.9 BLE 推送服务（BLEService）（✅ v3 已实现）
 
 **所属层次**：Service层（业务服务层）
 
 **需求对应**：F-NET-04 BLE 近场通信
 
-**当前状态**：✅ **v2 已实现**（2026-06-16 环形缓冲区 + 快照合并推送）
+**当前状态**：✅ **v3 已实现**（2026-06-18 环形缓冲区 + 快照合并推送）
 
 **模块功能**：
 - **接收**：注册 BLE 回调，将接收到的原始数据写入环形缓冲区，tick 中解析并路由到 ControlService / NavigationService
@@ -958,13 +958,13 @@ BLE 中断 (modem 线程)
 
 ---
 
-#### 2.2.5.2 统一控制服务（ControlService.py）（✅ v2 已实现）
+#### 2.2.5.2 统一控制服务（ControlService.py）（✅ v3 已实现）
 
 **所属层次**：Service层（业务服务层）
 
 **需求对应**：F-CTRL-01 远端控制
 
-**当前状态**：✅ **v2 已实现**（2026-06-16 纯事件驱动 + TTS 反馈）
+**当前状态**：✅ **v3 已实现**（2026-06-18 纯事件驱动 + TTS 反馈）
 
 **模块职责**：
 - 订阅 `EVENT_RIDE_CONTROL` 事件（来自 BLE FFF3 写入 → BLEService buffer → tick 解析）
@@ -1081,6 +1081,9 @@ BLE 指令 → BLEService buffer → tick 解析 → EVENT_RIDE_CONTROL → _exe
 
 **订阅事件**：
 - `EVENT_NAV_CMD`：收到导航指令
+- `EVENT_POWER_STATE_CHANGE`：电源状态变化，EMERGENCY 暂停导航
+- `EVENT_ALARM_TRIGGERED`：报警触发，标记报警状态（静默报警跳过 TTS）
+- `EVENT_ALARM_CANCELED`：报警取消，清除报警状态
 
 **TTS 播报文本**：
 - 有路名：`"前方200米右转进入中山路"`
@@ -1120,9 +1123,8 @@ BLE 指令 → BLEService buffer → tick 解析 → EVENT_RIDE_CONTROL → _exe
 | | polyline 前向差分解压 + act_desc 方向映射修复 | ✅ 已修复 |
 | | 导航位置播报（头盔根据 GNSS 位置自主播报，替代 5s 推流） | 📅 规划中 |
 | | 远端控制 UI（头灯开关、音量调节等控制面板，BLE FFF3 sendCtrl） | ✅ 已实现 |
-| | 统一控制服务（头盔端 ControlService v2 已实现） | ✅ 已实现 |
-| | 语音指令驱动（VoiceDriver UART 轮询 + hex 映射） | ⏳ 基础框架已实现 |
-| Step C | 语音交互（ASRPRO → UART → ControlService） | ⏳ 待集成 |
+| | 统一控制服务（头盔端 ControlService v3 已实现） | ✅ 已实现 |
+| | 语音指令驱动（VoiceDriver UART 轮询 + hex 映射） | ✅ 已实现 (06-20) |
 
 **通信方式**：
   头盔 → BLE GATT Notify (FFF1) → 微信小程序（BLE Central）→ 实时接收传感器数据推送
@@ -1528,37 +1530,39 @@ gnss.get_location() 返回有效数据
 2. IMU 驱动（IMU）（✅已实现）
 3. GNSS 驱动（GNSS）（✅已实现）
 4. 光照驱动（Light）（✅已实现）
-4.1. 语音指令驱动（Voice）（⏳ 基础框架已实现，待集成）
+4.1. LBS 基站定位（LBSDriver）（✅ v1 已实现）
+4.2. 语音指令驱动（Voice）（✅ 已实现）
 5. SOS 按键驱动（Button）（✅已实现）
 6. LED 驱动（LED）（✅已实现）
 7. 音频驱动（Audio）（✅已实现）
 8. LCD 驱动（LCD）（✅已实现）
-8.1. PWM LED 驱动（PWM_LED）（✅ v1 已实现）
+8.1. PWM LED 驱动（PWM_LED）（✅ 已实现，待集成 main.py）
 9. 网络驱动：Network → MQTT（✅已实现）
 10. 网络驱动：Qth（✅ v1 已实现）
-11. BLE 驱动（BLEDriver）（✅ v2 已实现，待集成到 main.py）
+11. BLE 驱动（BLEDriver）（✅ 已实现，待集成到 main.py）
 12. 碰撞检测服务（CollisionService）（✅ v1 已实现）
 13. 电源管理服务（PowerService）（⏳ v2 计划，等电池硬件）
 14. 报警联动服务（AlarmService）（✅ v1 已实现）
 15. 云端通信服务（CloudService）（✅ v1 已实现）
 16. 移远云通信服务（LarkCloudService）（✅ v1 已实现）
 17. 显示管理服务（DisplayService）（✅ v1 已实现）
-17.1. 自适应灯光服务（LightService）（✅ v1 已实现）
-17.2. 导航引导服务（NavigationService）（✅ v1 已实现）
-18. BLE 推送服务（BLEService）（✅ v2 已实现，待集成到 main.py）
-18.1. 统一控制服务（ControlService）（✅ v2 已实现，待集成到 main.py）
+17.1. 自适应灯光服务（LightService）（✅ 已实现，待集成 main.py）
+17.2. 导航引导服务（NavigationService）（✅ 已实现，待集成 main.py）
+18. BLE 推送服务（BLEService）（✅ v3 已实现，待集成到 main.py）
+18.1. 统一控制服务（ControlService）（✅ v3 已实现，待集成到 main.py）
 
 **v2 新增模块**：
 
 | # | 模块 | 状态 | 说明 |
 |:-|:----|:----|:------|
-| 4.1 | LBS 基站定位（LBSDriver） | ✅ v1 已实现 | quectel.LBS 基站定位，与 GNSS 互斥 |
+| 4.1 | LBS 基站定位（LBSDriver） | ✅ 已实现 (06-09) | quectel.LBS 基站定位，与 GNSS 互斥 |
+| 4.2 | 语音指令驱动（VoiceDriver） | ✅ 已实现 (06-20) | ASRPRO UART hex 映射 19 指令 |
 | 17 | 心率驱动（HeartRate） | 📅 v2 | BLE 扫描心率带广播数据 |
-| 18 | PWM 调光 LED 驱动（PWM_LED） | ✅ 板子端已实现（未集成 main.py） | PE11 + TIM1_CH2，PWM 调光 |
-| 18.1 | 自适应灯光服务（LightService） | ✅ 板子端已实现（未集成 main.py） | 订阅光照事件 + PWM LED 调光 + 自动/手动模式 |
-| 19 | 导航引导服务（NavigationService） | ✅ 板子端已实现（未集成 main.py） | BLE FFF2 接收指令 + TTS 播报；位置播报升级 📅 |
-| 19.1 | 统一控制服务（ControlService） | ✅ 板子端已实现（小程序端待开发） | BLE FFF3 接收指令 + 统一路由到设备驱动 |
-| 20 | 微信小程序（WeChatMiniProgram） | 🟢 Step A + Step B 导航完成，远端控制 UI 待开发 | 登录+BLE+骑行+地图+导航推送+远端控制 🔜 |
+| 18 | PWM 调光 LED 驱动（PWM_LED） | ✅ 已实现 (06-11)，待集成 main.py | PE11 + TIM1_CH2，PWM 调光 |
+| 18.1 | 自适应灯光服务（LightService） | ✅ 已实现 (06-11)，待集成 main.py | 订阅光照事件 + PWM LED 调光 + 自动/手动模式 |
+| 19 | 导航引导服务（NavigationService） | ✅ 已实现 (06-09)，待集成 main.py | BLE FFF2 接收指令 + TTS 播报；位置播报升级 📅 |
+| 19.1 | 统一控制服务（ControlService） | ✅ v3 已实现 (06-18)，待集成 main.py | BLE FFF3 接收指令 + 统一路由到设备驱动 |
+| 20 | 微信小程序（WeChatMiniProgram） | ✅ Step A + Step B 完成 | 登录+BLE+骑行+地图+导航推送+远端控制 |
 ```
 
 ---
@@ -1674,23 +1678,6 @@ gnss.get_location() 返回有效数据
 - v2 待办：PowerService、系统状态机、SD 卡缓存
 - 系统能连续运行 30 分钟不死机
 
-**开发时间轴**：
-
-| 日期 | 里程碑 | 说明 |
-|:----:|:-------|:-----|
-| 5/5 - 5/13 | Phase 1 驱动层开发 | 传感器 + 执行器 + Button，第一阶段验收通过 |
-| 5/14 | 驱动层验收 + 文档同步 | GNSS、LCD、config 等细节完善 |
-| 5/17 | CloudService + Network/MQTT | 云端通信方案实现（MQTT → ConnectLab） |
-| 5/18 - 5/19 | AlarmService + CollisionService + DisplayService | 业务服务层核心模块 |
-| 5/20 | v1 系统集成完成 | 12 模块全部集成到 main.py，5 步渐进验证通过 |
-| 5/22 | Qth + LarkCloudService | 移远云通信方案实现（Qth SDK → 移远云 DMP） |
-| 5/22-5/28 | 小程序 Step A 开发 | 需求(5/22)→开发(5/23)→架构重构(5/24)→BLE 连通(5/28)，一次性 push；登录+实时数据+骑行控制+报警弹窗+地图轨迹 |
-| 5/28 | BLE 模块开发 | BLEDriver + BLEService + GATT Server FFF1-FFF4 + 稳定性修复（MTU 去重、断连清队列、熔断机制） |
-| 5/31 | BLE 报警修复 + 导航框架 | t=5 载荷压缩为 15 字节（ATT_MTU 限制）；navigation-service.js 搭建（腾讯地图 API + BLE FFF2 sendNav） |
-| 6/01 | Step A 完成 | 轨迹显示修复（WXML concat 根因）；canvas 蓝点 marker；总结地图起点+终点标记；报警取消功能；小程序包瘦身（3099KB→141KB） |
-| 6/02 | 文档对齐 + 密钥安全 | 规划文档/小程序文档同步至 Step A 完成状态；config.js 从 git 排除；BLE t=5 压缩入库 |
-| 6/09 | 导航功能开发 | BLE hex 解码、TTS 非阻塞（_thread）、NavigationService 创建、LBS 驱动、GNSS cog 字段、小程序 polyline 前向差分解压 + act_desc 方向映射 |
-
 ---
 
 ### 阶段 4：v2 功能扩展（📅 规划中）
@@ -1792,30 +1779,29 @@ gnss.get_location() 返回有效数据
 
 ---
 
-## 3.5 开发日志
+## 3.5 开发变更记录
 
-> 基于 git 提交记录，按时间顺序记录 Phase 3 关键变更
+> 按时间顺序记录各阶段的关键模块新增、功能上线和架构变更。
 
-| 日期 | 提交 | 变更类型 | 说明 |
-|------|------|----------|------|
-| 2026-06-18 | b16ef07 | feat(config) | 添加 CMD_TTS_MAP、电源模式常量、亮度步长 |
-| 2026-06-18 | 6270df0 | feat(control) | v3 远端控制：合并 BLE 推送、TTS 反馈、报警快照 |
-| 2026-06-18 | 0a3eac3 | test | 添加/更新 ControlService、电源、报警、Phase3 E2E 测试 |
-| 2026-06-18 | ef3aed4 | feat(miniprogram) | 小程序远端控制页 + TabBar + BLE 服务集成 |
-| 2026-06-18 | cbf8f04 | docs | 更新架构文档、设计方案、AGENTS.md |
-| 2026-06-18 | 3122432 | fix(control,miniprogram,test) | 亮度同步、报警 TTS、E2E 调试输出 |
-| 2026-06-18 | ab3c773 | test | 移除单独的报警取消测试，用户手动处理 |
-| 2026-06-18 | 358e4d3 | test | 添加结果追踪和总结报告到 E2E 测试 |
-| 2026-06-18 | a4f03b8 | test | 增强 Phase3 集成测试（8→23 个用例） |
-| 2026-06-18 | 9694b07 | fix(test) | 修复 MicroPython __doc__ AttributeError |
-| 2026-06-18 | c75c0e1 | fix(test) | 修复 TTS 防抖测试问题 |
-
-**Phase 3 开发总结**：
-- **核心功能**：ControlService v3（纯事件驱动、19 条指令、TTS 反馈、报警快照）
-- **BLE 优化**：环形缓冲区、快照合并、UUID 分发
-- **小程序**：控制页 UI、TabBar、BLE 服务集成
-- **测试覆盖**：43 个单元测试 + 23 个集成测试 + E2E 测试
-- **文档同步**：架构文档、模块实现文档、测试指南
+| 日期 | 阶段 | 关键变更 |
+|------|------|---------|
+| 05-05 ~ 05-06 | Phase 1 | 项目初始化、core 框架搭建（BaseModule、EventBus、config） |
+| 05-08 | Phase 1 | 新增驱动：IMU（LIS2DH12TR）、LightSensor（GL5528 ADC） |
+| 05-11 ~ 05-13 | Phase 1 | 新增驱动：Audio、Button、GNSS、LED、LCD；第一阶段验收通过 |
+| 05-14 | Phase 1 | GNSS/LCD/config 细节完善，按键事件定义 |
+| 05-17 | Phase 2 | 新增驱动：Network + MQTT；新增服务：CloudService（MQTT → ConnectLab） |
+| 05-18 ~ 05-19 | Phase 2 | 新增服务：AlarmService、CollisionService、DisplayService |
+| 05-20 | Phase 3 | **v1 系统集成完成**：12 模块 main.py 集成，`test_system_full_v1.py` 全系统测试 |
+| 05-22 | Phase 4 | 新增驱动：QthDriver；新增服务：LarkCloudService（移远云 DMP 通道） |
+| 05-28 | Phase 4 | 新增驱动：BLEDriver；新增服务：BLEService（GATT Server FFF1-FFF4）；小程序 Step A 初版 |
+| 06-01 | Phase 4 | **小程序 Step A 完成**：登录+实时数据+骑行控制+地图轨迹+报警取消 |
+| 06-02 | Phase 4 | 文档同步、密钥安全、BLE 报警载荷 t=5 压缩（15 字节） |
+| 06-09 | Phase 4 | 新增驱动：LBSDriver（基站定位）；新增服务：NavigationService；GNSS cog 字段；小程序导航推送 |
+| 06-11 | Phase 4 | 新增驱动：PWM_LED（PE11/TIM1_CH2）；新增服务：LightService（自适应灯光）、ControlService v1（BLE 远端控制）；BLE type=7 控制状态回推 |
+| 06-12 | Phase 4 | ControlService 重构为纯事件驱动架构；新增驱动：VoiceDriver（UART hex 映射 19 指令）；新增 TTS 反馈、电源模式、CUSTOM 状态；集成测试 |
+| 06-14 ~ 06-15 | Phase 4 | 小程序控制页 UI/JS/WXSS + TabBar + BLE 服务集成 + safe area 适配 |
+| 06-18 | Phase 4 | ControlService v3（合并 BLE 推送+TTS+报警快照）；BLEService v3（环形缓冲区+快照合并）；E2E 测试增强；文档同步 |
+| 06-20 | Phase 4 | 语音模块开发完成：VoiceDriver 集成验证 + ASRPRO UART 通信调试 |
 
 ---
 
@@ -1832,19 +1818,21 @@ M1: 起步验证 ──→ M2: 本地闭环 ──→ M3: 云端打通 ──→
 ### 时间轴
 
 ✅ M1 ──→ ✅ M2 ──→ ✅ M3 ──→ ✅ M4 ──→ 🔵 M5 ──→ 📅 M6
-起步验证　　本地闭环　　云端打通　　v1 集成　　v2 进行中　　      收官
+起步验证　　本地闭环　　云端打通　　v1 集成　　v2 开发中　　      收官
 05上旬　　　05-13　　　   05-19　　　 05-20　　　 05-28~　　　　将来
 
 > 箭头表示开发推进方向，✅=已完成　🔵=进行中　📅=计划中
 
 | 时间 | 里程碑 | 状态 | 关键交付 |
 |:-----|:-------|:----:|:---------|
-| 05上旬 | M1 起步验证 | ✅ | 驱动封装：AHT20(温湿度)、LIS2DH12TR(IMU)、GNSS(定位)、GL5528(光照)、LED、Audio、LCD |
-| 05-13 | M2 本地闭环 | ✅ | 碰撞检测算法(CollisionService)、报警联动(AlarmService)：LED 闪烁 + 音频 + 按钮 SOS |
-| 05-19 | M3 云端打通 | ✅ | Network 驱动、MQTT 驱动、CloudService(ConnectLab) E2E 测试通过 |
-| 05-20 | M4 v1 集成 | ✅ | 12 模块 main.py 集成、EventBus 事件总线、`test_system_full_v1.py` 全系统测试 |
-| 05-22 | M4+ 移远云 | ✅ | QthDriver 驱动、LarkCloudService、移远云 DMP 数据通道 E2E 通过 |
-| 05-28 ~ 06-02 | M5 v2 设计 | 🔵 | BLE 模块、小程序 Step A 完成 + Step B 导航框架、文档对齐 |
+| 05上旬 | M1 起步验证 | ✅ | 驱动封装：AHT20、LIS2DH12TR、GNSS、GL5528、LED、Audio、LCD |
+| 05-13 | M2 本地闭环 | ✅ | CollisionService + AlarmService：碰撞检测 + 声光报警 + SOS |
+| 05-19 | M3 云端打通 | ✅ | Network + MQTT + CloudService（ConnectLab）E2E 通过 |
+| 05-20 | M4 v1 集成 | ✅ | 12 模块 main.py 集成、EventBus、`test_system_full_v1.py` |
+| 05-22 | M4+ 移远云 | ✅ | QthDriver + LarkCloudService（移远云 DMP）E2E 通过 |
+| 05-28 ~ 06-02 | M5 Phase 4 启动 | ✅ | BLE 模块 + 小程序 Step A 完成 + Step B 导航框架 |
+| 06-09 | M5 导航+LBS | ✅ | NavigationService + LBS 驱动 + 小程序导航推送 |
+| 06-11 ~ 06-20 | M5 Phase 4 推进 | 🔵 | PWM_LED + LightService + ControlService v3 + VoiceDriver + 小程序远端控制（代码完成，待集成 main.py） |
 | 将来 | M6 收官 | 📅 | 设计文档、演示视频、答辩 PPT、开源整理 |
 
 ---
@@ -1904,26 +1892,26 @@ M1: 起步验证 ──→ M2: 本地闭环 ──→ M3: 云端打通 ──→
 
 ---
 
-### M5: v2 设计与集成 📅
+### M5: v2 设计与集成 🔵
 
 **里程碑目标**：电源管理、心率监测、灯光驱动、导航引导、语音交互、微信小程序
 
-**当前状态**：🔵 **进行中（远端控制已完成）**
+**当前状态**：🔵 **进行中（v2 模块代码已实现，待集成 main.py）**
 
 **子里程碑**：
 
 | 子里程碑 | 内容 | 状态 |
 |:--------|:----|:----:|
 | M5.1 电源管理 | PowerService（等电池硬件） | 🟡 等硬件 |
-| M5.2 灯光驱动 | PWM_LED（PE11, TIM1_CH2） | ✅ 板子端已实现 |
+| M5.2 灯光驱动 | PWM_LED（PE11, TIM1_CH2）+ LightService | ✅ 代码已实现 (06-11)，待集成 main.py |
 | M5.3 心率模块 | HeartRate 驱动（数据走 MQTT） | 🟡 等心率带到货 |
-| M5.4 微信小程序 | Step A: 登录+实时数据+骑行控制+总结+地图+报警取消 ✅ | 🟢 完成 (2026-06-01) |
-| | Step B: 导航推送（腾讯地图 API + BLE FFF2 sendNav + polyline 修复） | ✅ 已实现 (2026-06-09) |
-| | Step B: 导航位置播报（头盔 GNSS 位置自主播报） | 📅 规划中 |
-| | Step B: 远端控制（小程序 UI + BLE FFF3 + 头盔 Service） | ✅ 已完成 (2026-06-17) |
-| | Step C: 语音交互（微信语音识别 → BLE FFF3 命令下发） | 📅 第三步 |
-| M5.5 导航+语音 | NavigationService ✅ + ControlService ✅（板子端） | 🔜 板子端已实现，位置播报和小程序 UI 待开发 |
-| M5.6 移远云通道 | LarkCloudService + QthDriver，Qth SDK 接入移远云 | ✅ v1 已完成（2026-5-22） |
+| M5.4 小程序 Step A | 登录+实时数据+骑行控制+总结+地图+报警取消 | ✅ 已完成 (06-01) |
+| M5.4 小程序 Step B | 导航推送 + 远端控制 UI + BLE 服务集成 | ✅ 已完成 (06-18) |
+| M5.4 导航位置播报 | 头盔 GNSS 位置自主播报（替代 5s 推流） | 📅 规划中 |
+| M5.5 导航服务 | NavigationService（BLE FFF2 + TTS + LCD） | ✅ 代码已实现 (06-09)，待集成 main.py |
+| M5.5 控制服务 | ControlService v3（19 指令 + TTS + 报警快照） | ✅ 代码已实现 (06-18)，待集成 main.py |
+| M5.5 语音模块 | VoiceDriver（UART hex 映射 19 指令） | ✅ 代码已实现 (06-20)，待集成 main.py |
+| M5.6 移远云通道 | LarkCloudService + QthDriver | ✅ 已完成 (05-22) |
 
 ---
 
@@ -1942,7 +1930,7 @@ M1: 起步验证 ──→ M2: 本地闭环 ──→ M3: 云端打通 ──→
 
 ---
 
-**文档版本**：v7.0
-**更新日期**：2026-06-09
+**文档版本**：v8.0
+**更新日期**：2026-06-20
 **维护团队**：锦依卫队
-**备注**：v1 集成完成（M4），v2 导航功能开发中（头盔端 TTS+LCD 已实现，位置播报和远端控制待开发），BLE 直连为主数据通道
+**备注**：Phase 4 代码完成（ControlService v3 + BLE 快照合并 + VoiceDriver + 小程序远端控制），v2 模块待集成 main.py，M5 进行中

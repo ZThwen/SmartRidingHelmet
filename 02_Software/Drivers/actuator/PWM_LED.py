@@ -141,11 +141,10 @@ class PWMLEDDriver(BaseModule):
         """
         if "power_state" in payload:
             old_state = self.ctx["power_state"]
-            self.ctx["power_state"] = payload["power_state"]
             print("[{}] power: {} -> {}".format(self.name, old_state, payload["power_state"]))
-            
             if payload["power_state"] != POWER_STATE_ACTIVE:
                 self.set_brightness(0)
+            self.ctx["power_state"] = payload["power_state"]
     
     def get_data(self):
         """

@@ -1,0 +1,18 @@
+{"type":"click","text":"1\n      \n        Canvas 2D 画蓝点\n        用 <canvas type=\"2d\"> 画蓝色实心圆 + 白色边框 + 外圈光晕，导出为临时文件作为 marker iconPath","choice":"canvas","id":null,"timestamp":1780320444019}
+{"type":"click","text":"1\n      \n        Canvas 2D 画蓝点\n        用 <canvas type=\"2d\"> 画蓝色实心圆 + 白色边框 + 外圈光晕，导出为临时文件作为 marker iconPath","choice":"canvas","id":null,"timestamp":1780320444746}
+{"type":"click","text":"1\n      \n        Canvas 2D 画蓝点\n        用 <canvas type=\"2d\"> 画蓝色实心圆 + 白色边框 + 外圈光晕，导出为临时文件作为 marker iconPath","choice":"canvas","id":null,"timestamp":1780320445526}
+{"type":"click","text":"1\n      \n        Canvas 2D 画蓝点\n        用 <canvas type=\"2d\"> 画蓝色实心圆 + 白色边框 + 外圈光晕，导出为临时文件作为 marker iconPath","choice":"canvas","id":null,"timestamp":1780320447295}
+{"type":"click","text":"1\n      \n        Canvas 2D 画蓝点\n        用 <canvas type=\"2d\"> 画蓝色实心圆 + 白色边框 + 外圈光晕，导出为临时文件作为 marker iconPath","choice":"canvas","id":null,"timestamp":1780320447918}
+{"type":"click","text":"1\n      \n        Canvas 2D 画蓝点\n        用 <canvas type=\"2d\"> 画蓝色实心圆 + 白色边框 + 外圈光晕，导出为临时文件作为 marker iconPath","choice":"canvas","id":null,"timestamp":1780320449531}
+{"type":"click","text":"1\n      \n        Canvas 2D 画蓝点\n        用 <canvas type=\"2d\"> 画蓝色实心圆 + 白色边框 + 外圈光晕，导出为临时文件作为 marker iconPath","choice":"canvas","id":null,"timestamp":1780320582289}
+{"type":"click","text":"2\n      \n        时序保证\n        canvas 画完 → wx.canvasToTempFilePath → 存储路径 → 后续 onData 使用。需确保在第一个 BLE 数据到达前完成","choice":"timing","id":null,"timestamp":1780320582708}
+{"type":"click","text":"2\n      \n        时序保证\n        canvas 画完 → wx.canvasToTempFilePath → 存储路径 → 后续 onData 使用。需确保在第一个 BLE 数据到达前完成","choice":"timing","id":null,"timestamp":1780320583428}
+{"type":"click","text":"2\n      \n        时序保证\n        canvas 画完 → wx.canvasToTempFilePath → 存储路径 → 后续 onData 使用。需确保在第一个 BLE 数据到达前完成","choice":"timing","id":null,"timestamp":1780320583856}
+{"type":"click","text":"2\n      \n        时序保证\n        canvas 画完 → wx.canvasToTempFilePath → 存储路径 → 后续 onData 使用。需确保在第一个 BLE 数据到达前完成","choice":"timing","id":null,"timestamp":1780320584267}
+{"type":"click","text":"2\n      \n        时序保证\n        canvas 画完 → wx.canvasToTempFilePath → 存储路径 → 后续 onData 使用。需确保在第一个 BLE 数据到达前完成","choice":"timing","id":null,"timestamp":1780320584598}
+{"type":"click","text":"1\n      \n        Canvas 2D 画蓝点\n        用 <canvas type=\"2d\"> 画蓝色实心圆 + 白色边框 + 外圈光晕，导出为临时文件作为 marker iconPath","choice":"canvas","id":null,"timestamp":1780320585514}
+{"type":"click","text":"2\n      \n        时序保证\n        canvas 画完 → wx.canvasToTempFilePath → 存储路径 → 后续 onData 使用。需确保在第一个 BLE 数据到达前完成","choice":"timing","id":null,"timestamp":1780320585866}
+{"type":"click","text":"1\n      \n        Canvas 2D 画蓝点\n        用 <canvas type=\"2d\"> 画蓝色实心圆 + 白色边框 + 外圈光晕，导出为临时文件作为 marker iconPath","choice":"canvas","id":null,"timestamp":1780321129433}
+{"type":"click","text":"2\n      \n        时序保证\n        canvas 画完 → wx.canvasToTempFilePath → 存储路径 → 后续 onData 使用。需确保在第一个 BLE 数据到达前完成","choice":"timing","id":null,"timestamp":1780321129854}
+{"type":"click","text":"3\n      \n        位置更新\n        每次 onData 时用最新 GPS 坐标更新 marker 的 latitude/longitude，通过 setData 一次完成","choice":"update","id":null,"timestamp":1780321130161}
+{"type":"click","text":"4\n      \n        降级策略\n        如果 canvas 导出失败（极端情况），buildMarker 返回空数组，轨迹线仍可显示，只是没有蓝点","choice":"fallback","id":null,"timestamp":1780321130614}

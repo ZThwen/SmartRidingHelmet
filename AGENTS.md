@@ -341,6 +341,17 @@ type(scope): description
 - **WeChat `onBLECharacteristicValueChange` 监听所有特征值变化** — 必须过滤 `res.characteristicId`
 - **catch 块捕获的不一定是 JSON.parse 错误** — `ReferenceError` 也会被 catch 捕获
 
+### 12.6 Phase 3 远端控制经验
+
+- **先读 MTU 限制文档再设计 BLE 协议** — 默认 MTU=23，可用载荷=20 字节，但协商后可达 247。先拆成 3 条（t=7/8/9），后发现 EventBus 自动注入字段导致超长，最终合并为 1 条
+- **TTS 防抖需要考虑边界情况** — alarm_cancel 触发 TTS 后，紧接着 light_on 的 TTS 被 1 秒防抖阻塞。解决：在 _on_alarm_canceled 中直接调用 _tts()，绕过 _maybe_tts
+- **小程序 UI 先验证再开发** — 12 个 fix 提交只修复 TabBar 适配问题。先在微信开发者工具中验证设计，再开发
+- **MicroPython ≠ CPython** — __doc__ 属性在 MicroPython 中不存在，需要用 getattr(t, '__doc__', '') 替代
+- **避免自订阅事件** — ControlService 订阅自己发布的事件导致时序混乱。直接在 _execute_cmd 中更新状态
+- **状态快照需要考虑并发修改** — _pre_alarm_state 保存/恢复时状态可能已被修改。恢复后需推送 BLE
+- **测试文件版本管理** — test_control_service.py 有 4 个版本，旧版本应及时归档
+- **gitignore 应在项目初期配置** — thonny 目录之前被 git 跟踪，后来才加入 gitignore，导致删除后需要重新创建
+
 ---
 
 ## 13. 参考文档

@@ -26,7 +26,7 @@ class FakeUART:
 def make_voice():
     bus = EventBus()
     from Drivers.interface.Voice import VoiceDriver
-    voice = VoiceDriver(bus, uart_id=2, baudrate=9600)
+    voice = VoiceDriver(bus, uart_id=2, baudrate=115200)
     fake_uart = FakeUART()
     voice.uart = fake_uart
     voice.init()
@@ -38,6 +38,17 @@ def test_init():
     assert voice.ctx["is_init"] == True
     assert voice.name == "voice"
     print("  OK init")
+
+
+def test_wake():
+    voice, bus, uart = make_voice()
+    received = []
+    bus.subscribe(EVENT_VOICE_CMD, lambda p: received.append(p))
+    uart.feed(0x00)
+    voice.tick()
+    assert len(received) == 1
+    assert received[0]["cmd"] == "wake"
+    print("  OK wake (0x00)")
 
 
 def test_light_on():
@@ -149,7 +160,7 @@ def main():
     print("=" * 50)
     print(" VoiceDriver 单元测试")
     print("=" * 50)
-    tests = [test_init, test_light_on, test_alarm_sos,
+    tests = [test_init, test_wake, test_light_on, test_alarm_sos,
              test_query_status, test_query_speed, test_query_temp,
              test_all_mapped, test_unknown_hex, test_no_data,
              test_get_data, test_get_status]

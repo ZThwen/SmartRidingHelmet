@@ -1,0 +1,1348 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>SmartRidingHelmet — 导航 UI Mockup</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Noto+Sans+SC:wght@300;400;500;700&display=swap');
+
+  :root {
+    --bg-deep: #040810;
+    --bg-primary: #080d17;
+    --bg-secondary: #0c1220;
+    --bg-card: rgba(8, 13, 23, 0.92);
+    --bg-glass: rgba(12, 18, 32, 0.85);
+    --primary: #66ccff;
+    --primary-dim: rgba(102, 204, 255, 0.15);
+    --primary-glow: rgba(102, 204, 255, 0.4);
+    --accent-green: #00e676;
+    --accent-green-dim: rgba(0, 230, 118, 0.15);
+    --accent-orange: #ff9100;
+    --accent-red: #ff3d00;
+    --text-primary: #e8edf5;
+    --text-secondary: rgba(232, 237, 245, 0.6);
+    --text-dim: rgba(232, 237, 245, 0.35);
+    --border: rgba(102, 204, 255, 0.12);
+    --border-active: rgba(102, 204, 255, 0.35);
+    --radius-sm: 8px;
+    --radius-md: 14px;
+    --radius-lg: 20px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Noto Sans SC', sans-serif;
+    background: var(--bg-deep);
+    color: var(--text-primary);
+    min-height: 100vh;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ===== PHONE FRAME ===== */
+  .phone-frame {
+    width: 390px;
+    height: 844px;
+    margin: 30px auto;
+    border-radius: 44px;
+    border: 3px solid rgba(102, 204, 255, 0.08);
+    background: var(--bg-primary);
+    position: relative;
+    overflow: hidden;
+    box-shadow:
+      0 0 0 1px rgba(102, 204, 255, 0.04),
+      0 25px 80px rgba(0, 0, 0, 0.6),
+      0 0 120px rgba(102, 204, 255, 0.03);
+  }
+
+  .phone-frame::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 50%;
+    transform: translateX(-50%);
+    width: 120px; height: 28px;
+    background: var(--bg-deep);
+    border-radius: 0 0 18px 18px;
+    z-index: 100;
+  }
+
+  /* ===== STATUS BAR ===== */
+  .status-bar {
+    height: 48px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    padding: 0 28px 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 400;
+    color: var(--text-secondary);
+    letter-spacing: 0.5px;
+  }
+
+  /* ===== MAP AREA ===== */
+  .map-area {
+    position: relative;
+    width: 100%;
+    height: 420px;
+    background:
+      radial-gradient(ellipse at 30% 40%, rgba(102, 204, 255, 0.03) 0%, transparent 60%),
+      radial-gradient(ellipse at 70% 70%, rgba(0, 230, 118, 0.02) 0%, transparent 50%),
+      linear-gradient(180deg, var(--bg-secondary) 0%, var(--bg-primary) 100%);
+    overflow: hidden;
+  }
+
+  /* Grid overlay for tactical feel */
+  .map-area::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(rgba(102, 204, 255, 0.015) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(102, 204, 255, 0.015) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+  }
+
+  /* Scan line effect */
+  .map-area::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(102, 204, 255, 0.008) 2px,
+      rgba(102, 204, 255, 0.008) 4px
+    );
+    pointer-events: none;
+    animation: scanDrift 8s linear infinite;
+  }
+
+  @keyframes scanDrift {
+    from { transform: translateY(0); }
+    to { transform: translateY(4px); }
+  }
+
+  /* Route polyline (green) */
+  .route-line {
+    position: absolute;
+    top: 60px; left: 40px;
+    width: 280px; height: 300px;
+    pointer-events: none;
+  }
+
+  .route-line svg {
+    width: 100%; height: 100%;
+    filter: drop-shadow(0 0 6px rgba(0, 230, 118, 0.4));
+  }
+
+  .route-path {
+    fill: none;
+    stroke: var(--accent-green);
+    stroke-width: 3;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-dasharray: 600;
+    stroke-dashoffset: 600;
+    animation: drawRoute 2s ease-out 0.5s forwards;
+  }
+
+  .route-path-glow {
+    fill: none;
+    stroke: rgba(0, 230, 118, 0.15);
+    stroke-width: 10;
+    stroke-linecap: round;
+    stroke-dasharray: 600;
+    stroke-dashoffset: 600;
+    animation: drawRoute 2s ease-out 0.5s forwards;
+  }
+
+  @keyframes drawRoute {
+    to { stroke-dashoffset: 0; }
+  }
+
+  /* Track polyline (cyan) */
+  .track-line svg {
+    position: absolute;
+    top: 80px; left: 60px;
+    width: 200px; height: 250px;
+    filter: drop-shadow(0 0 4px rgba(102, 204, 255, 0.3));
+    pointer-events: none;
+  }
+
+  .track-path {
+    fill: none;
+    stroke: var(--primary);
+    stroke-width: 2.5;
+    stroke-linecap: round;
+    stroke-dasharray: 400;
+    stroke-dashoffset: 400;
+    animation: drawTrack 3s ease-out 1s forwards;
+  }
+
+  @keyframes drawTrack {
+    to { stroke-dashoffset: 0; }
+  }
+
+  /* Destination marker */
+  .dest-marker {
+    position: absolute;
+    top: 52px; left: 290px;
+    width: 28px; height: 28px;
+    display: flex; align-items: center; justify-content: center;
+    animation: markerPulse 2s ease-in-out infinite;
+  }
+
+  .dest-marker-dot {
+    width: 12px; height: 12px;
+    background: var(--accent-green);
+    border-radius: 50%;
+    box-shadow: 0 0 12px var(--accent-green), 0 0 24px rgba(0, 230, 118, 0.3);
+    position: relative;
+  }
+
+  .dest-marker-ring {
+    position: absolute;
+    inset: -8px;
+    border: 2px solid rgba(0, 230, 118, 0.3);
+    border-radius: 50%;
+    animation: ringExpand 2s ease-out infinite;
+  }
+
+  @keyframes markerPulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+  }
+
+  @keyframes ringExpand {
+    0% { transform: scale(0.8); opacity: 1; }
+    100% { transform: scale(2); opacity: 0; }
+  }
+
+  .dest-label {
+    position: absolute;
+    top: -28px; left: 50%;
+    transform: translateX(-50%);
+    background: var(--accent-green);
+    color: var(--bg-deep);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 4px;
+    white-space: nowrap;
+    letter-spacing: 0.5px;
+  }
+
+  /* Current position marker */
+  .pos-marker {
+    position: absolute;
+    top: 280px; left: 150px;
+    width: 20px; height: 20px;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  .pos-marker-dot {
+    width: 10px; height: 10px;
+    background: var(--primary);
+    border-radius: 50%;
+    box-shadow: 0 0 10px var(--primary), 0 0 20px rgba(102, 204, 255, 0.3);
+    border: 2px solid rgba(255, 255, 255, 0.8);
+  }
+
+  .pos-marker-ring {
+    position: absolute;
+    inset: -6px;
+    border: 1.5px solid rgba(102, 204, 255, 0.25);
+    border-radius: 50%;
+    animation: posRing 3s ease-out infinite;
+  }
+
+  @keyframes posRing {
+    0% { transform: scale(0.8); opacity: 1; }
+    100% { transform: scale(2.5); opacity: 0; }
+  }
+
+  /* Map controls */
+  .map-ctrl {
+    position: absolute;
+    right: 16px;
+    top: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .map-ctrl-btn {
+    width: 36px; height: 36px;
+    background: var(--bg-glass);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--primary);
+    font-size: 14px;
+    backdrop-filter: blur(10px);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .map-ctrl-btn:hover {
+    border-color: var(--border-active);
+    background: var(--primary-dim);
+  }
+
+  /* ===== RIDE STATS BAR ===== */
+  .stats-bar {
+    display: flex;
+    justify-content: space-around;
+    padding: 14px 20px;
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .stat-item {
+    text-align: center;
+  }
+
+  .stat-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--primary);
+    letter-spacing: -0.5px;
+    line-height: 1.2;
+  }
+
+  .stat-label {
+    font-size: 10px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-top: 2px;
+  }
+
+  /* ===== NAVIGATION CARD ===== */
+  .nav-card {
+    margin: 12px 16px 0;
+    background: var(--bg-card);
+    border: 1px solid var(--border-active);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    backdrop-filter: blur(20px);
+    position: relative;
+    animation: cardSlideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  @keyframes cardSlideUp {
+    from { transform: translateY(20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+
+  /* Top accent line */
+  .nav-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--primary), transparent);
+    opacity: 0.6;
+  }
+
+  .nav-card-body {
+    display: flex;
+    align-items: center;
+    padding: 16px 20px;
+    gap: 16px;
+  }
+
+  /* Direction icon */
+  .nav-direction {
+    width: 48px; height: 48px;
+    background: var(--primary-dim);
+    border: 1px solid rgba(102, 204, 255, 0.2);
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    position: relative;
+  }
+
+  .nav-direction svg {
+    width: 24px; height: 24px;
+    color: var(--primary);
+  }
+
+  .nav-direction::after {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, rgba(102, 204, 255, 0.1), transparent);
+    pointer-events: none;
+  }
+
+  .nav-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .nav-instruction {
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--text-primary);
+    line-height: 1.3;
+    margin-bottom: 4px;
+  }
+
+  .nav-instruction em {
+    font-style: normal;
+    color: var(--primary);
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 600;
+  }
+
+  .nav-road {
+    font-size: 12px;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .nav-road::before {
+    content: '';
+    width: 4px; height: 4px;
+    background: var(--primary);
+    border-radius: 50%;
+    opacity: 0.5;
+  }
+
+  .nav-distance {
+    text-align: right;
+    flex-shrink: 0;
+  }
+
+  .nav-distance-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--primary);
+    line-height: 1;
+    text-shadow: 0 0 20px var(--primary-glow);
+  }
+
+  .nav-distance-unit {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .nav-card-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 20px;
+    border-top: 1px solid var(--border);
+    background: rgba(0, 0, 0, 0.15);
+  }
+
+  .nav-remain {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .nav-remain-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .nav-remain-item .icon {
+    font-size: 10px;
+    opacity: 0.5;
+  }
+
+  .nav-remain-value {
+    color: var(--text-primary);
+    font-weight: 600;
+  }
+
+  .nav-cancel {
+    font-size: 12px;
+    color: var(--accent-red);
+    cursor: pointer;
+    padding: 4px 12px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 61, 0, 0.2);
+    background: rgba(255, 61, 0, 0.05);
+    transition: all 0.2s;
+    letter-spacing: 0.5px;
+  }
+
+  .nav-cancel:hover {
+    background: rgba(255, 61, 0, 0.12);
+    border-color: rgba(255, 61, 0, 0.4);
+  }
+
+  /* ===== BOTTOM ACTIONS ===== */
+  .bottom-area {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    padding: 16px 20px 34px;
+    background: linear-gradient(0deg, var(--bg-primary) 60%, transparent);
+  }
+
+  .ride-btn {
+    width: 100%;
+    height: 52px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--accent-red);
+    background: rgba(255, 61, 0, 0.08);
+    color: var(--accent-red);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.25s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .ride-btn::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255, 61, 0, 0.06), transparent);
+    transform: translateX(-100%);
+    animation: btnShimmer 3s ease-in-out infinite;
+  }
+
+  @keyframes btnShimmer {
+    0%, 100% { transform: translateX(-100%); }
+    50% { transform: translateX(100%); }
+  }
+
+  .ride-btn:hover {
+    background: rgba(255, 61, 0, 0.15);
+    border-color: rgba(255, 61, 0, 0.6);
+  }
+
+  /* ===== DESTINATION PICKER MODAL ===== */
+  .modal-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(4, 8, 16, 0.85);
+    backdrop-filter: blur(12px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+    animation: overlayFade 0.3s ease;
+  }
+
+  @keyframes overlayFade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  .picker-modal {
+    width: 320px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-active);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    position: relative;
+    animation: modalScale 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow:
+      0 0 40px rgba(102, 204, 255, 0.05),
+      0 30px 60px rgba(0, 0, 0, 0.5);
+  }
+
+  @keyframes modalScale {
+    from { transform: scale(0.92); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+  }
+
+  /* Modal top accent */
+  .picker-modal::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--primary), var(--accent-green), transparent);
+  }
+
+  .picker-header {
+    padding: 28px 24px 20px;
+    text-align: center;
+    position: relative;
+  }
+
+  .picker-icon {
+    width: 56px; height: 56px;
+    margin: 0 auto 16px;
+    background: var(--primary-dim);
+    border: 1px solid rgba(102, 204, 255, 0.15);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    position: relative;
+  }
+
+  .picker-icon svg {
+    width: 24px; height: 24px;
+    color: var(--primary);
+  }
+
+  .picker-icon::after {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    border: 1px solid rgba(102, 204, 255, 0.06);
+    border-radius: 50%;
+    animation: iconPulse 2.5s ease-in-out infinite;
+  }
+
+  @keyframes iconPulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.15); opacity: 0.3; }
+  }
+
+  .picker-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 6px;
+    letter-spacing: 0.5px;
+  }
+
+  .picker-desc {
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+  }
+
+  .picker-actions {
+    padding: 0 24px 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .picker-btn {
+    height: 48px;
+    border-radius: var(--radius-sm);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    letter-spacing: 0.5px;
+  }
+
+  .picker-btn-primary {
+    background: linear-gradient(135deg, rgba(102, 204, 255, 0.12), rgba(0, 230, 118, 0.08));
+    border: 1px solid var(--border-active);
+    color: var(--primary);
+  }
+
+  .picker-btn-primary:hover {
+    background: linear-gradient(135deg, rgba(102, 204, 255, 0.2), rgba(0, 230, 118, 0.12));
+    border-color: var(--primary);
+    box-shadow: 0 0 20px rgba(102, 204, 255, 0.1);
+  }
+
+  .picker-btn-secondary {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+  }
+
+  .picker-btn-secondary:hover {
+    border-color: var(--border-active);
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.02);
+  }
+
+  .picker-btn svg {
+    width: 16px; height: 16px;
+  }
+
+  .picker-divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 24px;
+    margin: -4px 0;
+  }
+
+  .picker-divider span {
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  .picker-divider::before,
+  .picker-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* ===== NAV PAUSED OVERLAY ===== */
+  .nav-paused-badge {
+    position: absolute;
+    top: 12px; left: 16px;
+    background: rgba(255, 145, 0, 0.12);
+    border: 1px solid rgba(255, 145, 0, 0.3);
+    border-radius: 8px;
+    padding: 8px 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    z-index: 50;
+    animation: badgePulse 1.5s ease-in-out infinite;
+  }
+
+  @keyframes badgePulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+  }
+
+  .nav-paused-badge .dot {
+    width: 6px; height: 6px;
+    background: var(--accent-orange);
+    border-radius: 50%;
+  }
+
+  .nav-paused-badge .text {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--accent-orange);
+    letter-spacing: 0.5px;
+  }
+
+  /* ===== LEGEND ===== */
+  .legend {
+    position: absolute;
+    bottom: 16px; left: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    z-index: 10;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 0.3px;
+  }
+
+  .legend-line {
+    width: 16px; height: 3px;
+    border-radius: 2px;
+  }
+
+  .legend-line.cyan { background: var(--primary); box-shadow: 0 0 6px var(--primary-glow); }
+  .legend-line.green { background: var(--accent-green); box-shadow: 0 0 6px rgba(0, 230, 118, 0.4); }
+
+  /* ===== SCENE TOGGLE ===== */
+  .scene-toggle {
+    position: fixed;
+    top: 20px; left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 4px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 4px;
+    z-index: 1000;
+  }
+
+  .scene-btn {
+    padding: 8px 16px;
+    border: none;
+    background: transparent;
+    color: var(--text-dim);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .scene-btn.active {
+    background: var(--primary-dim);
+    color: var(--primary);
+    border: 1px solid rgba(102, 204, 255, 0.15);
+  }
+
+  .scene-btn:hover:not(.active) {
+    color: var(--text-secondary);
+  }
+
+  /* ===== SCENE VISIBILITY ===== */
+  .scene { display: none; }
+  .scene.active { display: block; }
+
+  /* ===== COMPASS ===== */
+  .compass {
+    position: absolute;
+    top: 16px; left: 16px;
+    width: 32px; height: 32px;
+    background: var(--bg-glass);
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    backdrop-filter: blur(10px);
+  }
+
+  .compass svg {
+    width: 16px; height: 16px;
+    color: var(--primary);
+    opacity: 0.6;
+  }
+
+  /* Responsive */
+  @media (max-width: 440px) {
+    .phone-frame {
+      width: 100%;
+      height: 100vh;
+      margin: 0;
+      border-radius: 0;
+      border: none;
+    }
+    .phone-frame::before { display: none; }
+    .scene-toggle { top: 10px; }
+  }
+
+  /* ===== FULL-SCREEN ALARM OVERLAY ===== */
+  .alarm-fullscreen {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(180, 0, 0, 0.95) 0%, rgba(120, 0, 0, 0.98) 100%);
+    z-index: 200;
+    display: flex;
+    flex-direction: column;
+    animation: alarmFadeIn 0.3s ease;
+    overflow: hidden;
+  }
+
+  @keyframes alarmFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  /* Pulsing red border */
+  .alarm-pulse-border {
+    position: absolute;
+    inset: 0;
+    border: 3px solid rgba(255, 61, 0, 0.6);
+    border-radius: 0;
+    animation: alarmPulseBorder 1.2s ease-in-out infinite;
+    pointer-events: none;
+  }
+
+  @keyframes alarmPulseBorder {
+    0%, 100% { border-color: rgba(255, 61, 0, 0.6); box-shadow: inset 0 0 30px rgba(255, 61, 0, 0.1); }
+    50% { border-color: rgba(255, 61, 0, 1); box-shadow: inset 0 0 60px rgba(255, 61, 0, 0.2); }
+  }
+
+  .alarm-fullscreen-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px 32px;
+    position: relative;
+    z-index: 10;
+  }
+
+  /* Big alarm icon */
+  .alarm-big-icon {
+    width: 100px; height: 100px;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 20px;
+  }
+
+  .alarm-big-icon svg {
+    width: 60px; height: 60px;
+    color: #fff;
+    filter: drop-shadow(0 0 20px rgba(255, 255, 255, 0.5));
+  }
+
+  .alarm-big-icon-ring {
+    position: absolute;
+    inset: 0;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    animation: iconRingPulse 1.5s ease-in-out infinite;
+  }
+
+  @keyframes iconRingPulse {
+    0%, 100% { transform: scale(1); opacity: 0.3; }
+    50% { transform: scale(1.2); opacity: 0.1; }
+  }
+
+  .alarm-big-type {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 32px;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    text-shadow: 0 0 30px rgba(255, 255, 255, 0.3);
+  }
+
+  .alarm-big-level {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 18px;
+    font-weight: 600;
+    color: #ffd700;
+    letter-spacing: 6px;
+    margin-bottom: 24px;
+    text-shadow: 0 0 20px rgba(255, 215, 0, 0.4);
+  }
+
+  .alarm-divider {
+    width: 120px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+    margin-bottom: 24px;
+  }
+
+  /* Data grid */
+  .alarm-data-grid {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    margin-bottom: 28px;
+    padding: 16px 24px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .alarm-data-item {
+    text-align: center;
+  }
+
+  .alarm-data-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 18px;
+    font-weight: 600;
+    color: #fff;
+    line-height: 1.2;
+  }
+
+  .alarm-data-label {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.4);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-top: 4px;
+  }
+
+  .alarm-data-sep {
+    width: 1px;
+    height: 32px;
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  /* Nav status */
+  .alarm-nav-status {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 20px;
+    background: rgba(255, 145, 0, 0.1);
+    border: 1px solid rgba(255, 145, 0, 0.25);
+    border-radius: 8px;
+    margin-bottom: 28px;
+  }
+
+  .alarm-nav-status-dot {
+    width: 8px; height: 8px;
+    background: #ff9100;
+    border-radius: 50%;
+    animation: statusBlink 1s ease-in-out infinite;
+  }
+
+  @keyframes statusBlink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  .alarm-nav-status span {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: #ff9100;
+    letter-spacing: 0.5px;
+  }
+
+  /* Action buttons */
+  .alarm-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+    max-width: 280px;
+    margin-bottom: 20px;
+  }
+
+  .alarm-btn {
+    height: 48px;
+    border-radius: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: none;
+  }
+
+  .alarm-btn-resume {
+    background: rgba(0, 230, 118, 0.15);
+    border: 1px solid rgba(0, 230, 118, 0.4);
+    color: #00e676;
+  }
+
+  .alarm-btn-resume:hover {
+    background: rgba(0, 230, 118, 0.25);
+  }
+
+  .alarm-btn-cancel {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: rgba(255, 255, 255, 0.7);
+  }
+
+  .alarm-btn-cancel:hover {
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  .alarm-btn-end {
+    background: rgba(255, 61, 0, 0.1);
+    border: 1px solid rgba(255, 61, 0, 0.3);
+    color: rgba(255, 61, 0, 0.8);
+  }
+
+  .alarm-btn-end:hover {
+    background: rgba(255, 61, 0, 0.2);
+  }
+
+  .alarm-hint {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.25);
+    letter-spacing: 0.5px;
+  }
+</style>
+</head>
+<body>
+
+<!-- Scene Toggle -->
+<div class="scene-toggle">
+  <button class="scene-btn active" onclick="showScene('picker')">目的地选择</button>
+  <button class="scene-btn" onclick="showScene('navigating')">导航中</button>
+  <button class="scene-btn" onclick="showScene('paused')">报警暂停</button>
+</div>
+
+<!-- ===== SCENE 1: Destination Picker ===== -->
+<div class="phone-frame scene active" id="scene-picker">
+  <div class="status-bar">
+    <span>9:41</span>
+    <span>BLE ●</span>
+  </div>
+
+  <!-- Map background -->
+  <div class="map-area">
+    <div class="compass">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3 7h-6l3-7z"/><path d="M12 22l-3-7h6l-3 7z"/></svg>
+    </div>
+    <div class="map-ctrl">
+      <div class="map-ctrl-btn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v4m0 12v4m-10-10h4m12 0h4"/></svg>
+      </div>
+      <div class="map-ctrl-btn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+      </div>
+    </div>
+
+    <!-- Destination picker modal -->
+    <div class="modal-overlay">
+      <div class="picker-modal">
+        <div class="picker-header">
+          <div class="picker-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l5.447 2.724A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/>
+            </svg>
+          </div>
+          <div class="picker-title">设置骑行目的地</div>
+          <div class="picker-desc">选择目的地后将自动规划骑行路线</div>
+        </div>
+        <div class="picker-actions">
+          <button class="picker-btn picker-btn-primary">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+            选择目的地
+          </button>
+          <div class="picker-divider"><span>or</span></div>
+          <button class="picker-btn picker-btn-secondary">直接出发，不设目的地</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stats bar -->
+  <div class="stats-bar">
+    <div class="stat-item">
+      <div class="stat-value">--</div>
+      <div class="stat-label">km/h</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-value">--</div>
+      <div class="stat-label">km</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-value">--</div>
+      <div class="stat-label">temp</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-value">--</div>
+      <div class="stat-label">humid</div>
+    </div>
+  </div>
+
+  <div class="bottom-area">
+    <button class="ride-btn">end ride</button>
+  </div>
+</div>
+
+<!-- ===== SCENE 2: Navigating ===== -->
+<div class="phone-frame scene" id="scene-navigating">
+  <div class="status-bar">
+    <span>9:41</span>
+    <span>BLE ●</span>
+  </div>
+
+  <div class="map-area">
+    <div class="compass">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3 7h-6l3-7z"/><path d="M12 22l-3-7h6l-3 7z"/></svg>
+    </div>
+
+    <!-- Route polyline (green) -->
+    <div class="route-line">
+      <svg viewBox="0 0 280 300">
+        <path class="route-path-glow" d="M40,280 C80,260 60,200 100,180 S160,120 180,100 S220,60 260,40"/>
+        <path class="route-path" d="M40,280 C80,260 60,200 100,180 S160,120 180,100 S220,60 260,40"/>
+      </svg>
+    </div>
+
+    <!-- Track polyline (cyan) -->
+    <div class="track-line">
+      <svg viewBox="0 0 200 250">
+        <path class="track-path" d="M30,230 C50,200 40,170 70,150 S100,110 120,90"/>
+      </svg>
+    </div>
+
+    <!-- Destination marker -->
+    <div class="dest-marker">
+      <div class="dest-marker-dot">
+        <div class="dest-marker-ring"></div>
+      </div>
+      <div class="dest-label">DEST</div>
+    </div>
+
+    <!-- Current position -->
+    <div class="pos-marker">
+      <div class="pos-marker-dot">
+        <div class="pos-marker-ring"></div>
+      </div>
+    </div>
+
+    <!-- Legend -->
+    <div class="legend">
+      <div class="legend-item"><div class="legend-line cyan"></div>骑行轨迹</div>
+      <div class="legend-item"><div class="legend-line green"></div>规划路线</div>
+    </div>
+
+    <div class="map-ctrl">
+      <div class="map-ctrl-btn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v4m0 12v4m-10-10h4m12 0h4"/></svg>
+      </div>
+      <div class="map-ctrl-btn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stats bar -->
+  <div class="stats-bar">
+    <div class="stat-item">
+      <div class="stat-value">18.5</div>
+      <div class="stat-label">km/h</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-value">3.2</div>
+      <div class="stat-label">km</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-value">26°</div>
+      <div class="stat-label">temp</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-value">65%</div>
+      <div class="stat-label">humid</div>
+    </div>
+  </div>
+
+  <!-- Navigation instruction card -->
+  <div class="nav-card">
+    <div class="nav-card-body">
+      <div class="nav-direction">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M5 12h14M12 5l7 7-7 7"/>
+        </svg>
+      </div>
+      <div class="nav-info">
+        <div class="nav-instruction">前方 <em>200m</em> 右转</div>
+        <div class="nav-road">中山路</div>
+      </div>
+      <div class="nav-distance">
+        <div class="nav-distance-value">200</div>
+        <div class="nav-distance-unit">meters</div>
+      </div>
+    </div>
+    <div class="nav-card-footer">
+      <div class="nav-remain">
+        <div class="nav-remain-item">
+          <span class="icon">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+          </span>
+          <span class="nav-remain-value">3.2 km</span>
+        </div>
+        <div class="nav-remain-item">
+          <span class="icon">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+          </span>
+          <span class="nav-remain-value">12 min</span>
+        </div>
+      </div>
+      <div class="nav-cancel">取消导航</div>
+    </div>
+  </div>
+
+  <div class="bottom-area">
+    <button class="ride-btn">end ride</button>
+  </div>
+</div>
+
+<!-- ===== SCENE 3: Paused (Alarm) ===== -->
+<div class="phone-frame scene" id="scene-paused">
+  <!-- 全屏报警覆盖层 -->
+  <div class="alarm-fullscreen">
+    <!-- 脉冲边框 -->
+    <div class="alarm-pulse-border"></div>
+
+    <!-- 状态栏 -->
+    <div class="status-bar" style="position: relative; z-index: 10;">
+      <span>9:41</span>
+      <span style="color: var(--accent-red);">BLE ●</span>
+    </div>
+
+    <!-- 主报警内容 -->
+    <div class="alarm-fullscreen-content">
+      <!-- 碰撞图标 -->
+      <div class="alarm-big-icon">
+        <div class="alarm-big-icon-ring"></div>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+          <line x1="12" y1="9" x2="12" y2="13"/>
+          <line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+      </div>
+
+      <!-- 报警类型 -->
+      <div class="alarm-big-type">碰撞报警</div>
+      <div class="alarm-big-level">LEVEL 2</div>
+
+      <!-- 分隔线 -->
+      <div class="alarm-divider"></div>
+
+      <!-- 关键数据 -->
+      <div class="alarm-data-grid">
+        <div class="alarm-data-item">
+          <div class="alarm-data-value">18.5</div>
+          <div class="alarm-data-label">km/h</div>
+        </div>
+        <div class="alarm-data-sep"></div>
+        <div class="alarm-data-item">
+          <div class="alarm-data-value">22.5431</div>
+          <div class="alarm-data-label">纬度</div>
+        </div>
+        <div class="alarm-data-sep"></div>
+        <div class="alarm-data-item">
+          <div class="alarm-data-value">113.9523</div>
+          <div class="alarm-data-label">经度</div>
+        </div>
+      </div>
+
+      <!-- 导航状态 -->
+      <div class="alarm-nav-status">
+        <div class="alarm-nav-status-dot"></div>
+        <span>导航已暂停 — 报警结束后自动恢复</span>
+      </div>
+
+      <!-- 操作按钮 -->
+      <div class="alarm-actions">
+        <button class="alarm-btn alarm-btn-resume">继续导航</button>
+        <button class="alarm-btn alarm-btn-cancel">取消导航</button>
+        <button class="alarm-btn alarm-btn-end">结束骑行</button>
+      </div>
+
+      <!-- 提示 -->
+      <div class="alarm-hint">报警信息已自动上传至云端</div>
+    </div>
+  </div>
+</div>
+
+<script>
+function showScene(id) {
+  document.querySelectorAll('.scene').forEach(function(s) { s.classList.remove('active'); });
+  document.querySelectorAll('.scene-btn').forEach(function(b) { b.classList.remove('active'); });
+  document.getElementById('scene-' + id).classList.add('active');
+  event.target.classList.add('active');
+}
+</script>
+</body>
+</html>
