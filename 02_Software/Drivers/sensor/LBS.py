@@ -4,11 +4,12 @@ note 封装 quectel.LBS API，提供室内基站定位能力
      与 GNSSDriver 互斥（EC200U 不能同时运行 GNSS 和 LBS）
 
 功能：
-1. get_location() 阻塞定位（必须在子线程中调用）
+1. get_location() 阻塞定位（在子线程中执行，不阻塞主循环）
 2. 定位成功发布 EVENT_LBS_READY
 3. 定位失败递增 err_count
 """
 import time
+import _thread
 
 from core.Base_Module import BaseModule
 from core.config import (
@@ -78,7 +79,7 @@ class LBSDriver(BaseModule):
             raise
 
     def tick(self):
-        """周期调度：触发定位（非阻塞，通过标志位控制）"""
+        """周期调度：触发定位（子线程执行，不阻塞主循环）"""
         if not self.ctx["is_init"]:
             return
         if self.ctx["power_state"] != POWER_STATE_ACTIVE:
@@ -91,10 +92,10 @@ class LBSDriver(BaseModule):
             return
 
         self.ctx["last_tick"] = now
-        self._do_positioning()
+        self._start_positioning_thread()
 
-    def _do_positioning(self):
-        """执行一次定位（同步阻塞，应在子线程中调用或接受阻塞）"""
+    def _start_positioning_thread(self):
+        """在子线程中执行阻塞定位，避免阻塞主循环 <5ms"""
         if self.ctx["is_positioning"]:
             return
         if not self._lbs:
@@ -102,12 +103,20 @@ class LBSDriver(BaseModule):
 
         self.ctx["is_positioning"] = True
         try:
+            _thread.stack_size(4096)
+            _thread.start_new_thread(self._do_positioning, ())
+        except Exception as e:
+            self.ctx["is_positioning"] = False
+            self.ctx["err_count"] += 1
+            print("[{}] 启动定位线程失败: {}".format(self.name, e))
+
+    def _do_positioning(self):
+        """执行一次定位（子线程中运行，可阻塞）"""
+        try:
             loc = self._lbs.get_location(self.cfg["timeout_ms"])
 
-            # 调试：打印实际返回值
             print("[{}] get_location 返回: {}".format(self.name, loc))
 
-            # 和官方示例一致：只检查 loc 是否为真值且有坐标
             if loc and "latitude" in loc and "longitude" in loc:
                 self._data["latitude"] = loc["latitude"]
                 self._data["longitude"] = loc["longitude"]

@@ -276,7 +276,9 @@ class NavigationService(BaseModule):
                                 pass
                             with lock:
                                 svc.ctx["is_tts_playing"] = False
+                        old_size = _thread.stack_size(4096)
                         _thread.start_new_thread(_tts_thread, (tts_text, self.audio_driver, svc_ref, self._tts_lock))
+                        _thread.stack_size(old_size)
 
         # SUSPENDED/EMERGENCY 模式：跳过 LCD
         if self.ctx["power_state"] in (POWER_STATE_SUSPENDED, POWER_STATE_EMERGENCY):
@@ -288,22 +290,15 @@ class NavigationService(BaseModule):
             print("[nav] LCD: %s" % lcd_text)
 
     def _write_nav_line(self, text):
-        """在 LCD 底部写导航行"""
+        """在 LCD 底部写导航行（通过 LCDDriver 公开接口）"""
         if not self.lcd_driver:
             return
         try:
-            if hasattr(self.lcd_driver, 'lcd') and hasattr(self.lcd_driver.lcd, 'show_string'):
-                lcd = self.lcd_driver.lcd
-                # 先用黑色矩形清除旧内容
-                lcd.fill_rectangle(
+            if hasattr(self.lcd_driver, 'show_nav_line'):
+                self.lcd_driver.show_nav_line(
                     self.cfg["nav_line_x"],
                     self.cfg["nav_line_y"],
-                    150, 16, lcd.BLACK
-                )
-                lcd.show_string(
-                    self.cfg["nav_line_x"],
-                    self.cfg["nav_line_y"],
-                    text, lcd.GREEN, lcd.BLACK
+                    text
                 )
         except Exception as e:
             print("[{}] LCD写入失败: {}".format(self.name, e))

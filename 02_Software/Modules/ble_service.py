@@ -96,8 +96,9 @@ class BLEService(BaseModule):
                 self.event_bus.subscribe(EVENT_CONTROL_STATE_CHANGED, self._on_control_state)
 
             self.ctx["thread_running"] = True
-            _thread.stack_size(4096)
+            old_size = _thread.stack_size(4096)
             _thread.start_new_thread(self._notify_thread, ())
+            _thread.stack_size(old_size)
 
             self.ctx["is_init"] = True
             print("[%s] ✓ BLE 推送服务已启动" % self.name)

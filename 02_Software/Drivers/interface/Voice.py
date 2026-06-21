@@ -67,6 +67,17 @@ class VoiceDriver(BaseModule):
         else:
             print("[%s] unknown: 0x%02X" % (self.name, hex_val))
 
+    def deinit(self):
+        """释放 UART 资源"""
+        try:
+            if self.uart:
+                self.uart.deinit()
+                self.uart = None
+            self.ctx["is_init"] = False
+            print("[%s] deinit OK" % self.name)
+        except Exception as e:
+            print("[%s] deinit err: %s" % (self.name, e))
+
     def get_data(self):
         return {
             "last_cmd": self._data["last_cmd"],

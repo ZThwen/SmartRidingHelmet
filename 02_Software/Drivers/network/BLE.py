@@ -173,6 +173,7 @@ class BLEDriver(BaseModule):
                 self.ctx["is_connected"] = True
                 self._connected_published = True
                 self._data["connected_time"] = time.ticks_ms()
+                self._data["connected_addr"] = self._ble.get_addr() if self._ble else ""
                 print("[%s] 手机已连接" % self.name)
                 if self.event_bus:
                     self.event_bus.publish(EVENT_BLE_CONNECTED, {
@@ -183,6 +184,7 @@ class BLEDriver(BaseModule):
             elif event_id == BLE.EVT_DISCONNECTED:
                 self.ctx["is_connected"] = False
                 self._connected_published = False
+                self._data["connected_addr"] = ""
                 print("[%s] 手机已断开" % self.name)
                 if self.event_bus:
                     self.event_bus.publish(EVENT_BLE_DISCONNECTED, {

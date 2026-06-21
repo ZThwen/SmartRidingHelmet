@@ -210,8 +210,11 @@ class AudioDriver(BaseModule):
         param file_path: 文件路径（如 "SD:alarm_l2.mp3"）
         return bool 是否成功发起播放
         note 播放完成/停止通过回调事件通知
+              报警期间拒绝非报警音频文件
         """
         if not self.ctx["is_init"]:
+            return False
+        if self.ctx.get("alarm_playing") and "alarm" not in file_path and "sos" not in file_path:
             return False
         self.ctx["is_busy"] = True
         try:

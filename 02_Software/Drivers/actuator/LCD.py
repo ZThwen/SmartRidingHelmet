@@ -42,9 +42,10 @@ class LCDDriver(BaseModule):
         self.ctx = {
             "is_init": False,           # 硬件初始化完成标志
             "is_busy": False,           # 显示操作中标志（防重入）
+            "busy_started": 0,          # is_busy 锁定起始时间戳（超时自动解锁）
             "last_tick": 0,             # 上次操作时间戳
             "err_count": 0,             # 连续操作错误计数
-            "power_state": POWER_STATE_ACTIVE  # 功耗状态
+            "power_state": POWER_STATE_ACTIVE,  # 功耗状态
         }
 
         # ===================== 四元组：当前数据 =====================
@@ -116,6 +117,13 @@ class LCDDriver(BaseModule):
         # LCD为被动显示，tick()仅更新时间戳
         self.ctx["last_tick"] = now
 
+        # is_busy 超时自动解锁（防止 SPI 挂死导致永久锁定）
+        if self.ctx["is_busy"] and self.ctx["busy_started"] > 0:
+            if time.ticks_diff(now, self.ctx["busy_started"]) > 5000:
+                print("[{}] WARNING: is_busy 超时 5s，强制解锁".format(self.name))
+                self.ctx["is_busy"] = False
+                self.ctx["busy_started"] = 0
+
     # ==================== 公共显示接口（供Service层调用）====================
 
     def show_normal_data(self, temp, humid, lat, lon):
@@ -137,6 +145,7 @@ class LCDDriver(BaseModule):
             return
 
         self.ctx["is_busy"] = True
+        self.ctx["busy_started"] = time.ticks_ms()
         try:
             # ====== 清屏并绘制标题 ======
             self.lcd.fill_screen(self.lcd.BLACK)
@@ -192,6 +201,7 @@ class LCDDriver(BaseModule):
             return
 
         self.ctx["is_busy"] = True
+        self.ctx["busy_started"] = time.ticks_ms()
         try:
             # ====== 清屏 ======
             self.lcd.fill_screen(self.lcd.BLACK)
@@ -240,6 +250,7 @@ class LCDDriver(BaseModule):
             return
 
         self.ctx["is_busy"] = True
+        self.ctx["busy_started"] = time.ticks_ms()
         try:
             self.lcd.fill_screen(self.lcd.BLACK)
             self.lcd.flush()
@@ -307,6 +318,7 @@ class LCDDriver(BaseModule):
             return
 
         self.ctx["is_busy"] = True
+        self.ctx["busy_started"] = time.ticks_ms()
         try:
             self.lcd.show_image(x, y, w, h, data)
             self.lcd.flush()
@@ -318,6 +330,35 @@ class LCDDriver(BaseModule):
             if self.ctx["err_count"] > self.cfg["max_retry"]:
                 if self.event_bus:
                     self.event_bus.publish(EVENT_LCD_ERROR, self.get_error_data(e))
+        finally:
+            self.ctx["is_busy"] = False
+
+    def show_nav_line(self, x, y, text, fg=None, bg=None):
+        """
+        brief 在指定位置显示导航文本行（供 NavigationService 调用）
+        param x: 起始X坐标
+        param y: 起始Y坐标
+        param text: 文本内容
+        param fg: 前景色，默认 GREEN
+        param bg: 背景色，默认 BLACK
+        note 封装 lcd.show_string + fill_rectangle，避免外部直接访问 self.lcd
+        """
+        if not self.ctx["is_init"] or not self.lcd:
+            return
+        if self.ctx["is_busy"]:
+            return
+        self.ctx["is_busy"] = True
+        self.ctx["busy_started"] = time.ticks_ms()
+        try:
+            if fg is None:
+                fg = self.lcd.GREEN
+            if bg is None:
+                bg = self.lcd.BLACK
+            self.lcd.fill_rectangle(x, y, 150, 16, bg)
+            self.lcd.show_string(x, y, text, fg, bg)
+            self.lcd.flush()
+        except Exception as e:
+            print("[{}] show_nav_line 失败: {}".format(self.name, e))
         finally:
             self.ctx["is_busy"] = False
 
