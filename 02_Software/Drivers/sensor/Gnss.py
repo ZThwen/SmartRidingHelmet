@@ -11,7 +11,7 @@ import time
 from quectel import GNSS
 
 from core.Base_Module import BaseModule
-from core.config import (EVENT_GNSS_READY, EVENT_SENSOR_ERROR, EVENT_CONFIG_UPDATE,
+from core.config import (EVENT_GNSS_READY, EVENT_SENSOR_ERROR, EVENT_CONFIG_UPDATE, EVENT_POWER_STATE_CHANGE,
                     EVENT_GPS_LOST, GNSS_SAMPLE_MS, GNSS_SUSPENDED_MS, GNSS_EMERGENCY_MS,
                     POWER_STATE_ACTIVE, POWER_STATE_SUSPENDED, POWER_STATE_EMERGENCY)
 
@@ -76,7 +76,7 @@ class GNSSDriver(BaseModule):
 
             # 3. 订阅事件
             if self.event_bus:
-                self.event_bus.subscribe(EVENT_CONFIG_UPDATE, self._on_config_update)
+                self.event_bus.subscribe(EVENT_POWER_STATE_CHANGE, self._on_config_update)
 
             self.ctx["is_init"] = True
             print(f"[{self.name}] ✓ 初始化完成 | 采样间隔:{self.cfg['sample_ms']}ms")
@@ -191,6 +191,17 @@ class GNSSDriver(BaseModule):
             "valid": self._data["valid"],
             "timestamp": time.ticks_ms()
         }
+
+    def force_read(self):
+        """
+        brief 获取 GNSS 数据快照
+        note GPS 数据由卫星信号决定更新率，无法强制获取新 fix
+             返回最近一次 tick() 缓存的数据，并发布事件同步到 BLE/LCD
+        return dict 数据副本
+        """
+        if self.event_bus:
+            self.event_bus.publish(EVENT_GNSS_READY, self.get_data())
+        return self.get_data()
 
     def get_status(self):
         """查询模块运行状态"""

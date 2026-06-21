@@ -10,7 +10,7 @@ import time
 
 from core.Base_Module import BaseModule
 from core.config import (
-    EVENT_IMU_READY, EVENT_COLLISION_DETECTED, EVENT_CONFIG_UPDATE,
+    EVENT_IMU_READY, EVENT_COLLISION_DETECTED, EVENT_CONFIG_UPDATE, EVENT_POWER_STATE_CHANGE,
     COLLISION_THRESHOLD_SUSPECT, COLLISION_THRESHOLD_LIKELY,
     COLLISION_THRESHOLD_HIGH, COLLISION_THRESHOLD_CONFIRMED,
     COLLISION_WINDOW_SIZE, COLLISION_WINDOW_DURATION_MS,
@@ -82,7 +82,7 @@ class CollisionService(BaseModule):
         try:
             if  self.event_bus:
                 self.event_bus.subscribe(EVENT_IMU_READY, self._on_imu_data)
-                self.event_bus.subscribe(EVENT_CONFIG_UPDATE, self._on_config_update)
+                self.event_bus.subscribe(EVENT_POWER_STATE_CHANGE, self._on_config_update)
 
             self.ctx["window"] = []
             self.ctx["is_init"] = True

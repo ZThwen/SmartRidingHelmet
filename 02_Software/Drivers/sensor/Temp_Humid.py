@@ -6,7 +6,7 @@ import machine
 import time
 
 from core.Base_Module import BaseModule
-from core.config import EVENT_TEMP_HUMID_READY,EVENT_SENSOR_ERROR, EVENT_CONFIG_UPDATE, TEMP_HUMID_SAMPLE_MS, TEMP_HUMID_SUSPENDED_MS, POWER_STATE_ACTIVE, POWER_STATE_SUSPENDED, POWER_STATE_EMERGENCY
+from core.config import EVENT_TEMP_HUMID_READY,EVENT_SENSOR_ERROR, EVENT_CONFIG_UPDATE, EVENT_POWER_STATE_CHANGE, TEMP_HUMID_SAMPLE_MS, TEMP_HUMID_SUSPENDED_MS, POWER_STATE_ACTIVE, POWER_STATE_SUSPENDED, POWER_STATE_EMERGENCY
 from ahtx0 import AHT20
 
 
@@ -69,7 +69,7 @@ class TempHumidDriver(BaseModule):
             
             # 4. 订阅事件
             if self.event_bus:
-                self.event_bus.subscribe(EVENT_CONFIG_UPDATE, self._on_config_update)
+                self.event_bus.subscribe(EVENT_POWER_STATE_CHANGE, self._on_config_update)
             
             self.ctx["is_init"] = True
             print(f"[{self.name}] ✓ 初始化完成 | 设备: {[hex(d) for d in devices]}")
@@ -143,6 +143,8 @@ class TempHumidDriver(BaseModule):
             self.ctx["power_state"] = payload["power_state"]
             if payload["power_state"] == POWER_STATE_SUSPENDED:
                 self.cfg["sample_ms"] = TEMP_HUMID_SUSPENDED_MS
+            elif payload["power_state"] == POWER_STATE_EMERGENCY:
+                self.cfg["sample_ms"] = 0  # tick() 中直接判断停止采样
             elif payload["power_state"] == POWER_STATE_ACTIVE:
                 self.cfg["sample_ms"] = TEMP_HUMID_SAMPLE_MS
             print(f"[{self.name}] 功耗状态: {old_state} -> {payload['power_state']}")
@@ -158,6 +160,25 @@ class TempHumidDriver(BaseModule):
             "valid": self._data["valid"],
             "timestamp": time.ticks_ms()
         }
+
+    def force_read(self):
+        """
+        brief 强制读取传感器（绕过采样间隔和电源模式限制）
+        note 用于用户主动查询时获取实时数据，耗时 <1ms
+             读取后发布 EVENT_TEMP_HUMID_READY 同步数据到 BLE/LCD
+        return dict 数据副本
+        """
+        try:
+            temp = self.sensor.temperature
+            hum = self.sensor.relative_humidity
+            self._data["temp"] = round(temp, 1)
+            self._data["humid"] = round(hum, 1)
+            self._data["valid"] = True
+            if self.event_bus:
+                self.event_bus.publish(EVENT_TEMP_HUMID_READY, self.get_data())
+        except Exception as e:
+            self._data["valid"] = False
+        return self.get_data()
 
     def get_status(self):
         """

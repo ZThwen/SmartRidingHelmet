@@ -11,7 +11,7 @@ import _thread
 from core.Base_Module import BaseModule
 from core.config import (
     EVENT_TEMP_HUMID_READY, EVENT_IMU_READY, EVENT_GNSS_READY,
-    EVENT_ALARM_TRIGGERED, EVENT_ALARM_CANCELED, EVENT_CONFIG_UPDATE,
+    EVENT_ALARM_TRIGGERED, EVENT_ALARM_CANCELED, EVENT_CONFIG_UPDATE, EVENT_POWER_STATE_CHANGE,
     EVENT_NETWORK_CONNECTED, EVENT_NETWORK_DISCONNECTED,
     EVENT_DATA_UPLOAD_SUCCESS, EVENT_DATA_UPLOAD_FAILED,
     MQTT_TOPIC_DATA, MQTT_TOPIC_CONFIG,
@@ -91,6 +91,7 @@ class CloudService(BaseModule):
                 self.event_bus.subscribe(EVENT_ALARM_TRIGGERED, self._on_alarm)
                 self.event_bus.subscribe(EVENT_ALARM_CANCELED, self._on_alarm_canceled)
                 self.event_bus.subscribe(EVENT_CONFIG_UPDATE, self._on_config_update)
+                self.event_bus.subscribe(EVENT_POWER_STATE_CHANGE, self._on_config_update)
 
             # ====== 5. 主线程完成连接（AT 指令，栈充足）======
             if self.network.connect():

@@ -9,7 +9,7 @@ import time
 from core.Base_Module import BaseModule
 from core.config import (
     EVENT_BLE_CONNECTED, EVENT_BLE_DISCONNECTED,
-    EVENT_CONFIG_UPDATE, POWER_STATE_ACTIVE,
+    EVENT_CONFIG_UPDATE, EVENT_POWER_STATE_CHANGE, POWER_STATE_ACTIVE,
     BLE_DEVICE_NAME, BLE_SERVICE_UUID, BLE_CHAR_DATA,
     BLE_CHAR_NAV, BLE_CHAR_CTRL, BLE_CHAR_ACK,
     BLE_MTU,
@@ -95,6 +95,7 @@ class BLEDriver(BaseModule):
 
             if self.event_bus:
                 self.event_bus.subscribe(EVENT_CONFIG_UPDATE, self._on_config_update)
+                self.event_bus.subscribe(EVENT_POWER_STATE_CHANGE, self._on_config_update)
 
             self.ctx["is_init"] = True
             print("[%s] ✓ 初始化完成 | %s | addr=%s" % (

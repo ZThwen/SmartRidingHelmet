@@ -9,7 +9,7 @@ import time
 
 from core.Base_Module import BaseModule
 from core.config import (
-    EVENT_LCD_ERROR, EVENT_CONFIG_UPDATE,
+    EVENT_LCD_ERROR, EVENT_CONFIG_UPDATE, EVENT_POWER_STATE_CHANGE,
     LCD_BACKLIGHT_HIGH, LCD_SAMPLE_MS, POWER_STATE_ACTIVE
 )
 from st7735 import LCD
@@ -88,7 +88,7 @@ class LCDDriver(BaseModule):
 
             # ====== 5. 订阅事件 ======
             if self.event_bus:
-                self.event_bus.subscribe(EVENT_CONFIG_UPDATE, self._on_config_update)
+                self.event_bus.subscribe(EVENT_POWER_STATE_CHANGE, self._on_config_update)
 
             self.ctx["is_init"] = True
             print(f"[{self.name}] ✓ 初始化完成 | SPI{self.cfg['spi_id']} @ {self.cfg['spi_baudrate']}Hz, dc={self.cfg['dc_pin']}, cs={self.cfg['cs_pin']}")

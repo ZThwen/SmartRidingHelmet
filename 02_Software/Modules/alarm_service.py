@@ -11,7 +11,7 @@ from core.config import (
     EVENT_ALARM_TRIGGERED, EVENT_ALARM_CANCELED,
     EVENT_COLLISION_DETECTED, EVENT_BUTTON_PRESSED,
     EVENT_BATTERY_LOW, EVENT_BATTERY_CRITICAL, EVENT_GPS_LOST,
-    EVENT_CONFIG_UPDATE, EVENT_ALARM_CONTROL,
+    EVENT_CONFIG_UPDATE, EVENT_ALARM_CONTROL, EVENT_POWER_STATE_CHANGE,
     ALARM_DURATION_MS, ALARM_ENABLE_LOCAL,
     AUDIO_ALARM_FILE_L1, AUDIO_ALARM_FILE_L2, AUDIO_ALARM_FILE_L3,
     AUDIO_SOS_FILE,
@@ -70,7 +70,7 @@ class AlarmService(BaseModule):
                 self.event_bus.subscribe(EVENT_GPS_LOST, self._on_gps_lost)
                 self.event_bus.subscribe(EVENT_BATTERY_LOW, self._on_battery_low)
                 self.event_bus.subscribe(EVENT_BATTERY_CRITICAL, self._on_battery_critical)
-                self.event_bus.subscribe(EVENT_CONFIG_UPDATE, self._on_config_update)
+                self.event_bus.subscribe(EVENT_POWER_STATE_CHANGE, self._on_config_update)
                 self.event_bus.subscribe(EVENT_ALARM_CONTROL, self._on_alarm_control)
 
             self.ctx["alarm_active"] = False
@@ -86,12 +86,10 @@ class AlarmService(BaseModule):
 
     def tick(self):
         """
-        brief 周期调度：超时检查 + 功耗守卫 + 时间片控制
+        brief 周期调度：超时检查 + 时间片控制
         note 30s 超时精度 ±100ms，完全满足需求
+             超时检查不受电源模式限制（碰撞报警必须能自动取消）
         """
-        if self.ctx["power_state"] != POWER_STATE_ACTIVE:
-            return
-
         now = time.ticks_ms()
         if time.ticks_diff(now, self.ctx["last_tick"]) < self.cfg["check_interval_ms"]:
             return
