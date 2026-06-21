@@ -1,5 +1,6 @@
 # Claude Code 生成的文件
 .superpowers/
+docs/superpowers/
 .mimocode/
 .claude/
 .code-review-graph/
