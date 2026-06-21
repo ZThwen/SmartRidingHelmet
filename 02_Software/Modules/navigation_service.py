@@ -150,6 +150,7 @@ class NavigationService(BaseModule):
         }
 
         self._stealth_active = False
+        self._tts_lock = _thread.allocate_lock()
 
         self._data = {
             "is_navigating": False,
@@ -184,12 +185,12 @@ class NavigationService(BaseModule):
         """电源状态变化回调"""
         new_state = payload.get("power_state")
         self.ctx["power_state"] = new_state
-        if new_state == "EMERGENCY":
+        if new_state == POWER_STATE_EMERGENCY:
             self.ctx["nav_paused"] = True
             if self.ctx["is_navigating"]:
                 self.ctx["is_navigating"] = False
                 print("[{}] 导航暂停（紧急省电）".format(self.name))
-        elif new_state == "ACTIVE":
+        elif new_state == POWER_STATE_ACTIVE:
             if self.ctx["nav_paused"]:
                 self.ctx["nav_paused"] = False
                 self.ctx["is_navigating"] = True
@@ -213,7 +214,7 @@ class NavigationService(BaseModule):
         payload: {"raw": "{\"a\":\"nav\",\"d\":{\"dir\":\"right\",\"dist\":200,\"road\":\"中山路\"}}"}
         """
         # EMERGENCY 模式或暂停状态：忽略导航指令
-        if self.ctx.get("power_state") == "EMERGENCY" or self.ctx.get("nav_paused"):
+        if self.ctx.get("power_state") == POWER_STATE_EMERGENCY or self.ctx.get("nav_paused"):
             return
 
         print("[nav] 收到事件: %s" % str(payload)[:80])
@@ -250,7 +251,7 @@ class NavigationService(BaseModule):
         self._data["current_dist"] = dist
         self._data["current_road"] = road
 
-        # TTS 播报（非阻塞：子线程播放，防重入）
+        # TTS 播报（非阻塞：子线程播放，互斥锁防重入）
         # 静默报警：跳过 TTS
         if self.ctx.get("alarm_active") and self.ctx.get("alarm_type") == "stealth":
             pass  # 静默报警期间不播放导航 TTS
@@ -262,21 +263,23 @@ class NavigationService(BaseModule):
             print("[nav] ▶ TTS: %s" % tts_text)
 
             if self.audio_driver:
-                if self.ctx.get("is_tts_playing"):
-                    print("[nav] TTS 播放中，跳过")
-                else:
-                    self.ctx["is_tts_playing"] = True
-                    svc_ref = self
-                    def _tts_thread(text, drv, svc):
-                        try:
-                            drv.play_tts(text)
-                        except:
-                            pass
-                        svc.ctx["is_tts_playing"] = False
-                    _thread.start_new_thread(_tts_thread, (tts_text, self.audio_driver, svc_ref))
+                with self._tts_lock:
+                    if self.ctx.get("is_tts_playing"):
+                        print("[nav] TTS 播放中，跳过")
+                    else:
+                        self.ctx["is_tts_playing"] = True
+                        svc_ref = self
+                        def _tts_thread(text, drv, svc, lock):
+                            try:
+                                drv.play_tts(text)
+                            except:
+                                pass
+                            with lock:
+                                svc.ctx["is_tts_playing"] = False
+                        _thread.start_new_thread(_tts_thread, (tts_text, self.audio_driver, svc_ref, self._tts_lock))
 
         # SUSPENDED/EMERGENCY 模式：跳过 LCD
-        if self.ctx["power_state"] in ("SUSPENDED", "EMERGENCY"):
+        if self.ctx["power_state"] in (POWER_STATE_SUSPENDED, POWER_STATE_EMERGENCY):
             pass
         else:
             lcd_text = _build_lcd_text(dir_str, dist, road)
