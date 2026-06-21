@@ -358,9 +358,9 @@ class DisplayService(BaseModule):
         """GNSS数据回调：更新数据并刷新画面"""
         if not self.ctx["is_init"]:
             return
-        lat = payload.get("lat")
-        lon = payload.get("lon")
-        speed = payload.get("speed")
+        lat = payload.get("latitude")
+        lon = payload.get("longitude")
+        speed = payload.get("speed_kmh")
         if lat is not None:
             self._data["lat"] = lat
         if lon is not None:
