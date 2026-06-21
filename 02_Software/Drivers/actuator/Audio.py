@@ -10,7 +10,7 @@ from quectel import Audio as Audio
 from core.Base_Module import BaseModule
 from core.config import (EVENT_AUDIO_PLAYBACK_START, EVENT_AUDIO_PLAYBACK_END,
                     EVENT_AUDIO_ERROR, EVENT_VOLUME_CONTROL,
-                    EVENT_CONFIG_UPDATE, EVENT_TTS_REQUEST,
+                    EVENT_CONFIG_UPDATE, EVENT_TTS_REQUEST, EVENT_POWER_STATE_CHANGE,
                     EVENT_ALARM_TRIGGERED, EVENT_ALARM_CANCELED,
                     POWER_STATE_ACTIVE,
                     AUDIO_TTS_SPEED, AUDIO_TTS_VOLUME, AUDIO_SPEAKER_VOLUME)
@@ -81,7 +81,7 @@ class AudioDriver(BaseModule):
 
             # 4. 订阅事件
             if self.event_bus:
-                self.event_bus.subscribe(EVENT_CONFIG_UPDATE, self._on_config_update)
+                self.event_bus.subscribe(EVENT_POWER_STATE_CHANGE, self._on_config_update)
                 self.event_bus.subscribe(EVENT_TTS_REQUEST, self._on_tts_request)
                 self.event_bus.subscribe(EVENT_VOLUME_CONTROL, self._on_volume_control)
                 self.event_bus.subscribe(EVENT_ALARM_TRIGGERED, self._on_alarm_triggered)

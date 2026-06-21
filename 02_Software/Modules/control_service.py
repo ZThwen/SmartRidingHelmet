@@ -49,14 +49,18 @@ class ControlService(BaseModule):
     _LIGHT_MODE_MAP = {"auto": 0, "manual": 1}
     _POWER_MODE_MAP = {"active": 0, "suspended": 1, "emergency": 2, "custom": 3}
 
-    def __init__(self, event_bus=None):
+    def __init__(self, event_bus=None, temp_humid=None, gnss=None):
         """
         brief 初始化控制服务实例
         param event_bus: 事件总线实例引用
+        param temp_humid: 温湿度驱动实例（可选，用于查询时强制读取）
+        param gnss: GNSS驱动实例（可选，用于查询时强制读取）
         """
         super().__init__()
         self.event_bus = event_bus
         self.name = "control_service"
+        self.temp_humid = temp_humid
+        self.gnss = gnss
 
         # ===================== 四元组：静态配置 =====================
         self.cfg = {
@@ -336,6 +340,16 @@ class ControlService(BaseModule):
 
     def _query_speed(self):
         speed = self._sensor_cache.get("speed_kmh")
+        if speed is None and self.gnss:
+            try:
+                data = self.gnss.force_read()
+                if data and data.get("valid"):
+                    speed = data.get("speed_kmh")
+                    self._sensor_cache["speed_kmh"] = speed
+                    self._sensor_cache["latitude"] = data.get("latitude")
+                    self._sensor_cache["longitude"] = data.get("longitude")
+            except:
+                pass
         if speed is not None:
             self._tts("当前时速%d公里" % int(speed))
         else:
@@ -343,6 +357,15 @@ class ControlService(BaseModule):
 
     def _query_temp(self):
         temp = self._sensor_cache.get("temperature")
+        if temp is None and self.temp_humid:
+            try:
+                data = self.temp_humid.force_read()
+                if data and data.get("valid"):
+                    temp = data.get("temp")
+                    self._sensor_cache["temperature"] = temp
+                    self._sensor_cache["humidity"] = data.get("humid")
+            except:
+                pass
         if temp is not None:
             self._tts("当前温度%d度" % int(temp))
         else:
@@ -350,6 +373,15 @@ class ControlService(BaseModule):
 
     def _query_humid(self):
         humid = self._sensor_cache.get("humidity")
+        if humid is None and self.temp_humid:
+            try:
+                data = self.temp_humid.force_read()
+                if data and data.get("valid"):
+                    humid = data.get("humid")
+                    self._sensor_cache["humidity"] = humid
+                    self._sensor_cache["temperature"] = data.get("temp")
+            except:
+                pass
         if humid is not None:
             self._tts("当前湿度百分之%d" % int(humid))
         else:
@@ -358,6 +390,17 @@ class ControlService(BaseModule):
     def _query_location(self):
         lat = self._sensor_cache.get("latitude")
         lon = self._sensor_cache.get("longitude")
+        if (lat is None or lon is None) and self.gnss:
+            try:
+                data = self.gnss.force_read()
+                if data and data.get("valid"):
+                    lat = data.get("latitude")
+                    lon = data.get("longitude")
+                    self._sensor_cache["latitude"] = lat
+                    self._sensor_cache["longitude"] = lon
+                    self._sensor_cache["speed_kmh"] = data.get("speed_kmh")
+            except:
+                pass
         if lat is not None and lon is not None:
             self._tts("当前位置北纬%.4f东经%.4f" % (lat, lon))
         else:

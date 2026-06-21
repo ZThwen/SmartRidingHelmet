@@ -14,7 +14,7 @@ import time
 
 from core.Base_Module import BaseModule
 from core.config import (
-    EVENT_LIGHT_READY, EVENT_LIGHT_CONTROL, EVENT_CONFIG_UPDATE, POWER_STATE_ACTIVE,
+    EVENT_LIGHT_READY, EVENT_LIGHT_CONTROL, EVENT_CONFIG_UPDATE, EVENT_POWER_STATE_CHANGE, POWER_STATE_ACTIVE,
     LIGHT_DAY_ADC_THRESHOLD, LIGHT_NIGHT_ADC_THRESHOLD,
     LIGHT_BRIGHTNESS_MIN, LIGHT_BRIGHTNESS_MAX, LIGHT_BRIGHTNESS_STEP,
     LIGHT_GAMMA, LIGHT_BRIGHTNESS_THRESHOLD, LIGHT_DEBOUNCE_MS
@@ -73,7 +73,7 @@ class LightService(BaseModule):
             if self.event_bus:
                 self.event_bus.subscribe(EVENT_LIGHT_READY, self._on_light_ready)
                 self.event_bus.subscribe(EVENT_LIGHT_CONTROL, self._on_light_control)
-                self.event_bus.subscribe(EVENT_CONFIG_UPDATE, self._on_config_update)
+                self.event_bus.subscribe(EVENT_POWER_STATE_CHANGE, self._on_config_update)
 
             self.ctx["is_init"] = True
             print("[{}] OK init | auto_mode={}".format(self.name, self.ctx["auto_mode"]))

@@ -8,7 +8,7 @@ import time
 import math
 
 from core.Base_Module import BaseModule
-from core.config import EVENT_IMU_READY, EVENT_SENSOR_ERROR, EVENT_CONFIG_UPDATE, IMU_SAMPLE_MS, POWER_STATE_ACTIVE
+from core.config import EVENT_IMU_READY, EVENT_SENSOR_ERROR, EVENT_CONFIG_UPDATE, EVENT_POWER_STATE_CHANGE, IMU_SAMPLE_MS, POWER_STATE_ACTIVE
 from lis2dh12 import LIS2DH12
 
 
@@ -79,7 +79,7 @@ class IMUDriver(BaseModule):
             
             # ====== 4. 订阅事件 ======
             if self.event_bus:
-                self.event_bus.subscribe(EVENT_CONFIG_UPDATE, self._on_config_update)
+                self.event_bus.subscribe(EVENT_POWER_STATE_CHANGE, self._on_config_update)
             
             self.ctx["is_init"] = True
             print(f"[{self.name}] ✓ 初始化完成 | 设备: {[hex(d) for d in devices]}")

@@ -10,7 +10,7 @@ import time
 
 from core.Base_Module import BaseModule
 from core.config import (
-    EVENT_PWM_LED_ERROR, EVENT_CONFIG_UPDATE,
+    EVENT_PWM_LED_ERROR, EVENT_CONFIG_UPDATE, EVENT_POWER_STATE_CHANGE,
     PWM_LED_PIN, PWM_LED_TIMER_ID, PWM_LED_TIMER_CHANNEL,
     PWM_LED_FREQ, POWER_STATE_ACTIVE
 )
@@ -74,7 +74,7 @@ class PWMLEDDriver(BaseModule):
             self.pwm_channel.pulse_width_percent(0)
             
             if self.event_bus:
-                self.event_bus.subscribe(EVENT_CONFIG_UPDATE, self._on_config_update)
+                self.event_bus.subscribe(EVENT_POWER_STATE_CHANGE, self._on_config_update)
             
             self.ctx["is_init"] = True
             print("[{}] OK init | pin={}, timer={}, channel={}, freq={}Hz".format(

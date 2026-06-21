@@ -7,7 +7,7 @@ import time
 from machine import ADC, Pin
 
 from core.Base_Module import BaseModule
-from core.config import EVENT_LIGHT_READY, EVENT_SENSOR_ERROR, EVENT_CONFIG_UPDATE, EVENT_LIGHT_CONTROL, POWER_STATE_ACTIVE, POWER_STATE_SUSPENDED, POWER_STATE_EMERGENCY, LIGHT_SAMPLE_MS, LIGHTSENSOR_MANUAL_MS
+from core.config import EVENT_LIGHT_READY, EVENT_SENSOR_ERROR, EVENT_CONFIG_UPDATE, EVENT_POWER_STATE_CHANGE, EVENT_LIGHT_CONTROL, POWER_STATE_ACTIVE, POWER_STATE_SUSPENDED, POWER_STATE_EMERGENCY, LIGHT_SAMPLE_MS, LIGHTSENSOR_MANUAL_MS
 
 
 class LightSensorDriver(BaseModule):
@@ -57,7 +57,7 @@ class LightSensorDriver(BaseModule):
             # ====== 4. 订阅事件 ======
             if self.event_bus:
                 # 订阅配置更新事件
-                self.event_bus.subscribe(EVENT_CONFIG_UPDATE, self._on_config_update)
+                self.event_bus.subscribe(EVENT_POWER_STATE_CHANGE, self._on_config_update)
                 # 订阅灯光控制事件（用于动态调整采样间隔）
                 self.event_bus.subscribe(EVENT_LIGHT_CONTROL, self._on_light_control)
             
@@ -149,6 +149,8 @@ class LightSensorDriver(BaseModule):
                 self.cfg["sample_ms"] = LIGHT_SAMPLE_MS  # 2s
             else:
                 self.cfg["sample_ms"] = LIGHTSENSOR_MANUAL_MS  # 30s
+        elif self.ctx["power_state"] == POWER_STATE_EMERGENCY:
+            self.cfg["sample_ms"] = LIGHT_SAMPLE_MS  # 2s
         elif self.ctx["power_state"] == POWER_STATE_ACTIVE:
             self.cfg["sample_ms"] = LIGHT_SAMPLE_MS  # 2s
 

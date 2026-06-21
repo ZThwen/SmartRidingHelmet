@@ -12,7 +12,7 @@ import time
 
 from core.Base_Module import BaseModule
 from core.config import (
-    EVENT_LED_ERROR, EVENT_CONFIG_UPDATE,
+    EVENT_LED_ERROR, EVENT_CONFIG_UPDATE, EVENT_POWER_STATE_CHANGE,
     LED_PIN_NAME, LED_BLINK_INTERVAL_MS,
     LED_BLINK_MIN_MS, LED_BLINK_MAX_MS,
     TIMER_ID_LED, POWER_STATE_ACTIVE
@@ -84,7 +84,7 @@ class LEDDriver(BaseModule):
 
             # ====== 2. 订阅事件 ======
             if self.event_bus:
-                self.event_bus.subscribe(EVENT_CONFIG_UPDATE, self._on_config_update)
+                self.event_bus.subscribe(EVENT_POWER_STATE_CHANGE, self._on_config_update)
 
             # ====== 3. 设置初始化标志 ======
             self.ctx["is_init"] = True
