@@ -12,7 +12,7 @@ from core.Base_Module import BaseModule
 from core.config import (
     EVENT_PWM_LED_ERROR, EVENT_CONFIG_UPDATE, EVENT_POWER_STATE_CHANGE,
     PWM_LED_PIN, PWM_LED_TIMER_ID, PWM_LED_TIMER_CHANNEL,
-    PWM_LED_FREQ, POWER_STATE_ACTIVE
+    PWM_LED_FREQ, POWER_STATE_ACTIVE, POWER_STATE_CUSTOM
 )
 
 
@@ -102,7 +102,7 @@ class PWMLEDDriver(BaseModule):
         if not self.ctx["is_init"]:
             return
         
-        if self.ctx["power_state"] != POWER_STATE_ACTIVE:
+        if self.ctx["power_state"] not in (POWER_STATE_ACTIVE, POWER_STATE_CUSTOM):
             return
         
         if duty_cycle < 0:
@@ -141,10 +141,16 @@ class PWMLEDDriver(BaseModule):
         """
         if "power_state" in payload:
             old_state = self.ctx["power_state"]
-            print("[{}] power: {} -> {}".format(self.name, old_state, payload["power_state"]))
-            if payload["power_state"] != POWER_STATE_ACTIVE:
+            new_state = payload["power_state"]
+            print("[{}] power: {} -> {}".format(self.name, old_state, new_state))
+            if new_state == POWER_STATE_CUSTOM:
+                # CUSTOM: 手动操作覆盖省电模式，不改变亮度
+                self.ctx["power_state"] = new_state
+            elif new_state != POWER_STATE_ACTIVE:
                 self.set_brightness(0)
-            self.ctx["power_state"] = payload["power_state"]
+                self.ctx["power_state"] = new_state
+            else:
+                self.ctx["power_state"] = new_state
     
     def get_data(self):
         """

@@ -183,6 +183,8 @@ class BLEService(BaseModule):
                 if not self._ble:
                     continue
                 if not self.ctx["ble_connected"]:
+                    # ★ 调试日志：因 BLE 未连接而丢弃消息
+                    print("[%s] DROP notify: BLE not connected, msg=%.50s" % (self.name, data))
                     continue
                 if len(data) > MAX_BLE_PAYLOAD:
                     print("[%s] payload too large (%d > %d), dropped" % (
@@ -191,23 +193,32 @@ class BLEService(BaseModule):
                 if self.ctx["consecutive_errors"] >= CIRCUIT_BREAKER_THRESHOLD:
                     time.sleep_ms(500)
                     continue
+                # ★ 调试日志：正在发送
+                print("[%s] SEND notify: %s" % (self.name, data))
                 self._ble.notify_data(data)
                 self.ctx["err_count"] = 0
                 self.ctx["consecutive_errors"] = 0
             except Exception as e:
                 self.ctx["err_count"] += 1
                 self.ctx["consecutive_errors"] += 1
-                print("[%s] notify err: %s" % (self.name, e))
+                # ★ 调试日志：更详细的异常信息
+                print("[%s] notify err (#%d): %s | msg=%.60s" % (self.name, self.ctx["err_count"], e, data if 'data' in dir() else 'N/A'))
 
     def _on_connected(self, payload):
         self.ctx["ble_connected"] = True
         self.ctx["consecutive_errors"] = 0
         self.ctx["force_push"] = True
+        # ★ 调试日志：BLE 连接
+        print("[%s] BLE CONNECTED" % self.name)
 
     def _on_disconnected(self, payload):
         self.ctx["ble_connected"] = False
+        # ★ 调试日志：BLE 断开
+        print("[%s] BLE DISCONNECTED" % self.name)
         if self.send_queue:
             self.send_queue.clear()
+            # ★ 调试日志：队列清空
+            print("[%s] BLE DISCONNECTED: queue cleared" % self.name)
 
     def _on_temp_humid(self, payload):
         if not payload.get("valid", False):
@@ -242,7 +253,11 @@ class BLEService(BaseModule):
         # 压缩载荷：15 字节（原 46 字节），避免超出 ATT_MTU 导致 +CME ERROR: 53
         type_code = 1 if alarm_type == "collision" else 2
         msg = json.dumps({"t": 5, "a": type_code, "l": level})
+        # ★ 调试日志：报警事件到达
+        print("[%s] ALARM_EVENT type=%s level=%d → queued: %s" % (self.name, alarm_type, level, msg))
         self.send_queue.put(msg)
+        # ★ 调试日志：确认入队后的队列大小
+        print("[%s] ALARM_EVENT queue_size=%d" % (self.name, self.send_queue.size()))
         self.ctx["force_push"] = False
 
     def _on_alarm_canceled(self, payload):
