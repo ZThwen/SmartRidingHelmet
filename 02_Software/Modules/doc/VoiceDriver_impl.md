@@ -2,7 +2,7 @@
 
 > **所属层次**：Device 层（接口驱动层）
 > **实现状态**：✅ **已实现**（2026-06-20），待集成 main.py
-> **负责人员**：郑皓文
+> **负责人员**：张文杰
 
 ---
 
@@ -41,38 +41,44 @@
 
 ---
 
-## 4. 指令映射表（19 条）
+## 4. 指令映射表（20 条）
 
 映射表定义在 `config.py` 的 `VOICE_CMD_MAP` 字典中：
 
-### 4.1 控制指令（13 条）
+### 4.1 唤醒指令（1 条，新增）
 
-| hex | cmd | 功能 | ControlService 响应 |
-|-----|-----|------|-------------------|
-| 0x01 | `light_on` | 开灯 | `EVENT_LIGHT_CONTROL{on}` |
-| 0x02 | `light_off` | 关灯 | `EVENT_LIGHT_CONTROL{off}` |
-| 0x03 | `brightness_up` | 亮度+ | `EVENT_LIGHT_CONTROL{brightness_up}` |
-| 0x04 | `brightness_down` | 亮度- | `EVENT_LIGHT_CONTROL{brightness_down}` |
-| 0x05 | `light_auto` | 自动模式 | `EVENT_LIGHT_CONTROL{auto}` |
-| 0x06 | `volume_up` | 音量+ | `EVENT_VOLUME_CONTROL{up}` |
-| 0x07 | `volume_down` | 音量- | `EVENT_VOLUME_CONTROL{down}` |
-| 0x08 | `alarm_cancel` | 取消报警 | `EVENT_ALARM_CONTROL{cancel}` |
-| 0x09 | `alarm_sos` | SOS 报警 | `EVENT_ALARM_CONTROL{sos}` |
-| 0x0A | `alarm_stealth` | 静默报警 | `EVENT_ALARM_CONTROL{stealth}` |
-| 0x0B | `power_save` | 省电模式 | `EVENT_POWER_STATE_CHANGE{SUSPENDED}` |
-| 0x0C | `power_normal` | 正常模式 | `EVENT_POWER_STATE_CHANGE{ACTIVE}` |
-| 0x0D | `power_emergency` | 紧急省电 | `EVENT_POWER_STATE_CHANGE{EMERGENCY}` |
+| hex  | cmd    | 功能     | 中文语音 |
+| ---- | ------ | -------- | -------- |
+| 0x00 | `wake` | 唤醒指令 | "小浩包" |
 
-### 4.2 查询指令（6 条）
+### 4.2 控制指令（13 条）
 
-| hex | cmd | 功能 | TTS 播报 |
-|-----|-----|------|----------|
-| 0x0E | `query_status` | 查询状态 | "灯光亮度百分之50，音量3，正常模式" |
-| 0x0F | `query_speed` | 查询速度 | "当前时速25公里" |
-| 0x10 | `query_temp` | 查询温度 | "当前温度28度" |
-| 0x11 | `query_humid` | 查询湿度 | "当前湿度百分之65" |
-| 0x12 | `query_location` | 查询位置 | "当前位置北纬31.23东经121.47" |
-| 0x13 | `query_battery` | 查询电量 | "电量信息暂不可用" |
+| hex  | cmd               | 功能     | 中文语音                                 |
+| ---- | ----------------- | -------- | ---------------------------------------- |
+| 0x01 | `light_on`        | 开灯     | "开灯"/"打开灯"/"把灯打开"               |
+| 0x02 | `light_off`       | 关灯     | "关灯"/"关掉灯"/"把灯关了"               |
+| 0x03 | `brightness_up`   | 亮度+    | "调亮"/"把灯调亮"/"调高亮度"             |
+| 0x04 | `brightness_down` | 亮度-    | "调暗"/"把灯调暗"/"调低亮度"             |
+| 0x05 | `light_auto`      | 自动模式 | "自适应灯光"/"灯光自适应"/"自动亮暗"     |
+| 0x06 | `volume_up`       | 音量+    | "调大音量"/"调高音量"/"音量调大"         |
+| 0x07 | `volume_down`     | 音量-    | "调小音量"/"调低音量"/"音量调小"         |
+| 0x08 | `alarm_cancel`    | 取消报警 | "取消报警"/"解除报警"/"关闭报警"         |
+| 0x09 | `alarm_sos`       | SOS 报警 | **"请求救助"/"请求支援"/"请求救援"**     |
+| 0x0A | `alarm_stealth`   | 静默报警 | "悄悄报警"/"后台报警"/"静默报警"         |
+| 0x0B | `power_save`      | 省电模式 | "开启省电模式"/"打开省电模式"            |
+| 0x0C | `power_normal`    | 正常模式 | "正常模式"/"开启正常模式"/"打开正常模式" |
+| 0x0D | `power_emergency` | 紧急省电 | "紧急省电"/"打开紧急省电"/"开启紧急省电" |
+
+### 4.3 查询指令（6 条）
+
+| hex  | cmd              | 功能     | 中文语音                           |
+| ---- | ---------------- | -------- | ---------------------------------- |
+| 0x0E | `query_status`   | 查询状态 | "查询状态"/"状态查询"/"当前状态"   |
+| 0x0F | `query_speed`    | 查询速度 | "查询速度"/"速度多少"/"当前速度"   |
+| 0x10 | `query_temp`     | 查询温度 | "查询温度"/"温度多少"/"当前温度"   |
+| 0x11 | `query_humid`    | 查询湿度 | "查询湿度"/"湿度多少"/"当前湿度"   |
+| 0x12 | `query_location` | 查询位置 | "查询位置"/"经纬度多少"/"当前位置" |
+| 0x13 | `query_battery`  | 查询电量 | "查询电量"/"当前电量"/"电量多少"   |
 
 ### 4.3 映射关系说明
 

@@ -74,6 +74,7 @@
 | 阶段 | 内容 | 测试文件 | 上板验证 |
 |------|------|---------|---------|
 | ✅ Wave 0 | v1 基线（12 模块） | test_system_v1.py | ✅ 通过 |
+| ✅ Step 1 | 基线（11 模块，无 CloudService） | test_system_base.py | ✅ 通过 (7/7) |
 | 🔧 Wave 1 | Device 层（PWM_LED, BLE） | 3 个文件 | ⚠️ 修复中 |
 | ⏳ Wave 2 | Service 层（Light, Control） | 3 个文件 | ⏸ 待测 |
 | ⏳ Wave 3 | 通信层（BLEService, Nav） | 3 个文件 | ⏸ 待测 |
