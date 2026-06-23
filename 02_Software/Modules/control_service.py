@@ -28,7 +28,7 @@ from core.config import (
     POWER_STATE_CUSTOM, EVENT_TTS_REQUEST,
     EVENT_TEMP_HUMID_READY, EVENT_GNSS_READY,
     EVENT_ALARM_TRIGGERED, EVENT_ALARM_CANCELED,
-    LIGHT_BRIGHTNESS_MAX, CMD_TTS_MAP,
+    LIGHT_BRIGHTNESS_MAX, CMD_TTS_MAP, PRIORITY_CTRL,
 )
 
 # CPython 兼容
@@ -221,6 +221,14 @@ class ControlService(BaseModule):
         handler = self._cmd_handlers.get(cmd)
         if handler:
             try:
+                # 先处理省电模式覆盖（在发布控制事件之前）
+                if cmd not in ("power_save", "power_normal", "power_emergency",
+                               "alarm_sos", "alarm_cancel", "alarm_stealth") and not cmd.startswith("query_"):
+                    if self._control_state["power_mode"] != "active":
+                        self._control_state["power_mode"] = "custom"
+                        if self.event_bus:
+                            self.event_bus.publish(EVENT_POWER_STATE_CHANGE, {"power_state": POWER_STATE_CUSTOM})
+
                 handler()
                 self.ctx["last_cmd_tick"] = now
                 self._data["last_cmd"] = cmd
@@ -228,13 +236,6 @@ class ControlService(BaseModule):
                 # 乐观更新本地状态缓存
                 self._update_control_state(cmd)
                 self._maybe_tts(cmd)
-                # 手动操作覆盖省电模式
-                if cmd not in ("power_save", "power_normal", "power_emergency",
-                               "alarm_sos", "alarm_cancel", "alarm_stealth") and not cmd.startswith("query_"):
-                    if self._control_state["power_mode"] != "active":
-                        self._control_state["power_mode"] = "custom"
-                        if self.event_bus:
-                            self.event_bus.publish(EVENT_POWER_STATE_CHANGE, {"power_state": POWER_STATE_CUSTOM})
                 self._push_state()
                 print("[{}] cmd={} src={}".format(self.name, cmd, source))
             except Exception as e:
@@ -323,7 +324,7 @@ class ControlService(BaseModule):
             print("[{}] TTS blocked during alarm".format(self.name))
             return
         if self.event_bus:
-            self.event_bus.publish(EVENT_TTS_REQUEST, {"text": text})
+            self.event_bus.publish(EVENT_TTS_REQUEST, {"text": text, "priority": PRIORITY_CTRL})
 
     def _query_status(self):
         cs = self._control_state
@@ -437,7 +438,7 @@ class ControlService(BaseModule):
         self.ctx["last_tts_tick"] = now
         tts_text = CMD_TTS_MAP.get(cmd)
         if tts_text and self.event_bus:
-            self.event_bus.publish(EVENT_TTS_REQUEST, {"text": tts_text})
+            self.event_bus.publish(EVENT_TTS_REQUEST, {"text": tts_text, "priority": PRIORITY_CTRL})
 
     # ==================== 数据接口 ====================
 

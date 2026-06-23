@@ -1,9 +1,10 @@
 """
-brief 智能骑行头盔系统入口 — v1 正式版
-note 集成 12 个模块（4 传感器 + 4 执行器 + 4 Service + 4G/MQTT）
+brief 智能骑行头盔系统入口 — v2 Step 5
+note 集成 18 个模块（4 传感器 + 7 执行器 + 7 Service）
 """
 import sys
 import time
+import gc
 
 sys.path.append("..")
 
@@ -19,16 +20,24 @@ from Drivers.interface.Button import Button
 from Drivers.actuator.LED import LEDDriver
 from Drivers.actuator.Audio import AudioDriver
 from Drivers.actuator.LCD import LCDDriver
+from Drivers.actuator.PWM_LED import PWMLEDDriver
+
+from Drivers.network.BLE import BLEDriver
+from Drivers.interface.Voice import VoiceDriver
 
 from Modules.collision_service import CollisionService
+from Modules.audio_service import AudioService
 from Modules.alarm_service import AlarmService
-from Modules.cloud_service import CloudService
 from Modules.display_service import DisplayService
+from Modules.light_service import LightService
+from Modules.ble_service import BLEService
+from Modules.control_service import ControlService
+from Modules.navigation_service import NavigationService
 
 
 def main():
     """
-    brief 系统入口: 12 个模块全集成，v1 正式版
+    brief 系统入口: 18 个模块全集成，v2 Step 5（新增 VoiceDriver）
     """
     print("🚀 智能骑行头盔系统启动...")
 
@@ -48,17 +57,24 @@ def main():
     led = LEDDriver(event_bus)
     audio = AudioDriver(event_bus)
     lcd = LCDDriver(event_bus)
+    pwm_led = PWMLEDDriver(event_bus)
+    ble = BLEDriver(event_bus)
 
     # --- 服务（注入 Device 引用）---
     collision = CollisionService(event_bus)
+    audio_svc = AudioService(event_bus, audio_driver=audio)
     alarm = AlarmService(event_bus, led=led, audio=audio)
-    cloud = CloudService(event_bus)
     display = DisplayService(event_bus, lcd_driver=lcd, audio_driver=audio)
+    control_svc = ControlService(event_bus, temp_humid=temp_humid, gnss=gnss)
+    light_svc = LightService(event_bus, pwm_led=pwm_led)
+    ble_svc = BLEService(event_bus, ble_driver=ble)
+    nav_svc = NavigationService(event_bus, audio_driver=audio, lcd_driver=lcd)
+    voice = VoiceDriver(event_bus)
 
     # 3. 按序初始化（传感器 → 执行器 → 服务）
     init_order = [temp_humid, imu, gnss, light,
-                  button, led, audio, lcd,
-                  collision, alarm, cloud, display]
+                  button, led, audio, lcd, pwm_led, ble,
+                  collision, audio_svc, alarm, display, control_svc, light_svc, ble_svc, nav_svc, voice]
     failed = []
 
     print("\n[初始化阶段]")
@@ -90,19 +106,46 @@ def main():
     loop_count = 0
     try:
         while True:
+            loop_start = time.ticks_ms()
+
+            # 5a. 逐模块 tick + 单模块耗时监控
             for mod in init_order:
                 if not mod.ctx.get("is_init", False):
                     continue
+                mod_start = time.ticks_ms()
                 try:
                     mod.tick()
                 except Exception as e:
                     print(f"[ERROR] {mod.name}.tick(): {e}")
+                mod_cost = time.ticks_diff(time.ticks_ms(), mod_start)
+                if mod_cost > 5:
+                    print(f"⚠️ 真阻塞: [{mod.name}] tick 耗时 {mod_cost}ms！")
 
+            # 5b. EventBus.pump 耗时测量
+            pump_start = time.ticks_ms()
             event_bus.pump()
+            pump_cost = time.ticks_diff(time.ticks_ms(), pump_start)
+            if pump_cost > 5:
+                print(f"⚠️ 真阻塞: [EventBus.pump] 耗时 {pump_cost}ms！")
+
+            # 5c. CPU 总忙碌时间测量
+            cpu_busy_time = time.ticks_diff(time.ticks_ms(), loop_start)
+            if cpu_busy_time > 8:
+                print(f"🔴 警告: 主循环 CPU 忙碌时间 {cpu_busy_time}ms，挤压了 sleep 时间！")
+
             time.sleep_ms(10)
 
-            # 每 2 秒打印一次数据快照
+            # 每 100 次循环检查内存
             loop_count += 1
+            if loop_count % 100 == 0:
+                free_bytes = gc.mem_free()
+                if free_bytes < 15000:
+                    print(f"[WARNING] 剩余内存 {free_bytes} bytes（<15000），触发 gc.collect()")
+                    gc.collect()
+                    free_bytes = gc.mem_free()
+                    print(f"  -> gc.collect() 后剩余 {free_bytes} bytes")
+
+            # 每 200 次循环（约 2 秒）打印一次数据快照
             if loop_count % 200 == 0:
                 print("\n--- 模块数据 (每 2 秒) ---")
                 for mod in init_order:

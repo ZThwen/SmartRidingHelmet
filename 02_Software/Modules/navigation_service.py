@@ -13,13 +13,12 @@ note Service层业务服务，MicroPython环境，在真实硬件上运行
 """
 import time
 import json
-import _thread
-
 from core.Base_Module import BaseModule
 from core.config import (
-    EVENT_NAV_CMD,
+    EVENT_NAV_CMD, EVENT_TTS_REQUEST, EVENT_NAV_DISPLAY,
     EVENT_POWER_STATE_CHANGE, EVENT_ALARM_TRIGGERED, EVENT_ALARM_CANCELED,
     POWER_STATE_ACTIVE, POWER_STATE_SUSPENDED, POWER_STATE_EMERGENCY,
+    PRIORITY_NAV,
     TTS_NAV_ARRIVE, TTS_NAV_CANCEL,
 )
 
@@ -137,7 +136,6 @@ class NavigationService(BaseModule):
         self.ctx = {
             "is_init": False,
             "is_navigating": False,
-            "is_tts_playing": False,
             "current_dir": "",
             "current_dist": 0,
             "current_road": "",
@@ -150,7 +148,6 @@ class NavigationService(BaseModule):
         }
 
         self._stealth_active = False
-        self._tts_lock = _thread.allocate_lock()
 
         self._data = {
             "is_navigating": False,
@@ -162,7 +159,7 @@ class NavigationService(BaseModule):
         }
 
     def init(self):
-        """初始化：订阅事件"""
+        """初始化：订阅事件，启动 TTS 工作线程"""
         try:
             if self.event_bus:
                 self.event_bus.subscribe(EVENT_NAV_CMD, self._on_nav_cmd)
@@ -251,7 +248,7 @@ class NavigationService(BaseModule):
         self._data["current_dist"] = dist
         self._data["current_road"] = road
 
-        # TTS 播报（非阻塞：子线程播放，互斥锁防重入）
+        # TTS 播报（通过 EventBus 发布，由 AudioService 统一调度优先级）
         # 静默报警：跳过 TTS
         if self.ctx.get("alarm_active") and self.ctx.get("alarm_type") == "stealth":
             pass  # 静默报警期间不播放导航 TTS
@@ -260,34 +257,27 @@ class NavigationService(BaseModule):
         else:
             tts_text = _build_tts_text(dir_str, dist, road)
             self._data["last_tts"] = tts_text
-            print("[nav] ▶ TTS: %s" % tts_text)
+            print("[nav] TTS: %s" % tts_text)
 
-            if self.audio_driver:
-                with self._tts_lock:
-                    if self.ctx.get("is_tts_playing"):
-                        print("[nav] TTS 播放中，跳过")
-                    else:
-                        self.ctx["is_tts_playing"] = True
-                        svc_ref = self
-                        def _tts_thread(text, drv, svc, lock):
-                            try:
-                                drv.play_tts(text)
-                            except:
-                                pass
-                            with lock:
-                                svc.ctx["is_tts_playing"] = False
-                        old_size = _thread.stack_size(4096)
-                        _thread.start_new_thread(_tts_thread, (tts_text, self.audio_driver, svc_ref, self._tts_lock))
-                        _thread.stack_size(old_size)
+            # 发布 TTS 请求事件（由 AudioService 统一调度）
+            if self.event_bus:
+                self.event_bus.publish(EVENT_TTS_REQUEST, {
+                    "text": tts_text,
+                    "priority": PRIORITY_NAV,
+                })
 
-        # SUSPENDED/EMERGENCY 模式：跳过 LCD
-        if self.ctx["power_state"] in (POWER_STATE_SUSPENDED, POWER_STATE_EMERGENCY):
-            pass
-        else:
-            lcd_text = _build_lcd_text(dir_str, dist, road)
-            self._data["last_lcd"] = lcd_text
+        # LCD 显示（通过 EventBus 发布，由 DisplayService 统一管理渲染）
+        lcd_text = _build_lcd_text(dir_str, dist, road)
+        self._data["last_lcd"] = lcd_text
+        print("[nav] LCD: %s" % lcd_text)
+
+        # 发布导航显示事件（DisplayService 订阅并缓存，渲染时恢复）
+        if self.event_bus:
+            self.event_bus.publish(EVENT_NAV_DISPLAY, {"text": lcd_text})
+
+        # 首次直接写入 LCD（确保立即显示，报警期间跳过）
+        if not self.ctx.get("alarm_active") and self.ctx["power_state"] not in (POWER_STATE_SUSPENDED, POWER_STATE_EMERGENCY):
             self._write_nav_line(lcd_text)
-            print("[nav] LCD: %s" % lcd_text)
 
     def _write_nav_line(self, text):
         """在 LCD 底部写导航行（通过 LCDDriver 公开接口）"""

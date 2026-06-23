@@ -65,6 +65,7 @@ EVENT_LIGHT_CONTROL         = "LIGHT_CONTROL"           # 灯光控制指令
 EVENT_VOLUME_CONTROL        = "VOLUME_CONTROL"          # 音量控制指令
 EVENT_ALARM_CONTROL         = "ALARM_CONTROL"           # 报警控制指令
 EVENT_TTS_REQUEST           = "TTS_REQUEST"             # TTS 播报请求
+EVENT_NAV_DISPLAY           = "NAV_DISPLAY"             # 导航显示内容变更（NavigationService → DisplayService）
 
 # ================= 默认参数配置 =================
 # 传感器采样间隔
@@ -287,3 +288,8 @@ CMD_TTS_MAP = {
     "power_normal": "正常模式",
     "power_emergency": "紧急省电模式",
 }
+
+# ================= TTS 优先级 =================
+PRIORITY_ALARM              = 0    # 报警语音（最高优先级）
+PRIORITY_NAV                = 1    # 导航播报
+PRIORITY_CTRL               = 2    # 控制反馈（最低优先级）

@@ -31,6 +31,7 @@ from core.config import (
     EVENT_ALARM_CANCELED,
     EVENT_POWER_STATE_CHANGE,
     EVENT_CONFIG_UPDATE,
+    EVENT_NAV_DISPLAY,
     POWER_STATE_ACTIVE,
 )
 
@@ -105,6 +106,9 @@ class DisplayService(BaseModule):
             "logo_loaded": False,
             "sos_icon_loaded": False,
         }
+
+        # 导航文字缓存（由 EVENT_NAV_DISPLAY 更新，渲染时恢复）
+        self._nav_text = ""
     
     def init(self):
         try:
@@ -118,6 +122,7 @@ class DisplayService(BaseModule):
                 self.event_bus.subscribe(EVENT_ALARM_CANCELED, self._on_alarm_canceled)
                 self.event_bus.subscribe(EVENT_POWER_STATE_CHANGE, self._on_power_state_change)
                 self.event_bus.subscribe(EVENT_CONFIG_UPDATE, self._on_config_update)
+                self.event_bus.subscribe(EVENT_NAV_DISPLAY, self._on_nav_display)
             
             self._show_boot_screen()
             
@@ -314,6 +319,13 @@ class DisplayService(BaseModule):
                 
                 print("[{}] 正常画面渲染: {} {} {} {}".format(
                     self.name, temp_str, humid_str, location_str, speed_str))
+
+                # 恢复导航文字（如果有）
+                if self._nav_text and hasattr(self.lcd_driver, 'show_nav_line'):
+                    try:
+                        self.lcd_driver.show_nav_line(10, 110, self._nav_text)
+                    except Exception:
+                        pass
         
         except Exception as e:
             print("[{}] 正常画面渲染失败: {}".format(self.name, e))
@@ -515,6 +527,13 @@ class DisplayService(BaseModule):
                 self.cfg["backlight_normal"] = int(payload["backlight_normal"])
         if "power_state" in payload:
             self.ctx["power_state"] = payload["power_state"]
+
+    def _on_nav_display(self, payload):
+        """
+        brief 导航显示内容变更回调
+        param payload: {"text": str} — 空字符串表示清除导航文字
+        """
+        self._nav_text = payload.get("text", "")
     
     def get_data(self):
         """获取当前显示数据"""

@@ -10,7 +10,7 @@ from quectel import Audio as Audio
 from core.Base_Module import BaseModule
 from core.config import (EVENT_AUDIO_PLAYBACK_START, EVENT_AUDIO_PLAYBACK_END,
                     EVENT_AUDIO_ERROR, EVENT_VOLUME_CONTROL,
-                    EVENT_CONFIG_UPDATE, EVENT_TTS_REQUEST, EVENT_POWER_STATE_CHANGE,
+                    EVENT_CONFIG_UPDATE, EVENT_POWER_STATE_CHANGE,
                     EVENT_ALARM_TRIGGERED, EVENT_ALARM_CANCELED,
                     POWER_STATE_ACTIVE,
                     AUDIO_TTS_SPEED, AUDIO_TTS_VOLUME, AUDIO_SPEAKER_VOLUME)
@@ -82,7 +82,6 @@ class AudioDriver(BaseModule):
             # 4. 订阅事件
             if self.event_bus:
                 self.event_bus.subscribe(EVENT_POWER_STATE_CHANGE, self._on_config_update)
-                self.event_bus.subscribe(EVENT_TTS_REQUEST, self._on_tts_request)
                 self.event_bus.subscribe(EVENT_VOLUME_CONTROL, self._on_volume_control)
                 self.event_bus.subscribe(EVENT_ALARM_TRIGGERED, self._on_alarm_triggered)
                 self.event_bus.subscribe(EVENT_ALARM_CANCELED, self._on_alarm_canceled)
@@ -180,20 +179,6 @@ class AudioDriver(BaseModule):
             old_state = self.ctx["power_state"]
             self.ctx["power_state"] = payload["power_state"]
             print(f"[{self.name}] 功耗状态: {old_state} -> {payload['power_state']}")
-
-    def _on_tts_request(self, payload):
-        """
-        brief TTS 播报请求回调
-        param payload: {text: "当前温度28度"}
-        note 先停止当前播报再播放新的，防止重叠
-              报警中拒绝 TTS（报警音优先）
-        """
-        if self.ctx.get("alarm_playing"):
-            return  # 报警中，拒绝 TTS
-        text = payload.get("text", "")
-        if text:
-            self.stop()
-            self.play_tts(text)
 
     def _on_alarm_triggered(self, payload):
         """报警触发：标记报警播放中"""
