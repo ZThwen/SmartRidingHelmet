@@ -359,7 +359,8 @@ while True:
 | EVENT_AUDIO_PLAYBACK_START | 音频开始播放 | AudioDriver | AlarmService |
 | EVENT_AUDIO_PLAYBACK_END | 音频播放结束 | AudioDriver | AlarmService |
 | EVENT_AUDIO_ERROR | 音频播放错误 | AudioDriver | — |
-| EVENT_TTS_REQUEST | TTS 播报请求 | ControlService | AudioDriver |
+| EVENT_TTS_REQUEST | TTS 播报请求 | ControlService/NavigationService | AudioService |
+| EVENT_NAV_DISPLAY | 导航显示内容变更 | NavigationService | DisplayService |
 | **电源事件** | | | |
 | EVENT_BATTERY_LOW | 低电量警告 | PowerService | AlarmService, CloudService, DisplayService |
 | EVENT_BATTERY_CRITICAL | 电量严重不足 | PowerService | AlarmService, CloudService |
@@ -404,6 +405,7 @@ while True:
 | Network | Drivers/network/Network.py | Device | ✅ | 4G 网络模组 |
 | MQTTDriver | Drivers/network/MQTT.py | Device | ✅ | MQTT 协议封装 |
 | CollisionService | Modules/collision_service.py | Service | ✅ | 碰撞检测算法（多级阈值+防误报） |
+| AudioService | Modules/audio_service.py | Service | ✅ v1 | 统一音频调度（优先级队列+超时丢弃） |
 | AlarmService | Modules/alarm_service.py | Service | ✅ | 报警联动（声光+BLE+云端） |
 | CloudService | Modules/cloud_service.py | Service | ✅ | MQTT 云端通信与数据上报 |
 | DisplayService | Modules/display_service.py | Service | ✅ | LCD 显示管理 |
@@ -431,14 +433,15 @@ while True:
   9. PWM_LED       → PE11 PWM 调光灯（v2 新增）
 
 阶段 3 — 业务服务（依赖下层模块）
-  10. CollisionService   → 碰撞检测
-  11. AlarmService       → 报警联动（注入 led, audio）
-  12. CloudService       → MQTT 云端通信
-  13. DisplayService     → LCD 显示管理（注入 lcd_driver, audio_driver）
-  14. LightService       → 自适应灯光（v2 新增）
-  15. BLEService         → BLE 推送服务（注入 ble_driver）
-  16. ControlService     → 统一控制（v3 新增，纯事件驱动）
-  17. NavigationService  → 导航引导（v3 新增）
+   10. CollisionService   → 碰撞检测
+   11. AudioService       → 统一音频调度（注入 audio_driver）（v3 新增）
+   12. AlarmService       → 报警联动（注入 led, audio）
+   13. CloudService       → MQTT 云端通信
+   14. DisplayService     → LCD 显示管理（注入 lcd_driver, audio_driver）
+   15. LightService       → 自适应灯光（v2 新增）
+   16. BLEService         → BLE 推送服务（注入 ble_driver）
+   17. ControlService     → 统一控制（v3 新增，纯事件驱动）
+   18. NavigationService  → 导航引导（v3 新增）
 ```
 
 **依赖注入**：Service 层模块通过构造函数注入 Device 层引用（如 `AlarmService(event_bus, led=led, audio=audio)`），禁止 Service 间直接引用。

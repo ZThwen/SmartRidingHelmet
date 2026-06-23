@@ -1056,6 +1056,30 @@ BLE 指令 → BLEService buffer → tick 解析 → EVENT_RIDE_CONTROL → _exe
 
 ---
 
+### AudioService（统一音频调度服务）
+
+**定位**：Service 层统一音频业务模块，取代 AudioDriver 直接订阅 TTS 请求的方式。
+
+**职责**：
+- 统一管理所有 TTS/音频播放请求
+- 按优先级调度 AudioDriver（ALARM > NAV > CTRL）
+- 高优先级打断低优先级，报警期间拒绝非报警请求
+- 队列上限 3 个，超时 5s 自动丢弃
+
+**数据流**：
+```
+NavigationService/ControlService → EVENT_TTS_REQUEST(priority) → AudioService → AudioDriver.play_tts()
+```
+
+**优先级定义**：
+| 优先级 | 值 | 场景 |
+|--------|---|------|
+| PRIORITY_ALARM | 0 | 报警语音 |
+| PRIORITY_NAV | 1 | 导航播报 |
+| PRIORITY_CTRL | 2 | 控制反馈 |
+
+---
+
 #### 2.2.6 导航引导服务（NavigationService.py）
 
 **所属层次**：Service层（业务服务层）
@@ -1802,6 +1826,7 @@ gnss.get_location() 返回有效数据
 | 06-14 ~ 06-15 | Phase 4 | 小程序控制页 UI/JS/WXSS + TabBar + BLE 服务集成 + safe area 适配 |
 | 06-18 | Phase 4 | ControlService v3（合并 BLE 推送+TTS+报警快照）；BLEService v3（环形缓冲区+快照合并）；E2E 测试增强；文档同步 |
 | 06-20 | Phase 4 | 语音模块开发完成：VoiceDriver 集成验证 + ASRPRO UART 通信调试 |
+| 06-22 | Phase 5 | **AudioService 统一音频调度 + LCD 导航恢复**：新建 AudioService（优先级队列 ALARM>NAV>CTRL + 超时 5s 丢弃 + 队列上限 3）；NavigationService TTS 改用 EventBus 发布；DisplayService 订阅 EVENT_NAV_DISPLAY 渲染恢复导航文字；AudioDriver 移除 TTS 订阅改为纯硬件层；Oracle 审查修复 3 个 Bug（同优先级覆盖延迟 / 僵尸 TTS 线程 / 报警期间 LCD 泄露）；小程序报警双端同步（globalData + EventBus）；省电模式灯光控制修复（PWM_LED CUSTOM 模式 + ControlService 时序） |
 
 ---
 
@@ -1930,7 +1955,7 @@ M1: 起步验证 ──→ M2: 本地闭环 ──→ M3: 云端打通 ──→
 
 ---
 
-**文档版本**：v8.0
-**更新日期**：2026-06-20
+**文档版本**：v8.1
+**更新日期**：2026-06-22
 **维护团队**：锦依卫队
-**备注**：Phase 4 代码完成（ControlService v3 + BLE 快照合并 + VoiceDriver + 小程序远端控制），v2 模块待集成 main.py，M5 进行中
+**备注**：Phase 5 — AudioService 统一音频调度 + LCD 导航恢复 + 小程序报警双端同步 + 省电模式灯光修复
