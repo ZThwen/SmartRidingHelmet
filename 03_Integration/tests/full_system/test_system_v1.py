@@ -12,7 +12,7 @@ note 包含调试反馈订阅，用于验证所有模块协作正常
 import sys
 import time
 
-sys.path.append("..")
+sys.path.append("../../02_Software")
 
 from core.Event_Bus import EventBus
 from core.config import (EVENT_SYSTEM_READY, EVENT_BUTTON_PRESSED,

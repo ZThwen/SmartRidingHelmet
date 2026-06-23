@@ -10,7 +10,7 @@ sys.path.append("../../../02_Software")
 
 from core.Event_Bus import EventBus
 from core.config import (
-    EVENT_CONFIG_UPDATE, EVENT_PWM_LED_ERROR,
+    EVENT_POWER_STATE_CHANGE, EVENT_PWM_LED_ERROR,
     EVENT_BLE_CONNECTED, EVENT_BLE_DISCONNECTED,
     POWER_STATE_ACTIVE, POWER_STATE_SUSPENDED,
 )
@@ -52,13 +52,13 @@ def make_system():
     else:
         # 更新 BLE 的 EventBus 引用，并在新总线上订阅 CONFIG_UPDATE
         _shared_ble.event_bus = bus
-        bus.subscribe(EVENT_CONFIG_UPDATE, _shared_ble._on_config_update)
+        bus.subscribe(EVENT_POWER_STATE_CHANGE, _shared_ble._on_config_update)
 
     ble = _shared_ble
 
     # 事件日志订阅（每次新建系统时重置）
     event_log.clear()
-    bus.subscribe(EVENT_CONFIG_UPDATE, lambda p: on_any_event("CFG", p))
+    bus.subscribe(EVENT_POWER_STATE_CHANGE, lambda p: on_any_event("CFG", p))
     bus.subscribe(EVENT_PWM_LED_ERROR, lambda p: on_any_event("PWM_ERR", p))
     bus.subscribe(EVENT_BLE_CONNECTED, lambda p: on_any_event("BLE_CONN", p))
     bus.subscribe(EVENT_BLE_DISCONNECTED, lambda p: on_any_event("BLE_DISC", p))
@@ -167,7 +167,7 @@ def test_05_pwm_brightness_via_event():
     assert pwm.get_data()["duty_cycle"] == 0, "Initial duty should be 0"
 
     # 通过事件设置亮度 50%
-    send_event(bus, EVENT_CONFIG_UPDATE, {
+    send_event(bus, EVENT_POWER_STATE_CHANGE, {
         "power_state": POWER_STATE_ACTIVE,
         "source": "test",
     })
@@ -195,7 +195,7 @@ def test_05_pwm_brightness_via_event():
 
 
 def test_06_power_state_suspend():
-    """Test 6: 通过 CONFIG_UPDATE 事件切换省电模式，PWM 自动熄灭"""
+    """Test 6: 通过 POWER_STATE_CHANGE 事件切换省电模式，PWM 自动熄灭"""
     print("\n--- test_06_power_state_suspend ---")
     bus, pwm, ble = make_system()
 
@@ -204,7 +204,7 @@ def test_06_power_state_suspend():
     assert pwm.get_data()["duty_cycle"] == 80
 
     # 切换到 SUSPENDED 模式，PWM 应自动熄灭
-    send_event(bus, EVENT_CONFIG_UPDATE, {
+    send_event(bus, EVENT_POWER_STATE_CHANGE, {
         "power_state": POWER_STATE_SUSPENDED,
         "source": "test",
     })

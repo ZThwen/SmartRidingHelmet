@@ -288,9 +288,8 @@ def test_08_power_state_suspended():
     pwm.calls = []
 
     # 切换到 SUSPENDED 模式
-    send_event(bus, EVENT_CONFIG_UPDATE, {
+    send_event(bus, EVENT_POWER_STATE_CHANGE, {
         "power_state": POWER_STATE_SUSPENDED,
-        "source": "test",
     })
 
     # 验证 power_state 已更新
