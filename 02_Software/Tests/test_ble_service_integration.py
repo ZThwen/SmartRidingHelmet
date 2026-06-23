@@ -23,6 +23,15 @@ class FakeBLEDriver:
     def __init__(self):
         self.notify_calls = []
         self.ctx = {"is_connected": True, "is_init": True}
+        self._data_handler = None
+        self.cfg = {
+            "char_nav": 0xFFF2,
+            "char_ctrl": 0xFFF3,
+            "char_ack": 0xFFF4,
+        }
+
+    def set_data_handler(self, handler):
+        self._data_handler = handler
 
     def notify_data(self, json_str):
         self.notify_calls.append(json.loads(json_str))
@@ -90,10 +99,10 @@ def test_alarm_immediate_push():
     found = False
     for call in fake_ble.notify_calls:
         if call.get("t") == 5:
-            assert call["d"]["lvl"] == 2
-            assert call["d"]["type"] == "collision"
+            assert call.get("a") == 1, "报警类型码应为 collision(1)"
+            assert call.get("l") == 2, "报警等级应为 2"
             found = True
-            print("  ✓ 报警立即推送: level=%s" % call["d"]["lvl"])
+            print("  ✓ 报警立即推送: a=%s l=%s" % (call.get("a"), call.get("l")))
             break
     assert found, "未收到报警推送"
 

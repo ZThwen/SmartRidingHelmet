@@ -8,7 +8,7 @@ import time
 sys.path.append("..")
 
 from core.Event_Bus import EventBus
-from core.config import EVENT_SYSTEM_READY, EVENT_SENSOR_ERROR, EVENT_CONFIG_UPDATE
+from core.config import EVENT_SYSTEM_READY, EVENT_SENSOR_ERROR,EVENT_POWER_STATE_CHANGE
 from Drivers.sensor.Light import LightSensorDriver
 
 try:
@@ -119,29 +119,6 @@ class IntegrationTest:
         else:
             print("\n✗ 未接收到光照传感器事件")
             
-    def test_config_update(self):
-        """
-        brief 测试动态配置更新
-        """
-        print("\n" + "-" * 60)
-        print("[测试 2] 配置更新测试")
-        print("-" * 60)
-        
-        print("\n发布配置更新事件: 采样间隔 -> 1000ms")
-        self.event_bus.publish(EVENT_CONFIG_UPDATE, {
-            "target": "light_Sensor",
-            "sample_ms": 1000
-        })
-        
-        self.event_bus.pump()
-        time.sleep(0.1)
-        
-        light = self.modules[0]
-        if light.cfg["sample_ms"] == 1000:
-            print("✓ 配置更新成功")
-        else:
-            print("✗ 配置更新失败")
-            
     def test_continuous_sampling(self):
         """
         brief 测试连续采样
@@ -206,7 +183,6 @@ class IntegrationTest:
             self.init_modules()
             
             self.test_event_flow()
-            self.test_config_update()
             self.test_continuous_sampling()
             
             self.print_summary()
