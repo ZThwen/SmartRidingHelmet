@@ -81,6 +81,7 @@ function _registerListeners() {
     if (!str || str.length < 3) return;
     try {
       var data = JSON.parse(str);
+      logger.log('BLE', '收到数据: ' + JSON.stringify(data));
       _callbacks.onData(data);
     } catch (e) {
       logger.log('BLE', '解析失败: ' + str);
@@ -171,6 +172,12 @@ function _enableNotify(deviceId, serviceId, charId) {
     serviceId: serviceId,
     characteristicId: charId,
     state: true,
+    success: function() {
+      logger.log('BLE', 'CCCD 订阅成功: ' + charId.slice(-4));
+    },
+    fail: function(err) {
+      logger.log('BLE', 'CCCD 订阅失败: ' + JSON.stringify(err));
+    },
   });
 }
 

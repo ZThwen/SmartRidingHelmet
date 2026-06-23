@@ -552,11 +552,27 @@ Page({
               },
             });
           }
+          // ★ 同步全局报警状态（双端同步）
+          app.globalData.alarmActive = true;
+          var bus = app.eventBus;
+          if (bus) {
+            bus.emit('alarm:triggered', {
+              type: typeName,
+              level: alarmLevel,
+              time: new Date().toLocaleTimeString(),
+            });
+          }
           // 导航暂停
           if (NavService.isNavigating()) NavService.pause();
         } else if (data.t === 6) {
-          that.setData({ alarm: '正常' });
+          that.setData({ alarm: '正常', alarmPopupClass: '' });
           if (that.data.showAlarmPopup) that.setData({ showAlarmPopup: false });
+          // ★ 同步全局报警状态（双端同步）
+          app.globalData.alarmActive = false;
+          var bus = app.eventBus;
+          if (bus) {
+            bus.emit('alarm:cancelled');
+          }
           // 导航恢复
           if (NavService.getState().state === 'paused') NavService.resume();
         }
