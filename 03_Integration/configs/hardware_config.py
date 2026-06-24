@@ -16,6 +16,10 @@ IMU_ADDR        = 0x19
 # ================= ADC =================
 LIGHT_ADC_PIN   = "PC5"      # GL5528 光敏电阻
 
+# 电池电压 ADC
+BATTERY_ADC_PIN     = "PC4"      # 电源扩展板锂电池分压
+BATTERY_DIVIDER_RATIO = 1.45     # 分压比（外部电阻分压）
+
 # ================= GPIO =================
 BUTTON_PIN      = "SW"       # SOS 按键
 LED_PIN         = "LED_BLUE" # 指示灯
@@ -33,7 +37,7 @@ PWM_LED_FREQ     = 1000
 
 # ================= UART =================
 VOICE_UART_ID    = 2         # ASRPRO 语音模块
-VOICE_BAUDRATE   = 9600
+VOICE_BAUDRATE   = 115200
 
 # ================= BLE =================
 BLE_NAME         = "SmartHelmet-66ccff"

@@ -374,3 +374,33 @@ Step 5 的 3 个问题全部是**测试代码缺陷**，不是模块代码缺陷
 **核心建议**：
 - 写测试前检查 3 件事：① tick 后有没有 pump ② Fake 有没有 init ③ 硬件替换在 init 之后
 - 这 3 条规则覆盖了 90% 的集成测试 bug
+
+---
+
+## [2026-06-24] Step 6 — 电池/电源集成经验
+
+### 经验 13：启动宽限期导致测试静默失效
+
+**现象**：PowerService 添加 sample_count < 3 宽限期后，test_power_battery.py 的 test_04/05/06/08 全部静默通过但不触发事件
+
+**根因**：测试通过 bus.publish() 直接发布 EVENT_BATTERY_READY，payload 中没有 sample_count 字段（默认 0），PowerService._on_battery() 在 sample_count < 3 时直接 return
+
+**教训**：在底层模块添加过滤逻辑后，必须检查所有直接发布事件的测试是否受到影响
+
+---
+
+### 经验 14：AudioDriver tick() 的 power_state 守卫陷阱
+
+**现象**：audio.py 的回调处理被 power_state 守卫阻塞，导致 TTS_END 事件无法发布，is_tts_playing 卡死为 True
+
+**根因**：tick() 中 `if self.ctx["power_state"] != POWER_STATE_ACTIVE: return` 阻止了回调缓冲区的处理
+
+**教训**：回调/中断上下文的处理必须始终执行，不受电源模式影响
+
+---
+
+### 经验 15：ControlService 自订阅 EVENT_POWER_STATE_CHANGE
+
+**设计决策**：ControlService 订阅自己发布的 EVENT_POWER_STATE_CHANGE，用于接收 PowerService 的自动省电事件并回推到小程序
+
+**注意**：不是"自订阅导致时序问题"——和执行指令时的直接更新不冲突

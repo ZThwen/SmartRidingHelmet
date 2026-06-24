@@ -79,6 +79,7 @@
         <view class="data-row"><text class="d-label">温度</text><text class="d-value">{{temp}}</text></view>
         <view class="data-row"><text class="d-label">湿度</text><text class="d-value">{{humid}}</text></view>
         <view class="data-row"><text class="d-label">速度</text><text class="d-value">{{speed}}</text></view>
+        <view class="data-row"><text class="d-label">电量</text><text class="d-value">{{battery}}</text></view>
       </view>
       <view class="corner tl"></view><view class="corner tr"></view>
       <view class="corner bl"></view><view class="corner br"></view>
@@ -123,7 +124,8 @@
       <view class="corner bl"></view><view class="corner br"></view>
     </view>
 
-    <view style="height:320rpx"></view>
+    <!-- 底部间距（避让 custom-tab-bar 按钮区 + tab 栏 = 约 220rpx） -->
+    <view style="height:240rpx;"></view>
   </view>
 
   <!-- 报警全屏弹窗 -->
@@ -190,10 +192,11 @@
         <view class="nav-picker-or"><text>or</text></view>
         <button class="nav-picker-btn skip" bindtap="onSkipNavigation">直接出发</button>
       </view>
+      <view class="nav-picker-cancel" bindtap="onCancelNavPicker">取消</view>
     </view>
   </view>
 
-  <!-- 导航指令浮层 -->
+  <!-- 导航指令浮层（纯信息展示，取消导航已移至底部 TabBar） -->
   <view class="nav-card" wx:if="{{showNavCard}}">
     <view class="nav-card-top-line"></view>
     <view class="nav-card-body">
@@ -214,7 +217,7 @@
     </view>
     <view class="nav-card-footer">
       <text class="nav-remain-detail">全程 {{navRemainDistance}}m</text>
-      <text class="nav-cancel" bindtap="onCancelNavigation">取消导航</text>
+      <text class="nav-status-hint">{{navState === 'paused' ? '⚠ 报警暂停中' : '▼ 底部取消导航'}}</text>
     </view>
   </view>
 

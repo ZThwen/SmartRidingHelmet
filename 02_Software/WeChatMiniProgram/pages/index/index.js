@@ -21,7 +21,7 @@ Page({
     showBlePicker: false,
     temp: '--', humid: '--', speed: '--', cog: '--',
     lat: '--', lon: '--', alt: '--',
-    lux: '--', alarm: '正常', time: '',
+    lux: '--', battery: '--', alarm: '正常', time: '',
     riding: false,
     btnText: '开始骑行',
     btnClass: 'btn-start',
@@ -174,6 +174,8 @@ Page({
         data.navInstruction = '';
       }
       that.setData(data);
+      // 通知自定义 tab bar 同步导航状态
+      that._syncTabBar();
     });
 
     // eventBus 监听（报警跨页面同步）
@@ -203,6 +205,143 @@ Page({
     if (app.globalData.alarmActive && !this.data.showAlarmPopup) {
       this.setData({ showAlarmPopup: true });
     }
+    // 同步 BLE 连接状态（以底层真实状态为准）
+    var realConnected = BleService.isConnected();
+    var syncData = {};
+    if (this.data.bleConnected !== realConnected) {
+      syncData.bleConnected = realConnected;
+      syncData.bleStatus = realConnected ? '已连接' : '未连接';
+    }
+    // 同步骑行状态（wx.redirectTo 重建页面后恢复）
+    var realRiding = !!app.globalData.isRiding;
+    if (realRiding) {
+      syncData.riding = true;
+      syncData.status = realConnected ? '骑行中...' : '已断开';
+      syncData.isOnline = realConnected;
+      syncData.btnText = '结束骑行';
+      syncData.btnClass = 'btn-end';
+    }
+    // 同步导航状态（从控制页返回时恢复导航 UI）
+    if (NavService.isNavigating() || NavService.getState().state === 'paused') {
+      var navState = NavService.getState();
+      var instr = NavService.getCurrentInstruction();
+      syncData.navState = navState.state;
+      syncData.showNavCard = true;
+      if (!realRiding) {
+        syncData.status = '导航中...';
+        syncData.isOnline = true;
+      }
+      if (instr) {
+        syncData.navInstruction = navState.state === 'paused' ? '报警中，导航暂停' : instr.instruction;
+        syncData.navCurDistance = instr.distance;
+      }
+      syncData.navRemainDistance = navState.remainDistance;
+    }
+    // 恢复缓存的传感器数据（页面重建后等待 BLE 推送前显示）
+    if (realConnected) {
+      var cached = app.globalData.latestSensorData;
+      if (cached) {
+        if (cached.temp && syncData.temp === undefined) syncData.temp = cached.temp;
+        if (cached.humid && syncData.humid === undefined) syncData.humid = cached.humid;
+        if (cached.speed && syncData.speed === undefined) syncData.speed = cached.speed;
+        if (cached.lat && syncData.lat === undefined) syncData.lat = cached.lat;
+        if (cached.lon && syncData.lon === undefined) syncData.lon = cached.lon;
+        if (cached.alt && syncData.alt === undefined) syncData.alt = cached.alt;
+        if (cached.cog && syncData.cog === undefined) syncData.cog = cached.cog;
+        if (cached.lux != null && syncData.lux === undefined) syncData.lux = cached.lux;
+        if (cached.battery && syncData.battery === undefined) syncData.battery = cached.battery;
+        if (cached.time && syncData.time === undefined) syncData.time = cached.time;
+      }
+    }
+    if (Object.keys(syncData).length > 0) {
+      this.setData(syncData);
+    }
+    // 重新注册 BLE 回调（wx.redirectTo 重建页面后 onData 指向旧页面）
+    if (realConnected && !this._bleCallbacksRegistered) {
+      this._restoreBleCallbacks();
+    }
+    // 通知自定义 tab bar 同步状态
+    this._syncTabBar();
+  },
+
+  _restoreBleCallbacks: function() {
+    var that = this;
+    logger.log('PAGE', '重新注册 BLE 回调');
+    BleService.setCallbacks({
+      onConnected: function() {
+        that.setData({ bleConnected: true, bleStatus: '已连接', status: '骑行中...', isOnline: true });
+        app.globalData.bleConnected = true;
+        app.globalData.bleStatus = '已连接';
+        if (app.eventBus) app.eventBus.emit('ble:connected');
+      },
+      onDisconnected: function() {
+        that.setData({ bleConnected: false, bleStatus: '已断开' });
+        app.globalData.bleConnected = false;
+        app.globalData.bleStatus = '已断开';
+        CtrlService.reset();
+        if (app.eventBus) app.eventBus.emit('ble:disconnected');
+      },
+      onData: function(data) {
+        if (data.t === 0 && data.d) {
+          var d = data.d;
+          var u = {};
+          if (d.tmp != null) u.temp = d.tmp.toFixed(1) + '°C';
+          if (d.hum != null) u.humid = d.hum.toFixed(1) + '%';
+          if (d.spd != null) u.speed = d.spd.toFixed(1) + ' km/h';
+          if (d.lat != null) u.lat = d.lat.toFixed(4);
+          if (d.lon != null) u.lon = d.lon.toFixed(4);
+          if (d.alt != null) u.alt = d.alt.toFixed(1) + 'm';
+          if (d.cog != null) u.cog = d.cog.toFixed(0) + '°';
+          if (d.lux != null) u.lux = d.lux;
+          if (d.bat != null) u.battery = d.bat + '档';
+          u.time = new Date().toLocaleTimeString();
+          u.isOnline = true;
+          app.globalData.latestSensorData = {
+            temp: u.temp, humid: u.humid, speed: u.speed,
+            lat: u.lat, lon: u.lon, alt: u.alt, cog: u.cog,
+            lux: u.lux, battery: u.battery, time: u.time,
+          };
+          if (d.lat != null && d.lon != null) {
+            that._lastBleLat = d.lat;
+            that._lastBleLon = d.lon;
+            if (RideService.isActive() && that.data.mapFollowing) {
+              u.mapLat = d.lat;
+              u.mapLon = d.lon;
+            }
+          }
+          if (RideService.isActive() && d.lat != null && d.lon != null) {
+            RideService.addRecord({
+              temp: d.tmp, humid: d.hum, speed: d.spd, cog: d.cog,
+              lat: d.lat, lon: d.lon, alt: d.alt,
+            });
+            var lastPt = that.data.trackPoints.length > 0 ? that.data.trackPoints[that.data.trackPoints.length - 1] : null;
+            var posChanged = !lastPt || lastPt.latitude !== d.lat || lastPt.longitude !== d.lon;
+            if (NavService.isNavigating()) {
+              var userMarker = MapService.buildMarker([{latitude: d.lat, longitude: d.lon}], that._dotIconPath, d.cog);
+              var navPoly = that.data._navPolylines || [];
+              var navMarker = that.data._navMarkers || [];
+              u.trackPolylines = navPoly;
+              u.trackMarkers = navMarker.concat(userMarker);
+            } else {
+              var points = posChanged ? MapService.pushPoint(that.data.trackPoints, d.lat, d.lon) : that.data.trackPoints;
+              if (posChanged) {
+                u.trackPoints = points;
+                u.trackPolylines = MapService.buildPolyline(points);
+                u.trackMarkers = MapService.buildMarker(points, that._dotIconPath, d.cog);
+              }
+            }
+          }
+          that.setData(u);
+        }
+      },
+      onStatus: function(msg) {
+        that.setData({ bleStatus: msg });
+      },
+      onDeviceFound: function(devices) {
+        that.setData({ bleDevices: devices, showBlePicker: true });
+      },
+    });
+    this._bleCallbacksRegistered = true;
   },
 
   onToggleRide: function() {
@@ -283,10 +422,10 @@ Page({
     that.setData({ showNavPicker: false });
     NavService.selectDestination().then(function(dest) {
       that._navDest = dest;
-      that._startRide();
+      that._beginNavOrRide();
     }).catch(function() {
       // 用户取消选择，直接开始骑行
-      that._startRide();
+      that._beginNavOrRide();
     });
   },
 
@@ -297,7 +436,32 @@ Page({
     }
     this.setData({ showNavPicker: false });
     this._navDest = null;
-    this._startRide();
+    this._beginNavOrRide();
+  },
+
+  /**
+   * 开始导航或骑行（根据是否已在骑行中分流）
+   * - 未骑行：调用 _startRide() 开始骑行 + 导航
+   * - 已骑行：直接在当前骑行中启动导航
+   */
+  _beginNavOrRide: function() {
+    if (RideService.isActive()) {
+      // 已在骑行中，直接启动导航
+      if (this._navDest) {
+        var origin = null;
+        if (this.data.bleConnected && this._lastBleLat && this._lastBleLon) {
+          origin = { lat: this._lastBleLat, lng: this._lastBleLon };
+        }
+        NavService.startNavigation(this._navDest, origin);
+        this._navDest = null;
+      }
+      // 通知 tab bar 同步导航状态
+      if (this.getTabBar() && this.getTabBar().updateNav) {
+        this.getTabBar().updateNav();
+      }
+    } else {
+      this._startRide();
+    }
   },
 
   onCancelNavigation: function() {
@@ -313,6 +477,14 @@ Page({
         }
       },
     });
+  },
+
+  onRestartNav: function() {
+    this.setData({ showNavPicker: true });
+  },
+
+  onCancelNavPicker: function() {
+    this.setData({ showNavPicker: false });
   },
 
   onCancelAlarm: function() {
@@ -355,13 +527,19 @@ Page({
       NavService.startNavigation(this._navDest, origin);
       this._navDest = null;
     }
+
+    // 通知自定义 tab bar 同步骑行+导航状态
+    this._syncTabBar();
   },
 
   _endRide: function() {
     logger.log('PAGE', '=== 结束骑行 ===');
 
-    // 结束导航
-    if (NavService.isNavigating()) NavService.stopNavigation('cancelled');
+    // 结束导航（覆盖所有活跃状态：planning/navigating/paused）
+    var navSt = NavService.getState().state;
+    if (navSt === 'planning' || navSt === 'navigating' || navSt === 'paused') {
+      NavService.stopNavigation('cancelled');
+    }
 
     var summary = RideService.end();
     RideService.clear();
@@ -437,6 +615,16 @@ Page({
     }
 
     this.setData(data);
+
+    // 通知自定义 tab bar 同步骑行+导航状态
+    this._syncTabBar();
+  },
+
+  _syncTabBar: function() {
+    var tabBar = this.getTabBar();
+    if (!tabBar) return;
+    if (tabBar.updateRiding) tabBar.updateRiding();
+    if (tabBar.updateNav) tabBar.updateNav();
   },
 
   onCloseSummary: function() {
@@ -452,6 +640,7 @@ Page({
   onToggleBle: function() {
     if (this.data.bleConnected) {
       BleService.disconnect();
+      this._bleCallbacksRegistered = false;
       this.setData({ bleConnected: false, bleStatus: '已断开' });
       return;
     }
@@ -486,6 +675,7 @@ Page({
           if (d.alt != null) u.alt = d.alt.toFixed(1) + 'm';
           if (d.cog != null) u.cog = d.cog.toFixed(0) + '°';
           if (d.lux != null) u.lux = d.lux;
+          if (d.bat != null) u.battery = d.bat + '档';
           u.time = new Date().toLocaleTimeString();
           u.isOnline = true;
 
@@ -528,6 +718,13 @@ Page({
               }
             }
           }
+
+          // 缓存最新传感器数据到全局（页面切换恢复用）
+          app.globalData.latestSensorData = {
+            temp: u.temp, humid: u.humid, speed: u.speed,
+            lat: u.lat, lon: u.lon, alt: u.alt, cog: u.cog,
+            lux: u.lux, battery: u.battery, time: u.time,
+          };
 
           // 合并所有数据为一次 setData
           that.setData(u);
@@ -592,6 +789,7 @@ Page({
         that.setData({ bleDevices: devices, showBlePicker: true });
       },
     }).then(function() {
+      that._bleCallbacksRegistered = true;
       that.setData({ bleStatus: '扫描中...' });
       BleService.scan();
     }).catch(function(err) {

@@ -27,5 +27,7 @@ App({
     },
     // 报警
     alarmActive: false,
+    // 传感器数据缓存（页面切换恢复用）
+    latestSensorData: null,
   },
 });

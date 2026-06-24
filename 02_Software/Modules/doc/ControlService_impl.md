@@ -39,6 +39,8 @@
 | `EVENT_GNSS_READY` | `_on_gnss` | 缓存速度/位置数据 |
 | `EVENT_ALARM_TRIGGERED` | `_on_alarm_triggered` | 标记报警状态（保护 TTS） |
 | `EVENT_ALARM_CANCELED` | `_on_alarm_canceled` | 清除报警状态 |
+| `EVENT_BATTERY_READY` | `_on_battery` | 缓存电量数据供查询 |
+| `EVENT_POWER_STATE_CHANGE` | `_on_power_state` | 回推电源状态到 BLE |
 
 ---
 
@@ -75,7 +77,7 @@
 | `power_normal` | EVENT_POWER_STATE_CHANGE{ACTIVE} | 全系统 | ❌ |
 | `power_emergency` | EVENT_POWER_STATE_CHANGE{EMERGENCY} | 全系统 | ❌ |
 
-### 5.2 查询指令（6 个）
+### 5.2 查询指令（8 个）
 
 | 指令 | 数据来源 | TTS 播报 |
 |------|----------|----------|
@@ -84,7 +86,9 @@
 | `query_temp` | Temp_Humid cache | "当前温度28度" |
 | `query_humid` | Temp_Humid cache | "当前湿度百分之65" |
 | `query_location` | GNSS cache | "当前位置北纬31.23东经121.47" |
-| `query_battery` | N/A | "电量信息暂不可用" |
+| `query_battery` | Battery cache | "当前电量X档" |
+| `query_heartrate` | HeartRate cache | "当前心率每分钟X次" |
+| `query_spo2` | HeartRate cache | "当前血氧百分之X" |
 
 ---
 
@@ -191,6 +195,9 @@ self._sensor_cache = {
     "speed_kmh": None,     # from EVENT_GNSS_READY.speed_kmh
     "latitude": None,      # from EVENT_GNSS_READY.latitude
     "longitude": None,     # from EVENT_GNSS_READY.longitude
+    "battery_level": None, # from EVENT_BATTERY_READY.level
+    "heart_rate": None,    # from EVENT_HEARTRATE_READY.hr
+    "spo2": None,          # from EVENT_HEARTRATE_READY.spo2
 }
 ```
 
@@ -243,3 +250,24 @@ if cmd 非电源类 and cmd 非查询类:
 - 非电源/报警指令在省电模式下执行时
 - 自动将 `power_mode` 改为 `custom`
 - 发布 `EVENT_POWER_STATE_CHANGE{power_state: CUSTOM}`
+
+---
+
+## v4 变更记录（2026-06-24）
+
+### 电池事件订阅
+- 订阅 `EVENT_BATTERY_READY` → `_on_battery`，缓存电量数据供查询指令使用
+- 订阅 `EVENT_POWER_STATE_CHANGE` → `_on_power_state`，接收电源切换通知并回推 BLE
+
+### 电源状态 BLE 回推
+- `_on_power_state` 回调在收到电源切换事件后更新 `_control_state.power_mode`
+- 调用 `_push_state()` 通过 BLE 回推最新电源状态
+
+### 新增查询指令
+- `query_battery`：数据来源从 `N/A` 改为 `Battery cache`，TTS 播报从 `"电量信息暂不可用"` 改为 `"当前电量X档"`
+- `query_heartrate`：新增查询心率指令，数据来源 `HeartRate cache`
+- `query_spo2`：新增查询血氧指令，数据来源 `HeartRate cache`
+- 查询指令总数从 6 个增至 8 个
+
+### 传感器缓存扩展
+- `_sensor_cache` 新增 3 个字段：`battery_level`（EVENT_BATTERY_READY）、`heart_rate` 和 `spo2`（EVENT_HEARTRATE_READY）

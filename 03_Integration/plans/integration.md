@@ -2,7 +2,7 @@
 
 ## TL;DR (For humans)
 
-**What you'll get:** 将 v2 新增的 7 个模块渐进式集成到 `main.py`，形成 18 模块全系统运行，覆盖传感器→执行器→BLE通信→灯光→导航→远端控制→语音的完整业务链路。
+**What you'll get:** 将 v2 新增的 10 个模块渐进式集成到 `main.py`，形成 21 模块全系统运行，覆盖传感器→执行器→BLE通信→音频调度→灯光→导航→远端控制→语音→电池/电源的完整业务链路。
 
 **Why this approach:** 采用 5-Step 渐进式策略（搭积木），每步只新增 1-2 个模块并在板子上验证通过后再推进下一步。每步聚焦一个独立业务链路，出问题能精确定位。
 
@@ -20,7 +20,7 @@
 
 ---
 
-> TL;DR (machine): Large effort, Medium risk. 5-step progressive integration of 7 new modules into main.py, producing an 18-module system (no MQTT/cloud): Step1=base(11), Step2=BLE+PWM(15), Step3=Nav(16), Step4=Control(17), Step5=Voice(18).
+> TL;DR (machine): Large effort, Medium risk. 7-step progressive integration of 11 new modules into main.py, producing a 22-module system (no MQTT/cloud): Step1=base(11), Step2=BLE+PWM(15), Step3=Nav(16), Step4=Control(17), Step5=Voice(18), Step6=AudioService+Battery+Power(21), Step7=HeartRate(22).
 
 ---
 
@@ -46,6 +46,8 @@
 │  [Light] ──EVENT_LIGHT_READY──→ DisplayService (自动调节LCD背光)             │
 │        │                      ──→ LightService (自适应灯光亮度计算)           │
 │        │                      ──→ BLEService (合并到 t=0 推送)               │
+│        │                                                                 │
+│  [HeartRate] ──EVENT_HEARTRATE_READY──→ ControlService (缓存供查询)         │
 │        │                                                                 │
 │  [Voice] ──EVENT_VOICE_CMD──→ ControlService (统一指令入口)                  │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -120,6 +122,11 @@
 │                                                   LightService              │
 │                                                   BLEService                │
 │                                                                             │
+│  EVENT_BATTERY_READY          BatteryDriver       PowerService              │
+│                                                   ControlService            │
+│                                                                             │
+│  EVENT_BATTERY_LOW            PowerService        （外部/日志）              │
+│                                                                             │
 │  EVENT_COLLISION_DETECTED     CollisionService    AlarmService              │
 │                                                                             │
 │  EVENT_ALARM_TRIGGERED        AlarmService        DisplayService            │
@@ -146,12 +153,15 @@
 │  EVENT_LIGHT_CONTROL          ControlService      LightService              │
 │  EVENT_VOLUME_CONTROL         ControlService      AudioDriver               │
 │  EVENT_ALARM_CONTROL          ControlService      AlarmService              │
-│  EVENT_TTS_REQUEST            ControlService      AudioDriver               │
+│  EVENT_TTS_REQUEST            ControlService      AudioService              │
+│                                                   AudioDriver (直连,已废弃) │
 │                                                                             │
 │  EVENT_POWER_STATE_CHANGE     ControlService      所有传感器/LightService    │
+│                                                   PowerService              │
 │                                                   CollisionService          │
 │                                                   AlarmService              │
 │                                                   PWM_LEDDriver             │
+│                                                   ControlService            │
 │                                                                             │
 │  EVENT_CONFIG_UPDATE          （外部/调试）        所有模块（通用配置更新）    │
 │  EVENT_SYSTEM_READY           main.py             各模块                    │
@@ -170,13 +180,16 @@
 │  模块                  构造函数参数                    依赖的Device          │
 │  ─────────────────────────────────────────────────────────────────────────   │
 │  CollisionService      (event_bus)                    无（纯事件驱动）       │
+│  AudioService          (event_bus, audio_driver)      AudioDriver            │
+│  PowerService          (event_bus)                    无（纯事件驱动）       │
 │  AlarmService          (event_bus, led, audio)        LEDDriver, AudioDriver │
 │  DisplayService        (event_bus, lcd_driver,        LCDDriver, AudioDriver │
 │                         audio_driver)                                     │
 │  LightService          (event_bus, pwm_led)           PWMLEDDriver           │
 │  BLEService            (event_bus, ble_driver)        BLEDriver              │
 │  ControlService        (event_bus, temp_humid,        TempHumidDriver,       │
-│                         gnss)                          GNSSDriver             │
+│                         gnss, heart_rate,              GNSSDriver,            │
+│                         power_svc)                    HeartRateDriver         │
 │  NavigationService     (event_bus, audio_driver,      AudioDriver,           │
 │                         lcd_driver)                   LCDDriver              │
 │                                                                             │
@@ -197,26 +210,29 @@
   2. IMUDriver          → I2C1, addr 0x19
   3. GNSSDriver         → EC200U 内置 GNSS
   4. LightSensorDriver  → ADC PC5
+  5. BatteryDriver      → ADC PC4（电池电压）       ← v2 新增
 
 阶段 2 — 执行器+接口（硬件输出就绪）
-  5. Button             → GPIO 'SW', IRQ_RISING
-  6. LEDDriver          → GPIO 'LED_BLUE', Timer1
-  7. AudioDriver        → EC200U quectel.Audio
-  8. LCDDriver          → SPI1, dc=F12, cs=D14
-  9. PWMLEDDriver       → PE11, TIM1_CH2        ← v2 新增
-  10. VoiceDriver       → UART2, 115200          ← v2 新增
+  6. Button             → GPIO 'SW', IRQ_RISING
+  7. LEDDriver          → GPIO 'LED_BLUE', Timer1
+  8. AudioDriver        → EC200U quectel.Audio
+  9. LCDDriver          → SPI1, dc=F12, cs=D14
+  10. PWMLEDDriver       → PE11, TIM1_CH2        ← v2 新增
+  11. VoiceDriver       → UART2, 115200          ← v2 新增
 
 阶段 3 — 网络（通信通道就绪）
-  11. BLEDriver         → EC200U 内置 BLE 4.2    ← v2 新增
+  12. BLEDriver         → EC200U 内置 BLE 4.2    ← v2 新增
 
 阶段 4 — 业务服务（依赖下层模块）
-  12. CollisionService  → 碰撞检测
-  13. AlarmService      → 报警联动（注入 led, audio）
-  14. DisplayService    → LCD 显示（注入 lcd_driver, audio_driver）
-  15. LightService      → 自适应灯光（注入 pwm_led）        ← v2 新增
-  16. BLEService        → BLE 推送（注入 ble_driver）       ← v2 新增
-  17. ControlService    → 统一控制（注入 temp_humid, gnss）  ← v2 新增
-  18. NavigationService → 导航引导（注入 audio_driver, lcd_driver）← v2 新增
+  13. PowerService      → 电源管理（自动省电+TTS）← v2 新增
+  14. CollisionService  → 碰撞检测
+  15. AudioService      → 统一音频调度（注入 audio_driver）   ← v2 新增
+  16. AlarmService      → 报警联动（注入 led, audio）
+  17. DisplayService    → LCD 显示（注入 lcd_driver, audio_driver）
+  18. LightService      → 自适应灯光（注入 pwm_led）        ← v2 新增
+  19. BLEService        → BLE 推送（注入 ble_driver）       ← v2 新增
+  20. ControlService    → 统一控制（注入 temp_humid, gnss）  ← v2 新增
+  21. NavigationService → 导航引导（注入 audio_driver, lcd_driver）← v2 新增
 
    注：LBSDriver 暂不集成（P2 优先级）
 ```
@@ -452,6 +468,12 @@ BLE FFF2 写入 {"a":"nav","d":{"dir":"right","dist":200,"road":"中山路"}}
 → EVENT_CONTROL_STATE_CHANGED → BLEService → BLE notify t=7
 → EVENT_TTS_REQUEST → AudioDriver.play_tts("灯光已开启")
 
+链路2.5 — 电源状态回推：
+PowerService 检测低电量 → EVENT_POWER_STATE_CHANGE{SUSPENDED}
+→ ControlService._on_power_state() → 更新 _control_state["power_mode"]
+→ _push_state() → EVENT_CONTROL_STATE_CHANGED → BLEService → BLE notify t=7
+→ 手机小程序收到电源模式变更
+
 链路2 — 查询状态：
 手机下发 query_status
 → ControlService → 读取缓存传感器数据
@@ -515,16 +537,123 @@ ASRPRO 发送 0x0E（query_status）
 3. 语音"查询状态" → TTS 播报
 4. 无 ASRPRO 硬件时系统正常启动（VoiceDriver 跳过）
 
-**测试文件**：Wave 6 待创建（等 ASRPRO 硬件）
+**测试文件**：
+- `03_Integration/tests/step5_voice/test_voice_driver.py`
+- `03_Integration/tests/step5_voice/test_voice_control_integration.py`
+- `03_Integration/tests/step5_voice/test_voice_e2e.py`
+- `03_Integration/tests/step5_voice/test_voice_real_debug.py`
 
 ---
 
-## 5. main.py v2 完整代码模板
+### Step 6: 补充测试（AudioService + 电池/电源 + 全系统 v2）
+
+**目标**：为新增的 AudioService、BatteryDriver、PowerService 模块编写集成测试，并创建 21 模块全系统集成测试替代过时的 v1 版本。
+
+**新增模块（3个）**：
+| 模块 | 文件 | 说明 |
+|------|------|------|
+| AudioService | `Modules/audio_service.py` | 统一音频调度（优先级队列 + 超时丢弃） |
+| BatteryDriver | `Drivers/sensor/Battery.py` | ADC PC4 电池电压采集，6 档电量 |
+| PowerService | `Modules/power_service.py` | 低电量自动省电 + TTS 提醒 |
+
+**AudioService 调度规则**：
+1. 高优先级打断低优先级（ALARM(0) > NAV(1) > CTRL(2)）
+2. 同优先级覆盖当前
+3. 低优先级入队等待（队列上限 3）
+4. 报警期间拒绝非报警请求
+5. 队列项超时 5s 自动丢弃
+
+**BatteryDriver + PowerService 规则**：
+1. ADC PC4 采集电池电压，分压比 1.45
+2. 6 档电量映射：0(没电) / 1(危急) / 2(低) / 3(中等) / 4(良好) / 5(满)
+3. level≤2 时自动切换 SUSPENDED 省电模式
+4. 低电量 TTS 播报"当前电量不足，请及时充电"
+5. auto_suspended 防重复标记，手动 ACTIVE 时清除
+6. 启动宽限期：前 3 次 ADC 采样不做省电决策（sample_count < 3 → 跳过）
+7. 未接电池保护：battery_mv < 1000 时跳过省电逻辑
+8. 低电量阈值：battery_mv < 1000 视为未接电池（原 500→1000）
+
+**初始化顺序变更**：
+```
+原：... → CollisionService → AudioService → AlarmService → ...
+新：BatteryDriver(传感器区) + PowerService → CollisionService → AudioService → AlarmService → ...
+```
+
+**测试文件**：
+- `03_Integration/tests/step6_addition/test_audio_service.py`（8 个用例）
+- `03_Integration/tests/step6_addition/test_power_battery.py`（8 个用例）
+- `03_Integration/tests/step6_addition/test_full_system_v2.py`（10 个用例）
+
+**验证目标**：
+1. AudioService 优先级调度正确（高打断低、同级覆盖、低入队）
+2. 报警期间非报警 TTS 被拒绝
+3. 队列满时丢弃最旧，超时项自动清理
+4. BatteryDriver ADC 读数 + 6 档映射正确
+5. level≤2 → 自动省电 + TTS + EVENT_BATTERY_LOW
+6. 21 模块全部初始化成功
+7. 传感器事件链 → DisplayService 正确更新
+8. 碰撞报警链路畅通
+9. 主循环 tick() < 5ms
+10. 内存无泄漏
+
+---
+
+### Step 7: 心率血氧模块集成
+
+**目标**：集成 HeartRateDriver，实现心率血氧数据采集 + 语音查询。
+
+**新增模块（1个）**：
+| 模块 | 文件 | 说明 |
+|------|------|------|
+| HeartRateDriver | `Drivers/sensor/HeartRate.py` | MKS SPO2-ZS-BLE 心率血氧，UART9 |
+
+**修改文件**：
+- `02_Software/core/main.py`：添加 HeartRateDriver 初始化
+- `02_Software/Modules/control_service.py`：添加 heart_rate 参数 + query_heartrate/query_spo2
+
+**初始化顺序变更**：
+```
+原：BatteryDriver → Button → ...
+新：BatteryDriver → HeartRateDriver → Button → ...
+```
+
+**数据流验证**：
+```
+链路1 — 心率数据采集：
+HeartRateDriver.tick() (每 2000ms) → UART 读取 50 字节帧
+→ EVENT_HEARTRATE_READY{heart_rate, spo2, valid}
+→ ControlService 缓存
+
+链路2 — 语音查询心率：
+ASRPRO 发送 0x14 → VoiceDriver → EVENT_VOICE_CMD{cmd:"query_heartrate"}
+→ ControlService._query_heartrate()
+→ heart_rate.force_read() → 返回缓存数据
+→ TTS 播报"当前心率94次每分钟"
+
+链路3 — 语音查询血氧：
+ASRPRO 发送 0x15 → VoiceDriver → EVENT_VOICE_CMD{cmd:"query_spo2"}
+→ ControlService._query_spo2()
+→ heart_rate.force_read() → 返回缓存数据
+→ TTS 播报"当前血氧饱和度百分之88"
+```
+
+**验证目标**：
+1. HeartRateDriver 初始化成功（UART9）
+2. 心率血氧数据正常采集（HR=90-95, SpO2=86-91）
+3. 语音"查询心率" → TTS 播报实际心率值
+4. 语音"查询血氧" → TTS 播报实际血氧值
+5. force_read() 返回缓存数据，不阻塞主循环
+6. 主循环 tick() < 5ms
+
+**测试文件**：
+- `02_Software/Tests/test_heartrate.py`（手指测试 60 秒 + force_read 测试）
+
+---
 
 ```python
 """
 brief 智能骑行头盔系统入口 — v2 正式版
-note 集成 18 个模块（4 传感器 + 6 执行器/接口 + 1 网络 + 7 Service）
+note 集成 21 个模块（5 传感器 + 6 执行器/接口 + 1 网络 + 9 Service）
      不含 MQTT 云连接，LBSDriver 暂不集成（P2）
 """
 import sys
@@ -541,6 +670,7 @@ from Drivers.sensor.Temp_Humid import TempHumidDriver
 from Drivers.sensor.imu import IMUDriver
 from Drivers.sensor.Gnss import GNSSDriver
 from Drivers.sensor.Light import LightSensorDriver
+from Drivers.sensor.Battery import BatteryDriver
 
 # 执行器+接口
 from Drivers.interface.Button import Button
@@ -555,12 +685,14 @@ from Drivers.network.BLE import BLEDriver
 
 # 服务
 from Modules.collision_service import CollisionService
+from Modules.audio_service import AudioService
 from Modules.alarm_service import AlarmService
 from Modules.display_service import DisplayService
 from Modules.light_service import LightService
 from Modules.ble_service import BLEService
 from Modules.control_service import ControlService
 from Modules.navigation_service import NavigationService
+from Modules.power_service import PowerService
 
 
 def main():
@@ -590,23 +722,25 @@ def main():
 
     # --- 阶段4: 服务（注入 Device 引用）---
     collision = CollisionService(event_bus)
+    audio_svc = AudioService(event_bus, audio_driver=audio)
     alarm = AlarmService(event_bus, led=led, audio=audio)
     display = DisplayService(event_bus, lcd_driver=lcd, audio_driver=audio)
     light_svc = LightService(event_bus, pwm_led=pwm_led)
     ble_svc = BLEService(event_bus, ble_driver=ble)
     ctrl_svc = ControlService(event_bus, temp_humid=temp_humid, gnss=gnss)
     nav_svc = NavigationService(event_bus, audio_driver=audio, lcd_driver=lcd)
+    power_svc = PowerService(event_bus)
 
     # 3. 按序初始化
     init_order = [
         # 传感器
-        temp_humid, imu, gnss, light,
+        temp_humid, imu, gnss, light, battery_drv,
         # 执行器+接口
         button, led, audio, lcd, pwm_led, voice,
         # 网络
         ble,
         # 服务
-        collision, alarm, display,
+        power_svc, collision, audio_svc, alarm, display,
         # 服务 v2
         light_svc, ble_svc, ctrl_svc, nav_svc,
     ]
@@ -687,16 +821,16 @@ if __name__ == "__main__":
 
 ## 6. 集成测试策略
 
-### 6.1 测试 Wave 与 Step 对应关系
+### 6.1 测试 Step 对应关系
 
 | Step | 模块数 | 测试文件 | 验证内容 |
 |------|--------|---------|---------|
-| Step 1 ⏳ | 11 | `test_system_base.py`（新建） | 去除 CloudService 基线 |
-| Step 2 ⏳ | 15 | `test_device_integration.py`, `test_ble_service_integration.py`, `test_light_service_integration.py` | BLE + PWM + Light |
-| Step 3 ⏳ | 16 | `test_navigation_service_integration.py` | 导航 TTS + LCD |
-| Step 4 ⏳ | 17 | `test_control_service_integration.py` | 远端控制 19 指令 |
-| Step 5 ⏳ | 18 | Wave 6 待创建 | 语音指令入口 |
-| 最终 | 18 | `test_full_system_v2.py`（待创建） | 全系统 E2E |
+| Step 1 ✅ | 11 | `test_system_base.py` | 去除 CloudService 基线 |
+| Step 2 ✅ | 15 | `test_pwm_led.py`, `test_ble_driver.py`, `test_ble_service.py`, `test_light_service.py`, `test_device_integration.py` | BLE + PWM + Light |
+| Step 3 ✅ | 16 | `test_navigation_service.py`, `test_navigation_e2e.py` | 导航 TTS + LCD |
+| Step 4 ✅ | 17 | `test_control_service.py`, `test_control_e2e.py`, `test_light_control.py` | 远端控制 19 指令 |
+| Step 5 ✅ | 18 | `test_voice_driver.py`, `test_voice_control_integration.py`, `test_voice_e2e.py`, `test_voice_real_debug.py` | 语音指令入口 |
+| Step 6 🔧 | 21 | `test_audio_service.py`, `test_power_battery.py`, `test_full_system_v2.py` | AudioService + Battery/Power + 全系统 E2E |
 
 ### 6.2 测试模式
 
@@ -722,11 +856,11 @@ if __name__ == "__main__":
 ## Scope
 
 ### Must have
-- v2 全部 7 个新模块集成到 main.py（BLEDriver, BLEService, ControlService, PWM_LED, LightService, NavigationService, VoiceDriver）
+- v2 全部 10 个新模块集成到 main.py（BLEDriver, BLEService, ControlService, PWM_LED, LightService, NavigationService, VoiceDriver, AudioService, BatteryDriver, PowerService）
 - 完整的依赖注入和判空保护
 - Fail-Safe 容错降级（单模块失败不阻塞系统）
 - 主循环性能监控（5ms 红线 + 内存监控）
-- 5 步渐进式集成，每步有验证目标
+- 6 步渐进式集成，每步有验证目标
 
 ### Must NOT have
 - 不集成 MQTT/4G 云连接（CloudService、Qth 不移入）
@@ -749,7 +883,8 @@ if __name__ == "__main__":
 | Step 2 | BLEDriver, BLEService, PWM_LED, LightService | Step 1 完成 | Step 3, 4, 5 |
 | Step 3 | NavigationService | Step 2 完成 | Step 4, 5 |
 | Step 4 | ControlService | Step 2 完成 | Step 5 |
-| Step 5 | VoiceDriver | Step 4 完成 | 最终验证 |
+| Step 5 | VoiceDriver | Step 4 完成 | Step 6 |
+| Step 6 | AudioService | Step 5 完成 | — |
 
 ## Commit strategy
 每个 Step 完成后提交一次：
@@ -759,6 +894,7 @@ feat(main): integrate BLE + PWM_LED + LightService (Step 2)
 feat(main): integrate NavigationService (Step 3)
 feat(main): integrate ControlService for remote control (Step 4)
 feat(main): integrate VoiceDriver for voice control (Step 5)
+feat(main): integrate AudioService + BatteryDriver + PowerService + full system v2 tests (Step 6)
 ```
 
 ## Success criteria

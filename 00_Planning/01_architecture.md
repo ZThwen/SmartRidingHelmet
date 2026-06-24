@@ -349,6 +349,7 @@ while True:
 | EVENT_IMU_READY | IMU 加速度数据就绪 | IMUDriver | CollisionService |
 | EVENT_GNSS_READY | GNSS 定位数据就绪 | GNSSDriver | CloudService, BLEService, NavigationService |
 | EVENT_LIGHT_READY | 光照数据就绪 | LightSensorDriver | DisplayService, LightService |
+| EVENT_HEARTRATE_READY | 心率血氧数据就绪 | HeartRateDriver | ControlService |
 | EVENT_LBS_READY | LBS 基站定位就绪 | GNSSDriver | CloudService |
 | **报警事件** | | | |
 | EVENT_COLLISION_DETECTED | 碰撞检测到 | CollisionService | AlarmService, CloudService |
@@ -362,9 +363,10 @@ while True:
 | EVENT_TTS_REQUEST | TTS 播报请求 | ControlService/NavigationService | AudioService |
 | EVENT_NAV_DISPLAY | 导航显示内容变更 | NavigationService | DisplayService |
 | **电源事件** | | | |
+| EVENT_BATTERY_READY | 电池电量数据就绪 | BatteryDriver | PowerService, BLEService, ControlService |
 | EVENT_BATTERY_LOW | 低电量警告 | PowerService | AlarmService, CloudService, DisplayService |
 | EVENT_BATTERY_CRITICAL | 电量严重不足 | PowerService | AlarmService, CloudService |
-| EVENT_POWER_STATE_CHANGE | 功耗状态切换 | ControlService | 各传感器, LightService |
+| EVENT_POWER_STATE_CHANGE | 功耗状态切换 | ControlService, PowerService | 各传感器, LightService |
 | **GNSS 事件** | | | |
 | EVENT_GPS_LOST | GPS 信号丢失 | GNSSDriver | AlarmService, DisplayService |
 | **网络事件** | | | |
@@ -395,6 +397,8 @@ while True:
 | IMUDriver | Drivers/sensor/imu.py | Device | ✅ | LIS2DH12TR 加速度/陀螺仪，I2C1 |
 | GNSSDriver | Drivers/sensor/Gnss.py | Device | ✅ | EC200U 内置 GNSS + LBS 基站定位 |
 | LightSensorDriver | Drivers/sensor/Light.py | Device | ✅ | GL5528 光敏电阻，ADC PC5 |
+| HeartRateDriver | Drivers/sensor/HeartRate.py | Device | ✅ | MKS SPO2-ZS-BLE 心率血氧，UART9 |
+| BatteryDriver | Drivers/sensor/Battery.py | Device | ✅ | 电池电压 ADC，6 档电量 |
 | Button | Drivers/interface/Button.py | Device | ✅ | SOS 按键，GPIO + IRQ |
 | VoiceDriver | Drivers/interface/Voice.py | Device | ✅ | ASRPRO 语音识别，UART hex 映射 |
 | LEDDriver | Drivers/actuator/LED.py | Device | ✅ | LED_BLUE，Timer1 闪烁 |
@@ -424,24 +428,30 @@ while True:
   2. IMU           → I2C1 加速度/陀螺仪
   3. GNSS          → EC200U 内置 GNSS
   4. Light         → ADC 光照
+  5. Battery       → ADC PC4 电池电压（v2 新增）
+  6. HeartRate     → UART9 心率血氧（v2 新增）
 
 阶段 2 — 执行器（硬件接口就绪）
-  5. Button        → GPIO SOS 按键
-  6. LED           → Timer1 LED 指示灯
-  7. Audio         → EC200U 音频输出
-  8. LCD           → SPI1 显示屏
-  9. PWM_LED       → PE11 PWM 调光灯（v2 新增）
+  7. Button        → GPIO SOS 按键
+  8. LED           → Timer1 LED 指示灯
+  9. Audio         → EC200U 音频输出
+  10. LCD          → SPI1 显示屏
+  11. PWM_LED      → PE11 PWM 调光灯（v2 新增）
+  12. Voice        → UART2 语音指令（v2 新增）
 
-阶段 3 — 业务服务（依赖下层模块）
-   10. CollisionService   → 碰撞检测
-   11. AudioService       → 统一音频调度（注入 audio_driver）（v3 新增）
-   12. AlarmService       → 报警联动（注入 led, audio）
-   13. CloudService       → MQTT 云端通信
-   14. DisplayService     → LCD 显示管理（注入 lcd_driver, audio_driver）
-   15. LightService       → 自适应灯光（v2 新增）
-   16. BLEService         → BLE 推送服务（注入 ble_driver）
-   17. ControlService     → 统一控制（v3 新增，纯事件驱动）
-   18. NavigationService  → 导航引导（v3 新增）
+阶段 3 — 网络（通信通道就绪）
+  13. BLE          → EC200U BLE 4.2（v2 新增）
+
+阶段 4 — 业务服务（依赖下层模块）
+  14. PowerService     → 电源管理（v2 新增）
+  15. CollisionService → 碰撞检测
+  16. AudioService     → 统一音频调度（v3 新增）
+  17. AlarmService     → 报警联动
+  18. DisplayService   → LCD 显示管理
+  19. LightService     → 自适应灯光（v2 新增）
+  20. BLEService       → BLE 推送服务（v2 新增）
+  21. ControlService   → 统一控制（v3 新增）
+  22. NavigationService → 导航引导（v3 新增）
 ```
 
 **依赖注入**：Service 层模块通过构造函数注入 Device 层引用（如 `AlarmService(event_bus, led=led, audio=audio)`），禁止 Service 间直接引用。
@@ -468,7 +478,8 @@ SmartRidingHelmet-TeamX/
 │   │   │   ├── Temp_Humid.py    # 温湿度（AHT20）
 │   │   │   ├── imu.py           # 加速度/陀螺仪
 │   │   │   ├── gnss.py          # GNSS定位
-│   │   │   └── Light.py         # 光照（GL5528 ADC）
+│   │   │   ├── Light.py         # 光照（GL5528 ADC）
+│   │   │   └── Battery.py       # 电池电量 ADC
 │   │   ├── actuator/
 │   │   │   ├── led.py           # LED指示灯
 │   │   │   └── PWM_LED.py       # PWM调光LED驱动（18W大功率灯）
@@ -491,7 +502,7 @@ SmartRidingHelmet-TeamX/
 │   │   ├── display_service.py   # 显示管理服务
 │   │   ├── light_service.py     # 自适应灯光服务
 │   │   ├── control_service.py   # 统一控制服务（BLE远端+语音）
-│   │   ├── power_service.py     # 【v2】电源管理（等电池硬件）
+│   │   ├── power_service.py     # 电源管理
 │   │   └── navigation_service.py# 【v2】导航引导服务
 │   │
 │   └── Tests/                   # 单元测试与集成测试
@@ -604,7 +615,7 @@ def tick(self):
 
 ---
 
-**文档版本**：v7.1
-**更新日期**：2026-06-20
+**文档版本**：v7.2
+**更新日期**：2026-06-24
 **维护团队**：锦依卫队
 **备注**：Phase 4 代码完成 — ControlService v3（19 指令+TTS+报警快照）、NavigationService、BLEService v3（环形缓冲+快照合并）、LightService、PWM_LED、VoiceDriver 已实现，待集成 main.py。

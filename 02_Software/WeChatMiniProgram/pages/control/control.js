@@ -44,6 +44,7 @@ Page({
   onShow: function() {
     logger.log('CTRL', 'onShow');
     this._syncFromGlobal();
+    this._syncTabBar();
   },
 
   onUnload: function() {
@@ -104,11 +105,13 @@ Page({
     this._onAlarmTriggered = function() {
       logger.log('CTRL', 'event alarm:triggered');
       that.setData({ alarmActive: true, showAlarmPopup: true });
+      that._syncTabBar();
     };
 
     this._onAlarmCancelled = function() {
       logger.log('CTRL', 'event alarm:cancelled');
       that.setData({ alarmActive: false, showAlarmPopup: false });
+      that._syncTabBar();
     };
 
     this._onBleDisconnected = function() {
@@ -120,6 +123,7 @@ Page({
       });
       CtrlService.reset();
       that._syncFromGlobal();
+      that._syncTabBar();
     };
 
     this._onBleConnected = function() {
@@ -129,6 +133,14 @@ Page({
         bleStatus: '已连接',
         deviceName: 'SmartHelmet-66ccff',
       });
+      that._syncTabBar();
+    };
+
+    // 导航状态变化（报警暂停/恢复时同步 tab bar）
+    this._onNavStateChange = function(navState) {
+      logger.log('CTRL', 'event navState: ' + navState);
+      that._syncFromGlobal();
+      that._syncTabBar();
     };
 
     bus.on('ctrl:stateChanged', this._onCtrlState);
@@ -136,6 +148,7 @@ Page({
     bus.on('alarm:cancelled', this._onAlarmCancelled);
     bus.on('ble:disconnected', this._onBleDisconnected);
     bus.on('ble:connected', this._onBleConnected);
+    NavService.onStateChange(this._onNavStateChange);
     logger.log('CTRL', '_bindEvents OK');
   },
 
@@ -147,6 +160,17 @@ Page({
     bus.off('alarm:cancelled', this._onAlarmCancelled);
     bus.off('ble:disconnected', this._onBleDisconnected);
     bus.off('ble:connected', this._onBleConnected);
+    // NavService.onStateChange 只支持单一回调，
+    // 页面销毁时清空以避免指向已销毁页面的回调
+    NavService.onStateChange(null);
+  },
+
+  /** 同步自定义 tab bar 状态（骑行/导航/连接） */
+  _syncTabBar: function() {
+    var tabBar = this.getTabBar();
+    if (!tabBar) return;
+    if (tabBar.updateRiding) tabBar.updateRiding();
+    if (tabBar.updateNav) tabBar.updateNav();
   },
 
   // ==================== 灯光控制 ====================

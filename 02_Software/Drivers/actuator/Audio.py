@@ -59,6 +59,9 @@ class AudioDriver(BaseModule):
             "tts_speed": AUDIO_TTS_SPEED,        # 当前 TTS 语速
         }
 
+        # 回调环形缓冲区（中断线程只 append，主线程 tick() 中 pop 并发布事件）
+        self._cb_ring = []
+
         self.audio = None
 
     def init(self):
@@ -93,16 +96,56 @@ class AudioDriver(BaseModule):
             print(f"[{self.name}] ✗ 初始化失败: {e}")
             raise
 
-    def tick(self):
+        def tick(self):
         """
-        brief 周期调度
-        note Audio 为被动控制型设备，无主动采样需求，tick 保持轻量
+        brief 周期调度：处理音频回调缓冲区
+        note 回调缓冲区始终保持处理，不受电源模式影响。
+             电源模式只影响新播放的启动（由 play_tts/play_file 控制），
+             而回调处理必须执行以保持状态一致性。
+             静默报警时仍正常处理回调，但不启动新音频。
         """
-        if self.ctx["power_state"] != POWER_STATE_ACTIVE:
-            return
+        # 处理回调缓冲区（回调线程只 append，主线程 pop + publish）
+        # 注意：此处不判断 power_state——回调处理必须始终执行，
+        #       否则 TTS/PLAY 完成事件永久积压，is_tts_playing 卡死
+        while self._cb_ring:
+            try:
+                event = self._cb_ring.pop(0)
+            except IndexError:
+                break
 
-        # Audio 无需周期性采样，保持空实现维持生命周期
-        pass
+            if event == Audio.PLAY_END:
+                self.ctx["is_playing"] = False
+                self.ctx["current_file"] = None
+                self._data["playback_status"] = "idle"
+                if self.event_bus:
+                    self.event_bus.publish(EVENT_AUDIO_PLAYBACK_END, {
+                        "type": "playback", "file": None, "stopped": False
+                    })
+
+            elif event == Audio.PLAY_STOP:
+                self.ctx["is_playing"] = False
+                self.ctx["current_file"] = None
+                self._data["playback_status"] = "stopped"
+                if self.event_bus:
+                    self.event_bus.publish(EVENT_AUDIO_PLAYBACK_END, {
+                        "type": "playback", "file": None, "stopped": True
+                    })
+
+            elif event == Audio.TTS_END:
+                self.ctx["is_tts_playing"] = False
+                self._data["playback_status"] = "idle"
+                if self.event_bus:
+                    self.event_bus.publish(EVENT_AUDIO_PLAYBACK_END, {
+                        "type": "tts", "stopped": False
+                    })
+
+            elif event == Audio.TTS_STOP:
+                self.ctx["is_tts_playing"] = False
+                self._data["playback_status"] = "stopped"
+                if self.event_bus:
+                    self.event_bus.publish(EVENT_AUDIO_PLAYBACK_END, {
+                        "type": "tts", "stopped": True
+                    })
 
     def _on_volume_control(self, payload):
         """
@@ -120,44 +163,11 @@ class AudioDriver(BaseModule):
     def _audio_event_cb(self, event):
         """
         brief Audio 底层回调（在中断/回调线程执行）
-        note 回调中禁止耗时/阻塞操作，只做状态更新 + 事件发布
+        note 回调中禁止耗时/阻塞操作，只写入环形缓冲区
+             由 tick() 在主线程中安全发布事件
         param event: 播放状态码（Audio.PLAY_END / PLAY_STOP / TTS_END / TTS_STOP）
         """
-        if event == Audio.PLAY_END:
-            self.ctx["is_playing"] = False
-            self.ctx["current_file"] = None
-            self._data["playback_status"] = "idle"
-            if self.event_bus:
-                self.event_bus.publish(EVENT_AUDIO_PLAYBACK_END, {
-                    "type": "playback", "file": None,
-                    "stopped": False
-                })
-
-        elif event == Audio.PLAY_STOP:
-            self.ctx["is_playing"] = False
-            self.ctx["current_file"] = None
-            self._data["playback_status"] = "stopped"
-            if self.event_bus:
-                self.event_bus.publish(EVENT_AUDIO_PLAYBACK_END, {
-                    "type": "playback", "file": None,
-                    "stopped": True
-                })
-
-        elif event == Audio.TTS_END:
-            self.ctx["is_tts_playing"] = False
-            self._data["playback_status"] = "idle"
-            if self.event_bus:
-                self.event_bus.publish(EVENT_AUDIO_PLAYBACK_END, {
-                    "type": "tts", "stopped": False
-                })
-
-        elif event == Audio.TTS_STOP:
-            self.ctx["is_tts_playing"] = False
-            self._data["playback_status"] = "stopped"
-            if self.event_bus:
-                self.event_bus.publish(EVENT_AUDIO_PLAYBACK_END, {
-                    "type": "tts", "stopped": True
-                })
+        self._cb_ring.append(event)
 
     def _on_config_update(self, payload):
         """

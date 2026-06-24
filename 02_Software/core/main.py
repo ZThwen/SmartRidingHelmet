@@ -1,6 +1,6 @@
 """
-brief 智能骑行头盔系统入口 — v2 Step 5
-note 集成 18 个模块（4 传感器 + 7 执行器 + 7 Service）
+brief 智能骑行头盔系统入口 — v2 Step 7
+note 集成 21 个模块（5 传感器 + 6 执行器/接口 + 1 网络 + 9 Service）
 """
 import sys
 import time
@@ -15,6 +15,7 @@ from Drivers.sensor.Temp_Humid import TempHumidDriver
 from Drivers.sensor.imu import IMUDriver
 from Drivers.sensor.Gnss import GNSSDriver
 from Drivers.sensor.Light import LightSensorDriver
+from Drivers.sensor.Battery import BatteryDriver
 
 from Drivers.interface.Button import Button
 from Drivers.actuator.LED import LEDDriver
@@ -33,11 +34,12 @@ from Modules.light_service import LightService
 from Modules.ble_service import BLEService
 from Modules.control_service import ControlService
 from Modules.navigation_service import NavigationService
+from Modules.power_service import PowerService
 
 
 def main():
     """
-    brief 系统入口: 18 个模块全集成，v2 Step 5（新增 VoiceDriver）
+    brief 系统入口: 21 个模块全集成，v2 Step 7（新增 BatteryDriver + PowerService）
     """
     print("🚀 智能骑行头盔系统启动...")
 
@@ -51,6 +53,7 @@ def main():
     imu = IMUDriver(event_bus)
     gnss = GNSSDriver(event_bus)
     light = LightSensorDriver(event_bus)
+    battery_drv = BatteryDriver(event_bus)
 
     # --- 执行器 ---
     button = Button(event_bus)
@@ -70,11 +73,12 @@ def main():
     ble_svc = BLEService(event_bus, ble_driver=ble)
     nav_svc = NavigationService(event_bus, audio_driver=audio, lcd_driver=lcd)
     voice = VoiceDriver(event_bus)
+    power_svc = PowerService(event_bus)
 
     # 3. 按序初始化（传感器 → 执行器 → 服务）
-    init_order = [temp_humid, imu, gnss, light,
+    init_order = [temp_humid, imu, gnss, light, battery_drv,
                   button, led, audio, lcd, pwm_led, ble,
-                  collision, audio_svc, alarm, display, control_svc, light_svc, ble_svc, nav_svc, voice]
+                  collision, audio_svc, alarm, display, control_svc, power_svc, light_svc, ble_svc, nav_svc, voice]
     failed = []
 
     print("\n[初始化阶段]")

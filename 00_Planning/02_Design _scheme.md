@@ -154,30 +154,59 @@
 
 ---
 
-#### 2.1.5 心率驱动模块（HeartRate.py）【v2 新增，待开发】
+#### 2.1.5 心率血氧驱动模块（HeartRate.py）✅ v1 已实现
 
 **所属层次**：Device层（设备封装层）
 
 **需求对应**：F-HR-01 心率监测
 
-**当前状态**：📅 **v2 计划**（等心率带硬件到货）
+**当前状态**：✅ **v1 已实现**（2026-06-24），UART9 通信
 
-**数据通路**：
+**模块功能**：
+- 初始化 MKS SPO2-ZS-BLE 心率血氧模块（UART 通信）
+- 周期读取心率（bpm）和血氧（%）数据
+- 字节级帧扫描，避免帧错位
+- force_read() 非阻塞缓存读取
+- 电源模式管理（SUSPENDED 降频，EMERGENCY 停止）
+- 预热计时（10 秒内数据标记无效）
 
-  数据统一走 MQTT 通道，与现有传感器数据上传方式一致。
+**发布事件**：
+- `EVENT_HEARTRATE_READY`：心率血氧数据就绪，携带数据 `{heart_rate, spo2, valid, timestamp}`
 
-**模块职责**（预留）：
+**订阅事件**：
+- `EVENT_POWER_STATE_CHANGE`：电源模式变化
 
-- 周期读取心率值（bpm）
-- 缓存最新心率，供 CloudService 拼入上传 JSON
-- 异常心率（过高/过低）发布事件
+**公共接口**：
+- `init()`：初始化 UART9 + 发送采集指令 0xFF
+- `tick()`：周期读取 UART 数据帧
+- `force_read()`：返回缓存数据（非阻塞）
+- `start_collect()`：发送 0xFF 开始采集
+- `stop_collect()`：发送 0xFE 停止采集
+- `get_data()`：获取心率血氧数据快照
+- `get_status()`：获取模块运行状态
 
-**发布事件**（预留）：
-- `EVENT_HEART_RATE_READY`：心率数据就绪，携带数据 `{bpm, valid, timestamp}`
+**数据包格式（50 字节）**：
 
-**依赖**：
+| 字节 | 内容 | 说明 |
+|------|------|------|
+| 1 | 0xFF | 帧头 |
+| 2-40 | 波形数据 | 不使用 |
+| 41 | heart_rate | 心率（bpm） |
+| 42 | spo2 | 血氧（%） |
+| 46 | br | 呼吸率 |
+| 47 | rr | RR 间期 |
+| 48 | rmssd | 疲劳值 |
 
-- 外接 ANT+/BLE 心率带（已采购，待到货）
+**硬件说明**：
+- 模块：MKS SPO2-ZS-BLE（广州谦辉）
+- 接口：UART9（TX=PG14/D15, RX=PG9/D14）
+- 波特率：115200
+- 默认工作模式：SPO2（红/红外光，可同时测心率+血氧）
+
+**技术要点**：
+- 使用批量 UART 读取 + 帧头扫描，避免逐字节等待
+- force_read() 直接返回缓存，不阻塞主循环
+- 模块启动可能延迟（init 时 500ms 不够，tick 会持续检测）
 
 ---
 
@@ -281,6 +310,7 @@
 **分层设计说明**：
 - Device层只提供基础播放控制，不包含业务逻辑
 - 不订阅业务事件（COLLISION_DETECTED等），由Service层调用
+- `tick()` 处理播放回调环形缓冲区 `_cb_ring`，始终执行不受电源模式影响，保证状态一致性（`is_tts_playing` 等标志位正确更新）
 - Service层（AlarmService）负责业务逻辑，调用Audio的公共接口
 
 ---
@@ -521,6 +551,8 @@ LCD 内部维护 `display_mode` 状态（normal / alarm），用于防止 Servic
 | 0x11 | `query_humid` | 查询湿度 |
 | 0x12 | `query_location` | 查询位置 |
 | 0x13 | `query_battery` | 查询电量 |
+| 0x14 | `query_heartrate` | 查询心率 |
+| 0x15 | `query_spo2` | 查询血氧 |
 
 **硬件说明**：
 - 语音芯片：ASRPRO（本地语音识别，不依赖云端）
@@ -834,29 +866,39 @@ BLE 中断 (modem 线程)
 
 #### 2.2.4 电源管理服务（PowerService.py）
 
-**当前状态**：⏳ **v2 计划**（等待电池供电硬件就绪）
+**当前状态**：✅ **v1 已完成**（2026-06-23 电池检测全链路测试通过）
 
-当前开发阶段使用 USB 双线供电（EC200U Type-C + Nucleo Micro-USB），无法读取真实电池电量，因此 PowerService 暂不实现。
+电源扩展板锂电池经分压（÷1.45）后接 ADC1_IN14 (PC4)，BatteryDriver 每 10 秒采样一次，输出六档电量（0-5）。PowerService 纯事件驱动（tick 为空），监听 `EVENT_BATTERY_READY`，低电量自动发布省电模式切换和 TTS 通知。
 
-后续若接入锂电池（18650 + 5V 升压模块），需在电源输出端加分压电路到空闲 ADC 引脚，然后在本模块的 tick() 中周期读取 ADC 值换算电量。
+**启动宽限期**：`if sample_count < 3: return`，前 3 次采样不做省电决策，等待采样稳定后再判断。
 
-**发布事件**（预留）：
-- `EVENT_BATTERY_LOW`：电量低于警告阈值
-- `EVENT_BATTERY_CRITICAL`：电量严重不足
-- `EVENT_POWER_STATE_CHANGE`：功耗状态切换
+**未接电池保护**：`if battery_mv < 1000: return`，阈值从 500mV 提高到 1000mV，未接电池时不发布低电量事件。
 
-**订阅事件**（预留）：
-- `EVENT_CONFIG_UPDATE`：远程配置更新
+**发布事件**：
+- `EVENT_BATTERY_LOW`：电量 ≤2 档时发布
+- `EVENT_POWER_STATE_CHANGE`：电量 ≤2 档且当前 ACTIVE 时，自动切换为 SUSPENDED
+- `EVENT_TTS_REQUEST`：电量 ≤2 档时，TTS 播报"当前电量不足，请及时充电"
 
-**实现要求**（预留）：
-- 周期读取电池电量（ADC 分压或 AT+CBC），低于阈值时发布对应事件
-- 检测到严重低电量时，通知系统进入低功耗模式
-- 具体阈值和采样周期由开发人员根据电池特性决定
+**订阅事件**：
+- `EVENT_BATTERY_READY`：来自 BatteryDriver，缓存电量数据
+- `EVENT_POWER_STATE_CHANGE`：跟踪电源状态，用户手动 `power_normal` 后清除 `auto_suspended` 标记
+
+**六档电量映射**（基于锂电池放电曲线）：
+
+| 档位 | ADC 电压 | 电池电压 | 含义 |
+|------|---------|---------|------|
+| 0 | <2000mV | <2.95V | 没电/未接电池 |
+| 1 | ≥2000mV | ≥2.95V | 危急（<5%） |
+| 2 | ≥2614mV | ≥3.79V | 低（5-20%，触发自动省电） |
+| 3 | ≥2669mV | ≥3.87V | 中等（20-40%） |
+| 4 | ≥2724mV | ≥3.95V | 良好（40-60%） |
+| 5 | ≥2772mV | ≥4.02V | 满（60%+） |
 
 **分层设计说明**：
-- Service层负责电量状态判断和业务逻辑
-- 发布电量事件通知其他Service层模块（AlarmService）
-- 不直接操作硬件，通过ADC或AT指令读取电量
+- BatteryDriver（Driver 层）负责 ADC 采样和六档映射
+- PowerService（Service 层）负责电量状态判断和事件发布
+- 不直接操作硬件，通过 EventBus 接收 BatteryDriver 的数据
+- 低电量 TTS 直接走 `EVENT_TTS_REQUEST` → AudioService，不经过 AlarmService
 
 ---
 
@@ -1005,7 +1047,9 @@ BLE 中断 (modem 线程)
 | `query_temp` | 查询温度 | "当前温度28度" |
 | `query_humid` | 查询湿度 | "当前湿度百分之65" |
 | `query_location` | 查询位置 | "当前位置北纬31.23东经121.47" |
-| `query_battery` | 查询电量 | "电量信息暂不可用" |
+| `query_battery` | 查询电量 | "当前电量X档" |
+| `query_heartrate` | 查询心率 | "当前心率94次每分钟" |
+| `query_spo2` | 查询血氧 | "当前血氧饱和度百分之88" |
 
 **发布事件**：
 - `EVENT_LIGHT_CONTROL`：灯光控制指令
@@ -1022,6 +1066,8 @@ BLE 中断 (modem 线程)
 - `EVENT_GNSS_READY`：缓存速度/位置数据（供查询）
 - `EVENT_ALARM_TRIGGERED`：标记报警状态（保护 TTS）
 - `EVENT_ALARM_CANCELED`：清除报警状态
+- `EVENT_BATTERY_READY`：缓存电量数据（供查询指令 `query_battery` 使用）
+- `EVENT_POWER_STATE_CHANGE`：跟踪电源状态变化，回推电源状态到 BLE
 
 **数据流**：
 ```
@@ -1243,7 +1289,7 @@ NavigationService/ControlService → EVENT_TTS_REQUEST(priority) → AudioServic
 
 服务层（依赖驱动层，部分模块间也有依赖）
 ├── CollisionService  # 依赖 IMU
-├── PowerService      # 依赖 ADC 或 AT 指令
+├── PowerService      # 依赖 BatteryDriver (ADC PC4)
 ├── AlarmService      # 依赖 LED、Audio（LCD 已解耦给 DisplayService）
 ├── CloudService      # 依赖 Network、MQTT、所有传感器驱动
 ├── LarkCloudService  # 依赖 Qth、所有传感器驱动
@@ -1267,6 +1313,7 @@ NavigationService/ControlService → EVENT_TTS_REQUEST(priority) → AudioServic
 | LightSensor | 2s | 自动→2s / 手动→❌ | 自动→2s / 手动→❌ |
 | GNSS | 2s | 10s | 10s（降频） |
 | IMU | 100ms | 100ms | 100ms |
+| BatteryDriver | 10s | 10s | 10s |
 
 #### 输出层
 
@@ -1376,9 +1423,13 @@ NavigationService/ControlService → EVENT_TTS_REQUEST(priority) → AudioServic
  │          ├──→ BLEService._on_light() → 缓存光照 → 合并推送
  │          └──→ DisplayService._on_light_ready() → LCD.set_backlight()
  │
- ├── PowerService.tick()  (每10000ms)
- │    ├── [E] EVENT_BATTERY_LOW       → AlarmService → TTS
- │    └── [E] EVENT_BATTERY_CRITICAL  → AlarmService → TTS + 低功耗
+ ├── BatteryDriver.tick()  (每10000ms)
+ │    └── [E] EVENT_BATTERY_READY     → PowerService / BLEService / ControlService
+ │
+ ├── PowerService.tick()  (纯事件驱动，tick 为空)
+ │    ├── [E] EVENT_POWER_STATE_CHANGE → 全系统降采样（level≤2 自动 SUSPENDED）
+ │    ├── [E] EVENT_BATTERY_LOW        → AlarmService
+ │    └── [E] EVENT_TTS_REQUEST        → AudioService（"当前电量不足"）
  │
  └── event_bus.pump()   ← 一次性分发所有待处理事件
       └── 逐个调用回调，异常隔离
@@ -1445,7 +1496,7 @@ Button 外部中断 (GPIO + 200ms消抖)
        ├──→ GNSS          → 更新 sample_ms / lost_count
        ├──→ LED           → 更新闪烁参数
        ├──→ Audio         → 更新音量/语速
-       ├──→ PowerService  → 更新电池阈值
+       ├──→ BatteryDriver → 更新采样间隔
        └──→ LCD           → 更新刷新间隔/背光
 ```
 
@@ -1538,7 +1589,8 @@ gnss.get_location() 返回有效数据
 | 2000ms | GNSS | 固定 | → EVENT_GNSS_READY / EVENT_GPS_LOST | CloudService + BLEService / AlarmService |
 | 2000ms | Light | 固定 | → EVENT_LIGHT_READY | DisplayService + BLEService |
 | 2000ms | BLEService | 固定 | → BLE Notify (FFF1) 合并 JSON | 小程序（BLE Central） |
-| 10000ms | PowerService | 固定 | → EVENT_BATTERY_LOW / CRITICAL | AlarmService（预留） |
+| 10000ms | BatteryDriver | 固定 | → EVENT_BATTERY_READY | PowerService / BLEService / ControlService |
+| 事件驱动 | PowerService | 无 tick | → EVENT_BATTERY_LOW / POWER_STATE_CHANGE / TTS | AlarmService / 全系统 / AudioService |
 | 中断 | Button | 按需 | → EVENT_BUTTON_PRESSED | AlarmService |
 | 云端 | CloudService | 按需 | → EVENT_CONFIG_UPDATE | 所有模块 |
 | 碰撞 | CollisionService | 按需 | → EVENT_COLLISION_DETECTED | AlarmService |
@@ -1556,6 +1608,7 @@ gnss.get_location() 返回有效数据
 4. 光照驱动（Light）（✅已实现）
 4.1. LBS 基站定位（LBSDriver）（✅ v1 已实现）
 4.2. 语音指令驱动（Voice）（✅ 已实现）
+4.3. 电池驱动（BatteryDriver）（✅ v1 已实现）
 5. SOS 按键驱动（Button）（✅已实现）
 6. LED 驱动（LED）（✅已实现）
 7. 音频驱动（Audio）（✅已实现）
@@ -1565,7 +1618,7 @@ gnss.get_location() 返回有效数据
 10. 网络驱动：Qth（✅ v1 已实现）
 11. BLE 驱动（BLEDriver）（✅ 已实现，待集成到 main.py）
 12. 碰撞检测服务（CollisionService）（✅ v1 已实现）
-13. 电源管理服务（PowerService）（⏳ v2 计划，等电池硬件）
+13. 电源管理服务（PowerService）（✅ v1 已完成）
 14. 报警联动服务（AlarmService）（✅ v1 已实现）
 15. 云端通信服务（CloudService）（✅ v1 已实现）
 16. 移远云通信服务（LarkCloudService）（✅ v1 已实现）
@@ -1644,7 +1697,7 @@ gnss.get_location() 返回有效数据
 | F-NET-01 | 骑行数据远程上传 | 开发 `Drivers/network/Network.py` + `Drivers/network/MQTT.py` + CloudService（✅ v1 已实现），实现数据打包和上传 | 传感器数据能实时上传到云端 |
 | F-NET-02 | 紧急报警远程推送 | CloudService（✅ v1 已实现）订阅 `EVENT_ALARM_TRIGGERED`，实现报警数据推送 | 报警事件能立即推送到云端 |
 | F-NET-04 | BLE 近场通信 | 开发 `Drivers/network/BLE.py` + BLEService（✅ v1 已实现），BLE GATT Server + Notify 推送，替代 HTTP 轮询 | 手机 BLE 连接后实时接收传感器数据和报警推送 |
-| F-ALM-04 | 低电量提醒 | PowerService 暂为空壳（无电池），后续接入电池后再补 | 现阶段占位，不影响其他模块 |
+| F-ALM-04 | 低电量提醒 | ✅ PowerService 已实现六档电量检测 + 自动省电 + TTS | 电池扩展板 ADC PC4 分压采样 |
 | F-SEN-04 | 环境光照应用 | 开发 DisplayService（✅ v1 已实现），实现开机画面（Logo + TTS）+ 背光自动调节 | 开机显示队标和语音，光照变化时自动调节背光 |
 
 **说明**：
@@ -1652,7 +1705,7 @@ gnss.get_location() 返回有效数据
 - F-ALM-02/03 报警优先级由 AlarmService 统一仲裁（SOS > 碰撞），通过发布 `EVENT_ALARM_TRIGGERED` 通知 CloudService
 - F-NET-01 依赖 `Drivers/interface/Network.py` 和 `Drivers/interface/MQTT.py`，需在 CloudService 之前或同步完成
 - F-NET-02 CloudService 只订阅 `EVENT_ALARM_TRIGGERED`，不直接订阅碰撞/按键原始事件，避免重复推送
-- PowerService **已移入 v2 计划**，等电池供电硬件就绪后开发
+- PowerService ✅ 已完成（2026-06-23）
 - DisplayService 包含开机画面（队伍 Logo + TTS）和背光调节，依赖 LCD、Audio、Light
 - DisplayService 需要提前准备队伍 Logo 的 RGB565 取模数据，存入 `team_logo.py`
 - 每开发一个业务模块，立即在板子上测试
@@ -1692,14 +1745,14 @@ gnss.get_location() 返回有效数据
 | F-NET-02 | 紧急报警远程推送 | ✅ | 报警立即 MQTT 推送 |
 | F-NET-03 | 远程参数配置 | ✅ | 云端下发 → EVENT_CONFIG_UPDATE |
 | F-NET-04 | BLE 近场通信 | ✅ | BLE GATT Server + BLEService 推送，替代 HTTP 轮询 |
-| F-ALM-04 | 低电量提醒 | ⏳ v2 计划 | 需 PowerService + 电池硬件 |
+| F-ALM-04 | 低电量提醒 | ✅ | PowerService 六档电量 + 自动省电 + TTS |
 | - | 系统状态机 | ⏳ v2 计划 | 当前为扁平主循环 |
 
 **说明**：
 - 集成过程采用 5 步渐进策略，每步的 main.py 版本见 `core/main_design.md` 第 12 节
 - 最终带调试反馈的全量测试版本保存在 `Tests/test_system_full_v1.py`
 - 生产版本 `core/main.py` 为去除调试订阅的正式版
-- v2 待办：PowerService、系统状态机、SD 卡缓存
+- v2 待办：系统状态机、SD 卡缓存
 - 系统能连续运行 30 分钟不死机
 
 ---
@@ -1707,7 +1760,7 @@ gnss.get_location() 返回有效数据
 ### 阶段 4：v2 功能扩展（📅 规划中）
 
 **核心任务**：
-- 电源管理模块（依赖电池供电硬件就绪）
+- 电源管理模块 ✅ 已完成
 - 心率监测模块（数据统一走 MQTT，BLE 为本地传输接口）
 - 大功率灯光驱动（自适应灯光，依赖硬件设计完成）
 - 导航引导服务（微信小程序规划路线 → 头盔 GNSS 比对 → TTS 播报）
@@ -1718,7 +1771,7 @@ gnss.get_location() 返回有效数据
 
 | 模块 | 类型 | 状态 | 关键依赖 |
 |:----|:----|:----:|:--------|
-| PowerService | 服务 | 🟡 等硬件 | 电池供电方案就绪 |
+| PowerService | 服务 | ✅ 已完成 | BatteryDriver (ADC PC4) |
 | HeartRate | 驱动 | 🟡 待开发 | 心率带硬件到货 |
 | PWM_LED | 驱动 | ✅ 板子端已实现 | PE11 + TIM1_CH2，PWM 调光 |
 | NavigationService | 服务 | ✅ 板子端已实现 | BLE FFF2 + TTS；位置播报 📅 |
@@ -1826,6 +1879,8 @@ gnss.get_location() 返回有效数据
 | 06-14 ~ 06-15 | Phase 4 | 小程序控制页 UI/JS/WXSS + TabBar + BLE 服务集成 + safe area 适配 |
 | 06-18 | Phase 4 | ControlService v3（合并 BLE 推送+TTS+报警快照）；BLEService v3（环形缓冲区+快照合并）；E2E 测试增强；文档同步 |
 | 06-20 | Phase 4 | 语音模块开发完成：VoiceDriver 集成验证 + ASRPRO UART 通信调试 |
+| 06-23 | Phase 4 | 电源检测模块完成：BatteryDriver (ADC PC4) + PowerService（六档映射、自动省电、TTS、BLE 推送、语音查询） |
+| 06-24 | Phase 4 | AudioDriver tick 环形缓冲区 + BatteryDriver sample_count 字段 + PowerService 启动宽限期（sample_count<3 跳过）+ PowerService 未接电池保护（battery_mv<1000）+ ControlService 订阅 EVENT_POWER_STATE_CHANGE 回推电源状态到小程序 |
 | 06-22 | Phase 5 | **AudioService 统一音频调度 + LCD 导航恢复**：新建 AudioService（优先级队列 ALARM>NAV>CTRL + 超时 5s 丢弃 + 队列上限 3）；NavigationService TTS 改用 EventBus 发布；DisplayService 订阅 EVENT_NAV_DISPLAY 渲染恢复导航文字；AudioDriver 移除 TTS 订阅改为纯硬件层；Oracle 审查修复 3 个 Bug（同优先级覆盖延迟 / 僵尸 TTS 线程 / 报警期间 LCD 泄露）；小程序报警双端同步（globalData + EventBus）；省电模式灯光控制修复（PWM_LED CUSTOM 模式 + ControlService 时序） |
 
 ---
@@ -1927,7 +1982,7 @@ M1: 起步验证 ──→ M2: 本地闭环 ──→ M3: 云端打通 ──→
 
 | 子里程碑 | 内容 | 状态 |
 |:--------|:----|:----:|
-| M5.1 电源管理 | PowerService（等电池硬件） | 🟡 等硬件 |
+| M5.1 电源管理 | PowerService + BatteryDriver | ✅ 已完成 (06-23) |
 | M5.2 灯光驱动 | PWM_LED（PE11, TIM1_CH2）+ LightService | ✅ 代码已实现 (06-11)，待集成 main.py |
 | M5.3 心率模块 | HeartRate 驱动（数据走 MQTT） | 🟡 等心率带到货 |
 | M5.4 小程序 Step A | 登录+实时数据+骑行控制+总结+地图+报警取消 | ✅ 已完成 (06-01) |
@@ -1955,7 +2010,7 @@ M1: 起步验证 ──→ M2: 本地闭环 ──→ M3: 云端打通 ──→
 
 ---
 
-**文档版本**：v8.1
-**更新日期**：2026-06-22
+**文档版本**：v8.3
+**更新日期**：2026-06-24
 **维护团队**：锦依卫队
-**备注**：Phase 5 — AudioService 统一音频调度 + LCD 导航恢复 + 小程序报警双端同步 + 省电模式灯光修复
+**备注**：Phase 4 — AudioDriver tick 环形缓冲区 + BatteryDriver sample_count + PowerService 宽限期 + ControlService 电源回推

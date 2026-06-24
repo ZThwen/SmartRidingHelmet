@@ -382,13 +382,14 @@ type(scope): description
 | Qth (Quectel Cloud SDK) | ⚠️ 已废弃 | `02_Software/Drivers/network/Qth.py` |
 | Services (Collision, Alarm, Cloud, Display, BLE, Light, Control, Navigation) | ✅ 完成 (v1) | `02_Software/Modules/` |
 | LarkCloudService (Quectel Cloud) | ⚠️ 已废弃 | `02_Software/Modules/lark_cloud.py` |
-| LightService (自适应灯光) | ✅ 完成（未集成 main.py） | `02_Software/Modules/light_service.py` |
+| LightService (自适应灯光) | ✅ 完成（已集成 main.py） | `02_Software/Modules/light_service.py` |
 | ControlService (统一控制) | ✅ 完成（纯事件驱动，19 指令） | `02_Software/Modules/control_service.py` |
-| NavigationService | ✅ 完成 (v1，未集成 main.py) | `02_Software/Modules/navigation_service.py` |
-| main.py (12 模块集成) | ✅ v1 完成 | `02_Software/core/main.py` |
-| PowerService | 📅 v2 计划（等电池硬件） | `02_Software/Modules/power_service.py` |
+| NavigationService | ✅ 完成（已集成 main.py） | `02_Software/Modules/navigation_service.py` |
+| main.py (21 模块集成) | ✅ v2 完成 | `02_Software/core/main.py` |
+| PowerService (电源管理) | ✅ 完成（已集成 main.py） | `02_Software/Modules/power_service.py` |
+| BatteryDriver (电池ADC) | ✅ 完成（已集成 main.py） | `02_Software/Drivers/sensor/Battery.py` |
 | HeartRate | 📅 v2 计划（等硬件） | `02_Software/Drivers/sensor/HeartRate.py` |
-| VoiceDriver (ASRPRO) | ✅ 完成（未集成 main.py） | `02_Software/Drivers/interface/Voice.py` |
+| VoiceDriver (ASRPRO) | ✅ 完成（已集成 main.py） | `02_Software/Drivers/interface/Voice.py` |
 | WeChatMiniProgram | Step A + Step B（导航+远端控制）完成 | `02_Software/WeChatMiniProgram/` |
 
 **注意**：Network.py 和 MQTT.py 放在 `02_Software/Drivers/network/`（不是 `02_Software/Drivers/interface/`）。

@@ -253,6 +253,23 @@ def test_13_continuous_commands():
     print("  OK test_13_continuous_commands")
 
 
+def test_14_power_state_push_back():
+    """ControlService 订阅 EVENT_POWER_STATE_CHANGE 后回推状态到小程序"""
+    bus, ctrl = make_system()
+    _reset_log()
+    # 现在 ControlService 订阅了 EVENT_POWER_STATE_CHANGE
+    # 发布 SUSPENDED → ControlService 应更新 power_mode 并推送 STATE
+    bus.publish(EVENT_POWER_STATE_CHANGE, {"power_state": POWER_STATE_SUSPENDED})
+    bus.pump()
+
+    states = _find_events("STATE")
+    assert len(states) >= 1, "收到 POWER_STATE_CHANGE 后应推送 EVENT_CONTROL_STATE_CHANGED"
+    snap = states[0]["payload"]
+    assert snap.get("p") == POWER_STATE_SUSPENDED, \
+        "power_mode 应变为 SUSPENDED, 实际: %s" % snap.get("p")
+    print("  OK test_14_power_state_push_back")
+
+
 # ==================== 主入口 ====================
 
 def run_all():
@@ -271,6 +288,7 @@ def run_all():
         test_11_query_status,
         test_12_state_snapshot_fields,
         test_13_continuous_commands,
+        test_14_power_state_push_back,
     ]
     passed = 0
     failed = 0

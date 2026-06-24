@@ -6,9 +6,9 @@
   ],
   "window": {
     "navigationBarTitleText": "智能骑行头盔",
-    "navigationBarBackgroundColor": "#080d17",
-    "navigationBarTextStyle": "white",
-    "backgroundColor": "#080d17"
+    "navigationBarBackgroundColor": "#ffffff",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#ffffff"
   },
   "permission": {
     "scope.userLocation": {

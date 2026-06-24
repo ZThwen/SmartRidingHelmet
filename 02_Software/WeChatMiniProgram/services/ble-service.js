@@ -256,6 +256,10 @@ function isConnected() {
   return _state.connected;
 }
 
+function setCallbacks(callbacks) {
+  _callbacks = callbacks;
+}
+
 function _ab2str(buf) {
   var bytes = new Uint8Array(buf);
   var str = '';
@@ -290,4 +294,4 @@ function _str2ab(str) {
   return buf;
 }
 
-module.exports = { init, scan, stopScan, connect, connectById, sendNav, sendCtrl, sendAck, disconnect, isConnected };
+module.exports = { init, scan, stopScan, connect, connectById, sendNav, sendCtrl, sendAck, disconnect, isConnected, setCallbacks };

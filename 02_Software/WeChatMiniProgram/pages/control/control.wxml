@@ -151,8 +151,8 @@
       </view>
     </view>
 
-    <!-- 底部间距（TabBar 遮挡） -->
-    <view style="height: 320rpx;"></view>
+    <!-- 底部间距（TabBar 遮挡: 按钮区 96+8 + tab栏 112 + safe-area） -->
+    <view style="height: 240rpx;"></view>
   </view>
 
   <!-- BLE 未连接提示（已移除，连接状态已在区块中展示） -->

@@ -32,6 +32,8 @@ from core.config import (
     EVENT_POWER_STATE_CHANGE,
     EVENT_CONFIG_UPDATE,
     EVENT_NAV_DISPLAY,
+    EVENT_TTS_REQUEST,
+    PRIORITY_NAV,
     POWER_STATE_ACTIVE,
 )
 
@@ -136,16 +138,18 @@ class DisplayService(BaseModule):
     def tick(self):
         if not self.ctx["is_init"]:
             return
-        if self.ctx["power_state"] != POWER_STATE_ACTIVE:
-            return
         now = time.ticks_ms()
         if time.ticks_diff(now, self.ctx["last_tick"]) < self.cfg["sample_ms"]:
             return
+        # boot→normal 切换不受电源状态影响
         if self.ctx["display_mode"] == "boot":
             elapsed = time.ticks_diff(now, self.ctx["boot_start_time"])
             if elapsed >= self.cfg["boot_display_ms"]:
                 self._switch_to_normal()
         self.ctx["last_tick"] = now
+        # 非 ACTIVE 模式跳过正常画面渲染
+        if self.ctx["power_state"] != POWER_STATE_ACTIVE:
+            return
     
     def _load_images(self):
         """加载两个图片"""
@@ -215,12 +219,12 @@ class DisplayService(BaseModule):
                 self.lcd_driver.set_backlight(self.cfg["backlight_boot"])
                 self.ctx["current_backlight"] = self.cfg["backlight_boot"]
             
-            if self.audio_driver:
-                try:
-                    self.audio_driver.play_tts(self.cfg["tts_welcome"])
-                    print("[{}] TTS播报: {}".format(self.name, self.cfg['tts_welcome']))
-                except Exception as e:
-                    print("[{}] TTS播报失败: {}".format(self.name, e))
+            if self.event_bus:
+                self.event_bus.publish(EVENT_TTS_REQUEST, {
+                    "text": self.cfg["tts_welcome"],
+                    "priority": PRIORITY_NAV,
+                })
+                print("[{}] TTS播报: {}".format(self.name, self.cfg['tts_welcome']))
             
             self.ctx["display_mode"] = "boot"
             self.ctx["boot_start_time"] = time.ticks_ms()

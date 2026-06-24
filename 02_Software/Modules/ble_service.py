@@ -17,6 +17,7 @@ from core.config import (
     EVENT_ALARM_TRIGGERED, EVENT_ALARM_CANCELED,
     EVENT_CONTROL_STATE_CHANGED,
     EVENT_NAV_CMD, EVENT_RIDE_CONTROL, EVENT_BLE_ALARM_ACK,
+    EVENT_BATTERY_READY,
     BLE_UPLOAD_INTERVAL_MS, BLE_KEEPALIVE_MS,
 )
 from Drivers.network.thread_queue import ThreadSafeQueue
@@ -59,6 +60,7 @@ class BLEService(BaseModule):
             "latest_spd": None,
             "latest_cog": None,
             "latest_lux": None,
+            "latest_battery": None,
         }
 
         # 控制状态快照（coalescing 缓冲，tick 周期统一推送）
@@ -91,6 +93,7 @@ class BLEService(BaseModule):
                 self.event_bus.subscribe(EVENT_IMU_READY, self._on_imu)
                 self.event_bus.subscribe(EVENT_GNSS_READY, self._on_gnss)
                 self.event_bus.subscribe(EVENT_LIGHT_READY, self._on_light)
+                self.event_bus.subscribe(EVENT_BATTERY_READY, self._on_battery)
                 self.event_bus.subscribe(EVENT_ALARM_TRIGGERED, self._on_alarm)
                 self.event_bus.subscribe(EVENT_ALARM_CANCELED, self._on_alarm_canceled)
                 self.event_bus.subscribe(EVENT_CONTROL_STATE_CHANGED, self._on_control_state)
@@ -166,6 +169,8 @@ class BLEService(BaseModule):
                 d["cog"] = self._data["latest_cog"]
         if self._data["latest_lux"] is not None:
             d["lux"] = self._data["latest_lux"]
+        if self._data["latest_battery"] is not None:
+            d["bat"] = self._data["latest_battery"]
 
         if not d:
             return
@@ -246,6 +251,11 @@ class BLEService(BaseModule):
         if not payload.get("valid", False):
             return
         self._data["latest_lux"] = payload.get("light_intensity")
+
+    def _on_battery(self, payload):
+        if not payload.get("valid", False):
+            return
+        self._data["latest_battery"] = payload.get("level")
 
     def _on_alarm(self, payload):
         alarm_type = payload.get("alarm_type", "collision")

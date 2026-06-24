@@ -11,6 +11,7 @@
   justify-content: center;
   padding: 0 48rpx;
   margin-bottom: 8rpx;
+  gap: 20rpx;
 }
 
 .ride-btn {
@@ -22,6 +23,11 @@
   justify-content: center;
   border: none;
   line-height: 1;
+  transition: all 0.2s ease;
+}
+
+.ride-btn-wrap.dual .ride-btn {
+  flex: 1;
 }
 
 .ride-btn-text {
@@ -30,30 +36,76 @@
   letter-spacing: 4rpx;
 }
 
+/* 开始骑行（未骑行状态） */
 .ride-btn.start {
-  background: transparent;
-  border: 2rpx solid #66ccff;
+  background: linear-gradient(135deg, #66ccff, #80d4ff);
+  box-shadow: 0 4rpx 16rpx rgba(102, 204, 255, 0.3);
 }
 
 .ride-btn.start .ride-btn-text {
-  color: #66ccff;
+  color: #ffffff;
 }
 
+.ride-btn.start:active {
+  background: linear-gradient(135deg, #4db8e6, #66ccff);
+  box-shadow: 0 2rpx 8rpx rgba(102, 204, 255, 0.2);
+  transform: scale(0.98);
+}
+
+/* 结束骑行 */
 .ride-btn.end {
-  background: linear-gradient(90deg, #ff4444, #cc0000);
+  background: linear-gradient(135deg, #e53e3e, #c53030);
+  box-shadow: 0 4rpx 16rpx rgba(229, 62, 62, 0.3);
 }
 
 .ride-btn.end .ride-btn-text {
-  color: #fff;
+  color: #ffffff;
+}
+
+.ride-btn.end:active {
+  background: linear-gradient(135deg, #c53030, #9b2c2c);
+  box-shadow: 0 2rpx 8rpx rgba(229, 62, 62, 0.2);
+  transform: scale(0.98);
+}
+
+/* 开始导航 */
+.ride-btn.start-nav {
+  background: #ffffff;
+  border: 2rpx solid #66ccff;
+}
+
+.ride-btn.start-nav .ride-btn-text {
+  color: #66ccff;
+}
+
+.ride-btn.start-nav:active {
+  background: rgba(102, 204, 255, 0.08);
+  transform: scale(0.98);
+}
+
+/* 取消导航 */
+.ride-btn.cancel-nav {
+  background: #ffffff;
+  border: 2rpx solid #e53e3e;
+}
+
+.ride-btn.cancel-nav .ride-btn-text {
+  color: #e53e3e;
+}
+
+.ride-btn.cancel-nav:active {
+  background: rgba(229, 62, 62, 0.06);
+  transform: scale(0.98);
 }
 
 .tab-bar {
   height: 112rpx;
-  background: rgba(8, 13, 23, 0.96);
-  border-top: 1rpx solid rgba(102, 204, 255, 0.12);
+  background: #ffffff;
+  border-top: 1rpx solid #e2e8f0;
   display: flex;
   align-items: center;
   padding-bottom: env(safe-area-inset-bottom, 0);
+  box-shadow: 0 -2rpx 12rpx rgba(0, 0, 0, 0.03);
 }
 
 .tab-item {
@@ -74,7 +126,7 @@
   font-size: 20rpx;
   font-weight: 600;
   letter-spacing: 1rpx;
-  color: #3a5068;
+  color: #9aa8b5;
 }
 
 .tab-item.active .tab-label {
