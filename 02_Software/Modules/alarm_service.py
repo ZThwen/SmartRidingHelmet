@@ -17,6 +17,11 @@ from core.config import (
     AUDIO_SOS_FILE,
     TTS_BATTERY_LOW, TTS_BATTERY_CRITICAL, TTS_GPS_LOST,
     POWER_STATE_ACTIVE,
+    EVENT_HEARTRATE_READY, EVENT_TTS_REQUEST, PRIORITY_ALARM,
+    HEARTRATE_HIGH_THRESHOLD, HEARTRATE_LOW_THRESHOLD,
+    HEARTRATE_SPO2_LOW_THRESHOLD,
+    HEARTRATE_TTS_HIGH, HEARTRATE_TTS_LOW, HEARTRATE_SPO2_TTS_LOW,
+    HEARTRATE_ALERT_COOLDOWN_MS,
 )
 
 
@@ -52,6 +57,7 @@ class AlarmService(BaseModule):
             "alarm_type": "",
             "alarm_level": 0,
             "alarm_start": 0,
+            "hr_alert_tick": 0,
         }
 
         # ======================= _data：数据快照 =======================
@@ -72,6 +78,7 @@ class AlarmService(BaseModule):
                 self.event_bus.subscribe(EVENT_BATTERY_CRITICAL, self._on_battery_critical)
                 self.event_bus.subscribe(EVENT_POWER_STATE_CHANGE, self._on_config_update)
                 self.event_bus.subscribe(EVENT_ALARM_CONTROL, self._on_alarm_control)
+                self.event_bus.subscribe(EVENT_HEARTRATE_READY, self._on_heartrate)
 
             self.ctx["alarm_active"] = False
             self.ctx["alarm_type"] = ""
@@ -265,6 +272,39 @@ class AlarmService(BaseModule):
                 self.cfg["enable_local"] = bool(payload["enable_local"])
         if "power_state" in payload:
             self.ctx["power_state"] = payload["power_state"]
+
+    def _on_heartrate(self, payload):
+        """
+        brief 心率异常 TTS 提醒（仅播报，不触发报警）
+        note ALARM 优先级可打断导航和控制 TTS，但不打断已有碰撞/SOS
+        """
+        if not payload.get("valid"):
+            return
+
+        if self.ctx.get("alarm_active", False):
+            return
+
+        now = time.ticks_ms()
+        if time.ticks_diff(now, self.ctx["hr_alert_tick"]) < HEARTRATE_ALERT_COOLDOWN_MS:
+            return
+
+        hr = payload.get("heart_rate", 0)
+        spo2 = payload.get("spo2", 0)
+        tts_text = None
+
+        if hr > HEARTRATE_HIGH_THRESHOLD:
+            tts_text = HEARTRATE_TTS_HIGH
+        elif hr < HEARTRATE_LOW_THRESHOLD:
+            tts_text = HEARTRATE_TTS_LOW
+        elif spo2 < HEARTRATE_SPO2_LOW_THRESHOLD:
+            tts_text = HEARTRATE_SPO2_TTS_LOW
+
+        if tts_text and self.event_bus:
+            self.ctx["hr_alert_tick"] = now
+            self.event_bus.publish(EVENT_TTS_REQUEST, {
+                "text": tts_text,
+                "priority": PRIORITY_ALARM,
+            })
 
     # ==================== 辅助映射 ====================
 
