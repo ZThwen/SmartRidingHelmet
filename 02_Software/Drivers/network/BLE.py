@@ -152,6 +152,43 @@ class BLEDriver(BaseModule):
         except Exception as e:
             print("[%s] 停止失败: %s" % (self.name, e))
 
+    def deinit(self):
+        """
+        brief 释放 BLE 资源（供 ControlService / 语音控制调用）
+        note 安全可重复调用；清空连接状态
+        """
+        try:
+            if self._ble:
+                self._ble.stop()
+                self._ble.deinit()
+            was_connected = self.ctx["is_connected"]
+            self.ctx["is_init"] = False
+            self.ctx["is_connected"] = False
+            self._data["connected_addr"] = ""
+            # 通知 BLEService 连接已断开
+            if was_connected and self.event_bus:
+                self.event_bus.publish(EVENT_BLE_DISCONNECTED, {
+                    "timestamp": time.ticks_ms(),
+                })
+            print("[%s] deinit OK" % self.name)
+        except Exception as e:
+            print("[%s] deinit err: %s" % (self.name, e))
+
+    def restart(self):
+        """
+        brief 重新初始化 BLE（deinit → init 全流程）
+        note 供 ControlService 语音"蓝牙连接"调用
+        """
+        try:
+            if self.ctx["is_init"]:
+                print("[%s] restart: deinit first" % self.name)
+                self.deinit()
+            time.sleep_ms(200)
+            self.init()
+            print("[%s] restart OK" % self.name)
+        except Exception as e:
+            print("[%s] restart err: %s" % (self.name, e))
+
     def set_data_handler(self, handler):
         """
         brief 注册外部数据处理器（BLEService 调用）

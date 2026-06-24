@@ -64,6 +64,7 @@ EVENT_VOICE_CMD             = "VOICE_CMD"              # 语音指令（ASRPRO �
 
 # 控制指令事件（ControlService → 各模块）
 EVENT_LIGHT_CONTROL         = "LIGHT_CONTROL"           # 灯光控制指令
+EVENT_LIGHT_BLINK_STATE     = "LIGHT_BLINK_STATE"       # 灯光闪烁状态变更（LightService → ControlService）
 EVENT_VOLUME_CONTROL        = "VOLUME_CONTROL"          # 音量控制指令
 EVENT_ALARM_CONTROL         = "ALARM_CONTROL"           # 报警控制指令
 EVENT_TTS_REQUEST           = "TTS_REQUEST"             # TTS 播报请求
@@ -97,6 +98,10 @@ HEARTRATE_SPO2_MAX          = 100     # 血氧最大值 (%)
 HEARTRATE_HIGH_THRESHOLD    = 190     # 心率过高阈值 (bpm)
 HEARTRATE_LOW_THRESHOLD     = 50      # 心率过低阈值 (bpm)
 HEARTRATE_SPO2_LOW_THRESHOLD = 90     # 血氧过低阈值 (%)
+HEARTRATE_TTS_HIGH = "心率过高，请注意休息"
+HEARTRATE_TTS_LOW = "心率过低，请注意"
+HEARTRATE_SPO2_TTS_LOW = "血氧偏低，请注意通风"
+HEARTRATE_ALERT_COOLDOWN_MS = 30000
 
 BUTTON_DEBOUNCE_MS     = 50      # 按键防抖动时间窗口 (ms)
 
@@ -259,6 +264,10 @@ PWM_LED_TIMER_ID        = 1                    # Timer1
 PWM_LED_TIMER_CHANNEL   = 2                    # Channel 2
 PWM_LED_FREQ            = 1000                 # PWM频率 (Hz)
 
+# ================= PWM LED 闪烁配置 =================
+PWM_BLINK_ON_DUTY       = 20     # 闪烁亮时占空比(%)，保护大功率LED
+PWM_BLINK_INTERVAL_MS   = 500    # 闪烁间隔(ms)
+
 # ================= LightService 自适应灯光配置 =================
 LIGHT_DAY_ADC_THRESHOLD    = 30000   # 白天阈值（ADC值 < 此值 → 光照强 → 灯不开）
 LIGHT_NIGHT_ADC_THRESHOLD  = 50000   # 晚上阈值（ADC值 > 此值 → 光照弱 → 灯最亮）
@@ -303,6 +312,10 @@ VOICE_CMD_MAP = {
     0x13: "query_battery",
     0x14: "query_heartrate",
     0x15: "query_spo2",
+    0x16: "ble_connect",       # 蓝牙连接
+    0x17: "ble_disconnect",    # 蓝牙断开
+    0x18: "voice_sleep",       # 语音休眠
+    0x19: "light_blink",       # PWM灯光闪烁
 }
 
 # ================= 控制指令 TTS 播报映射表 =================
@@ -320,6 +333,9 @@ CMD_TTS_MAP = {
     "power_save": "省电模式",
     "power_normal": "正常模式",
     "power_emergency": "紧急省电模式",
+    "ble_disconnect": "蓝牙已断开",
+    "voice_sleep": "好的",
+    "light_blink": "灯光闪烁",
 }
 
 # ================= TTS 优先级 =================

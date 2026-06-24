@@ -1,6 +1,6 @@
 """
 brief 智能骑行头盔系统入口 — v2 Step 7
-note 集成 21 个模块（5 传感器 + 6 执行器/接口 + 1 网络 + 9 Service）
+note 集成 22 个模块（6 传感器 + 6 执行器/接口 + 1 网络 + 9 Service）
 """
 import sys
 import time
@@ -16,6 +16,7 @@ from Drivers.sensor.imu import IMUDriver
 from Drivers.sensor.Gnss import GNSSDriver
 from Drivers.sensor.Light import LightSensorDriver
 from Drivers.sensor.Battery import BatteryDriver
+from Drivers.sensor.HeartRate import HeartRateDriver
 
 from Drivers.interface.Button import Button
 from Drivers.actuator.LED import LEDDriver
@@ -39,7 +40,7 @@ from Modules.power_service import PowerService
 
 def main():
     """
-    brief 系统入口: 21 个模块全集成，v2 Step 7（新增 BatteryDriver + PowerService）
+    brief 系统入口: 22 个模块全集成，v2 Step 7（新增 BatteryDriver + PowerService + HeartRate）
     """
     print("🚀 智能骑行头盔系统启动...")
 
@@ -54,6 +55,7 @@ def main():
     gnss = GNSSDriver(event_bus)
     light = LightSensorDriver(event_bus)
     battery_drv = BatteryDriver(event_bus)
+    heart_rate = HeartRateDriver(event_bus)
 
     # --- 执行器 ---
     button = Button(event_bus)
@@ -68,7 +70,7 @@ def main():
     audio_svc = AudioService(event_bus, audio_driver=audio)
     alarm = AlarmService(event_bus, led=led, audio=audio)
     display = DisplayService(event_bus, lcd_driver=lcd, audio_driver=audio)
-    control_svc = ControlService(event_bus, temp_humid=temp_humid, gnss=gnss)
+    control_svc = ControlService(event_bus, temp_humid=temp_humid, gnss=gnss, heart_rate=heart_rate, ble_driver=ble)
     light_svc = LightService(event_bus, pwm_led=pwm_led)
     ble_svc = BLEService(event_bus, ble_driver=ble)
     nav_svc = NavigationService(event_bus, audio_driver=audio, lcd_driver=lcd)
@@ -76,7 +78,7 @@ def main():
     power_svc = PowerService(event_bus)
 
     # 3. 按序初始化（传感器 → 执行器 → 服务）
-    init_order = [temp_humid, imu, gnss, light, battery_drv,
+    init_order = [temp_humid, imu, gnss, light, battery_drv, heart_rate,
                   button, led, audio, lcd, pwm_led, ble,
                   collision, audio_svc, alarm, display, control_svc, power_svc, light_svc, ble_svc, nav_svc, voice]
     failed = []

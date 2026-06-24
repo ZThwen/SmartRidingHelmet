@@ -28,7 +28,9 @@ from core.config import (
     POWER_STATE_CUSTOM, EVENT_TTS_REQUEST,
     EVENT_TEMP_HUMID_READY, EVENT_GNSS_READY,
     EVENT_ALARM_TRIGGERED, EVENT_ALARM_CANCELED,
-    EVENT_BATTERY_READY,
+    EVENT_BATTERY_READY, EVENT_HEARTRATE_READY,
+    EVENT_BLE_CONNECTED, EVENT_BLE_DISCONNECTED,
+    EVENT_LIGHT_BLINK_STATE,
     LIGHT_BRIGHTNESS_MAX, CMD_TTS_MAP, PRIORITY_CTRL,
 )
 
@@ -50,7 +52,7 @@ class ControlService(BaseModule):
     _LIGHT_MODE_MAP = {"auto": 0, "manual": 1}
     _POWER_MODE_MAP = {"active": 0, "suspended": 1, "emergency": 2, "custom": 3}
 
-    def __init__(self, event_bus=None, temp_humid=None, gnss=None, power_svc=None, heart_rate=None):
+    def __init__(self, event_bus=None, temp_humid=None, gnss=None, power_svc=None, heart_rate=None, ble_driver=None):
         """
         brief 初始化控制服务实例
         param event_bus: 事件总线实例引用
@@ -58,6 +60,7 @@ class ControlService(BaseModule):
         param gnss: GNSS驱动实例（可选，用于查询时强制读取）
         param power_svc: 电源管理服务实例（可选，用于查询电量）
         param heart_rate: 心率驱动实例（可选，用于查询时强制读取）
+        param ble_driver: BLE驱动实例（可选，用于语音蓝牙控制）
         """
         super().__init__()
         self.event_bus = event_bus
@@ -66,6 +69,7 @@ class ControlService(BaseModule):
         self.gnss = gnss
         self.power_svc = power_svc
         self.heart_rate = heart_rate
+        self.ble_driver = ble_driver
 
         # ===================== 四元组：静态配置 =====================
         self.cfg = {
@@ -118,9 +122,18 @@ class ControlService(BaseModule):
         # 报警前状态快照（报警取消后恢复）
         self._pre_alarm_state = None
 
+        # 语音门控：_voice_active=False 时只响应 wake 指令
+        self._voice_active = True
+
+        # BLE 连接状态缓存
+        self._ble_connected = False
+
+        # 灯光闪烁状态（来自 LightService 事件）
+        self._blink_active = False
+
         # 指令分发表 — 全部发布事件，不直接调用模块
         self._cmd_handlers = {
-            "wake":           lambda: None,  # 空操作，TTS 由 _maybe_tts 从 CMD_TTS_MAP 自动获取
+            "wake":           lambda: self._wake(),
             "light_on":       lambda: self._pub(EVENT_LIGHT_CONTROL, {"cmd": "on"}),
             "light_off":       lambda: self._pub(EVENT_LIGHT_CONTROL, {"cmd": "off"}),
             "light_auto":      lambda: self._pub(EVENT_LIGHT_CONTROL, {"cmd": "auto"}),
@@ -142,6 +155,10 @@ class ControlService(BaseModule):
             "query_battery":   lambda: self._query_battery(),
             "query_heartrate": lambda: self._query_heartrate(),
             "query_spo2":      lambda: self._query_spo2(),
+            "ble_connect":     lambda: self._ble_connect(),
+            "ble_disconnect":  lambda: self._ble_disconnect(),
+            "voice_sleep":     lambda: self._sleep_voice(),
+            "light_blink":     lambda: self._pub(EVENT_LIGHT_CONTROL, {"cmd": "blink"}),
         }
 
     def init(self):
@@ -156,9 +173,13 @@ class ControlService(BaseModule):
                 self.event_bus.subscribe(EVENT_TEMP_HUMID_READY, self._on_temp_humid)
                 self.event_bus.subscribe(EVENT_GNSS_READY, self._on_gnss)
                 self.event_bus.subscribe(EVENT_BATTERY_READY, self._on_battery)
+                self.event_bus.subscribe(EVENT_HEARTRATE_READY, self._on_heartrate)
                 self.event_bus.subscribe(EVENT_ALARM_TRIGGERED, self._on_alarm_triggered)
                 self.event_bus.subscribe(EVENT_ALARM_CANCELED, self._on_alarm_canceled)
                 self.event_bus.subscribe(EVENT_POWER_STATE_CHANGE, self._on_power_state)
+                self.event_bus.subscribe(EVENT_BLE_CONNECTED, self._on_ble_connected)
+                self.event_bus.subscribe(EVENT_BLE_DISCONNECTED, self._on_ble_disconnected)
+                self.event_bus.subscribe(EVENT_LIGHT_BLINK_STATE, self._on_light_blink_state)
 
             self.ctx["is_init"] = True
             print("[{}] OK init".format(self.name))
@@ -212,6 +233,9 @@ class ControlService(BaseModule):
         param payload: {"cmd": "light_on", "id": 1}
         """
         cmd = payload.get("cmd", "")
+        # 语音门控：非 wake 指令且语音休眠时忽略
+        if cmd != "wake" and not self._voice_active:
+            return
         self._execute_cmd(cmd, source="voice")
 
     # ==================== 指令执行 ====================
@@ -301,6 +325,8 @@ class ControlService(BaseModule):
             self._control_state["light_mode"] = "manual"
             self._control_state["light_brightness"] = 0
             self._pub(EVENT_LIGHT_CONTROL, {"cmd": "off"})
+        elif cmd == "light_blink":
+            self._control_state["light_mode"] = "manual"
 
     # ==================== 传感器缓存回调 ====================
 
@@ -318,6 +344,12 @@ class ControlService(BaseModule):
     def _on_battery(self, payload):
         if payload.get("valid"):
             self._sensor_cache["battery_level"] = payload.get("level")
+
+    def _on_heartrate(self, payload):
+        """brief 缓存心率血氧数据，供语音查询使用"""
+        if payload.get("valid"):
+            self._sensor_cache["heart_rate"] = payload.get("heart_rate")
+            self._sensor_cache["spo2"] = payload.get("spo2")
 
     def _on_power_state(self, payload):
         """
@@ -353,6 +385,46 @@ class ControlService(BaseModule):
             self._control_state.update(self._pre_alarm_state)
             self._pre_alarm_state = None
             self._push_state()  # 推送恢复后的状态到 BLE
+
+    # ==================== BLE 状态 & 语音控制 ====================
+
+    def _on_ble_connected(self, payload):
+        """缓存 BLE 连接状态"""
+        self._ble_connected = True
+
+    def _on_ble_disconnected(self, payload):
+        """缓存 BLE 断开状态"""
+        self._ble_connected = False
+
+    def _on_light_blink_state(self, payload):
+        """brief 缓存灯光闪烁状态并推送 BLE"""
+        self._blink_active = payload.get("blink", False)
+        self._push_state()
+
+    def _wake(self):
+        """唤醒语音系统"""
+        self._voice_active = True
+        # TTS "小洛包在，有什么指示" 由 CMD_TTS_MAP 自动处理
+
+    def _sleep_voice(self):
+        """语音休眠：停止接收语音指令"""
+        self._voice_active = False
+        # TTS "好的" 由 CMD_TTS_MAP 自动处理
+
+    def _ble_connect(self):
+        """语音蓝牙连接"""
+        if self._ble_connected:
+            self._tts("蓝牙已连接")
+            return
+        if self.ble_driver and not self.ble_driver.ctx.get("is_init", False):
+            self.ble_driver.restart()
+        self._tts("蓝牙正在连接")
+
+    def _ble_disconnect(self):
+        """语音蓝牙断开"""
+        if self.ble_driver and self.ble_driver.ctx.get("is_init", False):
+            self.ble_driver.deinit()
+        # TTS "蓝牙已断开" 由 CMD_TTS_MAP 自动处理
 
     # ==================== 查询指令 ====================
 
@@ -499,11 +571,13 @@ class ControlService(BaseModule):
         if not self.event_bus:
             return
         cs = self._control_state
+        f = 1 if self._blink_active else 0
         self.event_bus.publish(EVENT_CONTROL_STATE_CHANGED,
             {"t": 7, "m": self._LIGHT_MODE_MAP.get(cs["light_mode"], 0),
              "b": cs["light_brightness"],
              "v": cs["volume"],
-             "p": self._POWER_MODE_MAP.get(cs["power_mode"], 0)})
+             "p": self._POWER_MODE_MAP.get(cs["power_mode"], 0),
+             "f": f})
 
     # ==================== TTS 反馈 ====================
 
