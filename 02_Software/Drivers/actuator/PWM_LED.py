@@ -10,9 +10,10 @@ import time
 
 from core.Base_Module import BaseModule
 from core.config import (
-    EVENT_PWM_LED_ERROR, EVENT_CONFIG_UPDATE, EVENT_POWER_STATE_CHANGE,
+    EVENT_PWM_LED_ERROR, EVENT_POWER_STATE_CHANGE,
     PWM_LED_PIN, PWM_LED_TIMER_ID, PWM_LED_TIMER_CHANNEL,
-    PWM_LED_FREQ, POWER_STATE_ACTIVE, POWER_STATE_CUSTOM
+    PWM_LED_FREQ, POWER_STATE_ACTIVE, POWER_STATE_CUSTOM,
+    PWM_BLINK_ON_DUTY, PWM_BLINK_INTERVAL_MS,
 )
 
 
@@ -33,6 +34,8 @@ class PWMLEDDriver(BaseModule):
             "timer_channel": PWM_LED_TIMER_CHANNEL,
             "pwm_freq": PWM_LED_FREQ,
             "max_retry": 3,
+            "blink_on_duty": PWM_BLINK_ON_DUTY,
+            "blink_interval_ms": PWM_BLINK_INTERVAL_MS,
         }
         
         self.ctx = {
@@ -40,6 +43,10 @@ class PWMLEDDriver(BaseModule):
             "is_busy": False,
             "err_count": 0,
             "power_state": POWER_STATE_ACTIVE,
+            "blink_active": False,
+            "blink_on": False,
+            "blink_from_alarm": False,
+            "blink_last_toggle": 0,
         }
         
         self._data = {
@@ -88,10 +95,24 @@ class PWMLEDDriver(BaseModule):
     
     def tick(self):
         """
-        brief 周期调度：PWM模块不需要周期调度，tick()为空实现
+        brief 闪烁状态机
         note 主循环每轮调用，必须快速返回（<5ms），不能阻塞
         """
-        pass
+        if not self.ctx["blink_active"]:
+            return
+        now = time.ticks_ms()
+        if time.ticks_diff(now, self.ctx["blink_last_toggle"]) < self.cfg["blink_interval_ms"]:
+            return
+        self.ctx["blink_last_toggle"] = now
+        self.ctx["blink_on"] = not self.ctx["blink_on"]
+        try:
+            if self.ctx["blink_on"]:
+                self.pwm_channel.pulse_width_percent(self.cfg["blink_on_duty"])
+            else:
+                self.pwm_channel.pulse_width_percent(0)
+        except Exception as e:
+            self.ctx["err_count"] += 1
+            print("[%s] blink tick err: %s" % (self.name, e))
     
     def set_brightness(self, duty_cycle):
         """
@@ -100,6 +121,10 @@ class PWMLEDDriver(BaseModule):
         note 直接调用即可调光，无需周期调度
         """
         if not self.ctx["is_init"]:
+            return
+        
+        # 闪烁中拒绝外部亮度设置，防止打架
+        if self.ctx.get("blink_active", False):
             return
         
         if self.ctx["power_state"] not in (POWER_STATE_ACTIVE, POWER_STATE_CUSTOM):
@@ -133,6 +158,47 @@ class PWMLEDDriver(BaseModule):
         finally:
             self.ctx["is_busy"] = False
     
+    def start_blink(self, on_duty=None, interval_ms=None, from_alarm=False):
+        """
+        brief 开始闪烁
+        param on_duty: 亮时占空比(%)，默认使用 cfg 配置
+        param interval_ms: 闪烁间隔(ms)，默认使用 cfg 配置
+        param from_alarm: 是否报警触发（True 时不可被手动指令中断）
+        """
+        if on_duty is not None:
+            self.cfg["blink_on_duty"] = max(0, min(100, on_duty))
+        if interval_ms is not None:
+            self.cfg["blink_interval_ms"] = max(50, interval_ms)
+        self.ctx["blink_active"] = True
+        self.ctx["blink_from_alarm"] = from_alarm
+        self.ctx["blink_on"] = False
+        self.ctx["blink_last_toggle"] = time.ticks_ms()
+        print("[%s] blink start (duty=%d, interval=%d, alarm=%s)" % (
+            self.name, self.cfg["blink_on_duty"], self.cfg["blink_interval_ms"], from_alarm))
+    
+    def stop_blink(self):
+        """brief 停止闪烁，熄灭LED"""
+        was_active = self.ctx["blink_active"]
+        self.ctx["blink_active"] = False
+        self.ctx["blink_from_alarm"] = False
+        if was_active:
+            self.pwm_channel.pulse_width_percent(0)
+            self._data["duty_cycle"] = 0
+            print("[%s] blink stopped" % self.name)
+    
+    def set_blink_duty(self, duty):
+        """brief 改变闪烁亮时占空比（闪烁中调用）"""
+        duty = max(0, min(100, duty))
+        self.cfg["blink_on_duty"] = duty
+    
+    def is_blink_active(self):
+        """brief 查询闪烁状态"""
+        return self.ctx.get("blink_active", False)
+    
+    def is_blink_from_alarm(self):
+        """brief 查询是否报警触发的闪烁"""
+        return self.ctx.get("blink_from_alarm", False)
+    
     def _on_config_update(self, payload):
         """
         brief 配置更新回调
@@ -147,7 +213,11 @@ class PWMLEDDriver(BaseModule):
                 # CUSTOM: 手动操作覆盖省电模式，不改变亮度
                 self.ctx["power_state"] = new_state
             elif new_state != POWER_STATE_ACTIVE:
-                self.set_brightness(0)
+                # 省电模式：停止手动闪烁，报警闪烁继续
+                if self.ctx.get("blink_active") and not self.ctx.get("blink_from_alarm"):
+                    self.stop_blink()
+                else:
+                    self.set_brightness(0)
                 self.ctx["power_state"] = new_state
             else:
                 self.ctx["power_state"] = new_state

@@ -15,6 +15,7 @@ import time
 from core.Base_Module import BaseModule
 from core.config import (
     EVENT_LIGHT_READY, EVENT_LIGHT_CONTROL, EVENT_CONFIG_UPDATE, EVENT_POWER_STATE_CHANGE, POWER_STATE_ACTIVE,
+    EVENT_ALARM_TRIGGERED, EVENT_ALARM_CANCELED, EVENT_LIGHT_BLINK_STATE,
     LIGHT_DAY_ADC_THRESHOLD, LIGHT_NIGHT_ADC_THRESHOLD,
     LIGHT_BRIGHTNESS_MIN, LIGHT_BRIGHTNESS_MAX, LIGHT_BRIGHTNESS_STEP,
     LIGHT_GAMMA, LIGHT_BRIGHTNESS_THRESHOLD, LIGHT_DEBOUNCE_MS
@@ -74,6 +75,8 @@ class LightService(BaseModule):
                 self.event_bus.subscribe(EVENT_LIGHT_READY, self._on_light_ready)
                 self.event_bus.subscribe(EVENT_LIGHT_CONTROL, self._on_light_control)
                 self.event_bus.subscribe(EVENT_POWER_STATE_CHANGE, self._on_config_update)
+                self.event_bus.subscribe(EVENT_ALARM_TRIGGERED, self._on_alarm_triggered)
+                self.event_bus.subscribe(EVENT_ALARM_CANCELED, self._on_alarm_canceled)
 
             self.ctx["is_init"] = True
             print("[{}] OK init | auto_mode={}".format(self.name, self.ctx["auto_mode"]))
@@ -92,22 +95,89 @@ class LightService(BaseModule):
     def _on_light_control(self, payload):
         """
         brief 灯光控制指令回调（来自 ControlService）
-        param payload: {cmd: "on"/"off"/"auto"/"brightness_up"/"brightness_down"}
+        param payload: {cmd: "on"/"off"/"auto"/"blink"/"brightness_up"/"brightness_down"}
+        note 报警触发的闪烁不可被手动指令中断（blink 指令除外）
         """
         cmd = payload.get("cmd", "")
         max_brightness = self.cfg["brightness_max"]
-        if cmd == "on":
-            self.set_manual_brightness(max_brightness)
-        elif cmd == "off":
-            self.set_manual_brightness(0)
-        elif cmd == "auto":
-            self.set_auto_mode()
-        elif cmd == "brightness_up":
+
+        # 报警触发的闪烁不可被手动指令中断
+        if self.pwm_led and self.pwm_led.is_blink_from_alarm():
+            return
+
+        if cmd == "blink":
+            if self.pwm_led:
+                try:
+                    if self.pwm_led.is_blink_active():
+                        self.pwm_led.stop_blink()
+                    else:
+                        self.pwm_led.start_blink()
+                except Exception as e:
+                    print("[%s] blink cmd error: %s" % (self.name, e))
+            self._publish_blink_state()
+            return
+
+        elif cmd in ("on", "off", "auto"):
+            # 先停闪烁，再执行
+            if self.pwm_led and self.pwm_led.is_blink_active():
+                try:
+                    self.pwm_led.stop_blink()
+                except Exception as e:
+                    print("[%s] stop blink error: %s" % (self.name, e))
+                self._publish_blink_state()
+            if cmd == "on":
+                self.set_manual_brightness(max_brightness)
+            elif cmd == "off":
+                self.set_manual_brightness(0)
+            elif cmd == "auto":
+                self.set_auto_mode()
+
+        elif cmd in ("brightness_up", "brightness_down"):
+            if self.pwm_led and self.pwm_led.is_blink_active():
+                # 闪烁中：改变闪烁亮度
+                try:
+                    current = self.pwm_led.cfg["blink_on_duty"]
+                    new_duty = current + (5 if cmd == "brightness_up" else -5)
+                    self.pwm_led.set_blink_duty(new_duty)
+                except Exception as e:
+                    print("[%s] blink brightness error: %s" % (self.name, e))
+                return
+            # 正常模式：调节亮度
             current = self._data.get("current_brightness", 0)
-            self.set_manual_brightness(min(current + LIGHT_BRIGHTNESS_STEP, max_brightness))
-        elif cmd == "brightness_down":
-            current = self._data.get("current_brightness", 0)
-            self.set_manual_brightness(max(current - LIGHT_BRIGHTNESS_STEP, 0))
+            if cmd == "brightness_up":
+                self.set_manual_brightness(min(current + LIGHT_BRIGHTNESS_STEP, max_brightness))
+            else:
+                self.set_manual_brightness(max(current - LIGHT_BRIGHTNESS_STEP, 0))
+
+    def _publish_blink_state(self):
+        """brief 发布闪烁状态变更事件（供 ControlService 缓存）"""
+        if self.event_bus and self.pwm_led:
+            blink_active = self.pwm_led.is_blink_active()
+            self.event_bus.publish(EVENT_LIGHT_BLINK_STATE, {"blink": blink_active})
+
+    def _on_alarm_triggered(self, payload):
+        """
+        brief 报警触发回调：level>=3 (SOS) 时自动开启 PWM 闪烁
+        note 通过事件订阅实现，不直接调用 AlarmService
+        """
+        try:
+            level = payload.get("level", 1)
+            if level >= 3 and self.pwm_led:
+                self.pwm_led.start_blink(on_duty=20, from_alarm=True)
+                print("[%s] SOS alarm -> PWM blink start" % self.name)
+                self._publish_blink_state()
+        except Exception as e:
+            print("[%s] _on_alarm_triggered error: %s" % (self.name, e))
+
+    def _on_alarm_canceled(self, payload):
+        """brief 报警取消回调：停止 PWM 闪烁"""
+        try:
+            if self.pwm_led and self.pwm_led.is_blink_active():
+                self.pwm_led.stop_blink()
+                print("[%s] alarm canceled -> PWM blink stop" % self.name)
+                self._publish_blink_state()
+        except Exception as e:
+            print("[%s] _on_alarm_canceled error: %s" % (self.name, e))
 
     def _on_light_ready(self, payload):
         """

@@ -17,7 +17,7 @@ from core.config import (
     EVENT_ALARM_TRIGGERED, EVENT_ALARM_CANCELED,
     EVENT_CONTROL_STATE_CHANGED,
     EVENT_NAV_CMD, EVENT_RIDE_CONTROL, EVENT_BLE_ALARM_ACK,
-    EVENT_BATTERY_READY,
+    EVENT_BATTERY_READY, EVENT_HEARTRATE_READY,
     BLE_UPLOAD_INTERVAL_MS, BLE_KEEPALIVE_MS,
 )
 from Drivers.network.thread_queue import ThreadSafeQueue
@@ -61,6 +61,8 @@ class BLEService(BaseModule):
             "latest_cog": None,
             "latest_lux": None,
             "latest_battery": None,
+            "latest_heart_rate": None,
+            "latest_spo2": None,
         }
 
         # 控制状态快照（coalescing 缓冲，tick 周期统一推送）
@@ -68,12 +70,14 @@ class BLEService(BaseModule):
             "m": 0, "b": 0,  # t=7: 灯光
             "v": 5,           # t=8: 音量
             "p": 0,           # t=9: 电源
+            "f": 0,           # t=7: 闪烁
             "dirty": False,   # 是否有未推送的控制状态
         }
 
         # 环形缓冲区（BLE 中断写入，tick 中 drain）
         self.cmd_buffer = ThreadSafeQueue(max_size=16)
         self.cmd_ready = False
+        self._notify_tid = None
         self._connected_published = False
 
         self.send_queue = None
@@ -94,13 +98,14 @@ class BLEService(BaseModule):
                 self.event_bus.subscribe(EVENT_GNSS_READY, self._on_gnss)
                 self.event_bus.subscribe(EVENT_LIGHT_READY, self._on_light)
                 self.event_bus.subscribe(EVENT_BATTERY_READY, self._on_battery)
+                self.event_bus.subscribe(EVENT_HEARTRATE_READY, self._on_heartrate)
                 self.event_bus.subscribe(EVENT_ALARM_TRIGGERED, self._on_alarm)
                 self.event_bus.subscribe(EVENT_ALARM_CANCELED, self._on_alarm_canceled)
                 self.event_bus.subscribe(EVENT_CONTROL_STATE_CHANGED, self._on_control_state)
 
             self.ctx["thread_running"] = True
             old_size = _thread.stack_size(4096)
-            _thread.start_new_thread(self._notify_thread, ())
+            self._notify_tid = _thread.start_new_thread(self._notify_thread, ())
             _thread.stack_size(old_size)
 
             self.ctx["is_init"] = True
@@ -146,8 +151,8 @@ class BLEService(BaseModule):
             snap = self._ctrl_snapshot
             if snap["dirty"]:
                 self.send_queue.put(
-                    '{"t":7,"m":%d,"b":%d,"v":%d,"p":%d}' % (
-                        snap["m"], snap["b"], snap["v"], snap["p"]))
+                    '{"t":7,"m":%d,"b":%d,"v":%d,"p":%d,"f":%d}' % (
+                        snap["m"], snap["b"], snap["v"], snap["p"], snap["f"]))
                 snap["dirty"] = False
 
     def _enqueue_merged(self):
@@ -171,6 +176,9 @@ class BLEService(BaseModule):
             d["lux"] = self._data["latest_lux"]
         if self._data["latest_battery"] is not None:
             d["bat"] = self._data["latest_battery"]
+        if self._data["latest_heart_rate"] is not None:
+            d["hr"] = self._data["latest_heart_rate"]
+            d["spo2"] = self._data["latest_spo2"]
 
         if not d:
             return
@@ -181,6 +189,7 @@ class BLEService(BaseModule):
         MAX_BLE_PAYLOAD = 244  # ATT_MTU(247) - 3(ATT header)
         while self.ctx["thread_running"]:
             try:
+                data = None
                 data = self.send_queue.get()
                 if data is None:
                     time.sleep_ms(100)
@@ -207,7 +216,7 @@ class BLEService(BaseModule):
                 self.ctx["err_count"] += 1
                 self.ctx["consecutive_errors"] += 1
                 # ★ 调试日志：更详细的异常信息
-                print("[%s] notify err (#%d): %s | msg=%.60s" % (self.name, self.ctx["err_count"], e, data if 'data' in dir() else 'N/A'))
+                print("[%s] notify err (#%d): %s | msg=%.60s" % (self.name, self.ctx["err_count"], e, data if data is not None else 'N/A'))
 
     def _on_connected(self, payload):
         self.ctx["ble_connected"] = True
@@ -257,6 +266,13 @@ class BLEService(BaseModule):
             return
         self._data["latest_battery"] = payload.get("level")
 
+    def _on_heartrate(self, payload):
+        """brief 缓存心率血氧，由 _enqueue_merged 统一推送"""
+        if not payload.get("valid"):
+            return
+        self._data["latest_heart_rate"] = payload.get("heart_rate")
+        self._data["latest_spo2"] = payload.get("spo2")
+
     def _on_alarm(self, payload):
         alarm_type = payload.get("alarm_type", "collision")
         level = payload.get("level", 1)
@@ -279,7 +295,7 @@ class BLEService(BaseModule):
         note 不直接入队，改为更新快照；tick() 周期统一推送为 1 条消息
         param payload: EventBus 事件（含 source/timestamp 注入字段）
         """
-        valid_keys = ("t", "m", "b", "v", "p")
+        valid_keys = ("t", "m", "b", "v", "p", "f")
         data = {k: v for k, v in payload.items() if k in valid_keys}
         t = data.get("t")
         snap = self._ctrl_snapshot
@@ -288,6 +304,7 @@ class BLEService(BaseModule):
             snap["b"] = data.get("b", snap["b"])
             snap["v"] = data.get("v", snap["v"])
             snap["p"] = data.get("p", snap["p"])
+            snap["f"] = data.get("f", snap["f"])
         snap["dirty"] = True
 
     # ==================== BLE 数据处理（modem 线程） ====================
@@ -362,6 +379,11 @@ class BLEService(BaseModule):
 
     def deinit(self):
         self.ctx["thread_running"] = False
-        # 等待后台线程退出：线程 idle 睡眠 100ms + 熔断睡眠 500ms
-        time.sleep_ms(700)
+        # 等待后台线程安全退出（新版 SDK 推荐 _thread.join）
+        if self._notify_tid is not None:
+            try:
+                import _thread
+                _thread.join(self._notify_tid, 3000)
+            except Exception as e:
+                print("[%s] thread join err: %s" % (self.name, e))
         self.ctx["is_init"] = False
