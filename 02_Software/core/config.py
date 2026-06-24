@@ -18,6 +18,7 @@ EVENT_TEMP_HUMID_READY      = "TEMP_HUMID_READY"      # 温湿度数据就绪
 EVENT_IMU_READY             = "IMU_READY"             # IMU加速度数据就绪
 EVENT_GNSS_READY            = "GNSS_READY"            # GNSS定位数据就绪
 EVENT_LIGHT_READY           = "LIGHT_READY"           # 光照数据就绪
+EVENT_HEARTRATE_READY       = "HEARTRATE_READY"       # 心率血氧数据就绪
 
 # 报警相关事件
 EVENT_COLLISION_DETECTED    = "COLLISION_DETECTED"    # 碰撞检测到
@@ -33,6 +34,7 @@ EVENT_RECORD_START          = "RECORD_START"          # 开始录音
 EVENT_RECORD_END            = "RECORD_END"            # 录音结束
 
 # 电源管理事件
+EVENT_BATTERY_READY         = "BATTERY_READY"         # 电池电量数据就绪
 EVENT_BATTERY_LOW           = "BATTERY_LOW"           # 低电量警告
 EVENT_BATTERY_CRITICAL      = "BATTERY_CRITICAL"      # 电量严重不足
 EVENT_POWER_STATE_CHANGE    = "POWER_STATE_CHANGE"    # 功耗状态切换
@@ -75,6 +77,26 @@ GNSS_SAMPLE_MS         = 2000    # GNSS采样间隔 (ms)
 LIGHT_SAMPLE_MS        = 2000    # 光照传感器采样间隔 (ms)
 LCD_SAMPLE_MS          = 2000    # LCD显示更新间隔 (ms)
 DEFAULT_SAMPLE_MS      = 2000    # 传感器默认采样间隔 (ms)
+
+# ================= 心率传感器配置 =================
+HEARTRATE_SAMPLE_MS         = 2000    # 心率采样间隔 (ms)
+HEARTRATE_SUSPENDED_MS      = 5000    # 省电模式采样间隔 (ms)
+HEARTRATE_WARMUP_MS         = 10000   # 传感器预热时间 (ms)
+HEARTRATE_UART_ID           = 9       # UART总线编号（UART9, TX=PD15, RX=PD14）
+HEARTRATE_UART_BAUDRATE     = 115200  # 波特率
+HEARTRATE_UART_TX_PIN       = "PD15"  # USART9 TX
+HEARTRATE_UART_RX_PIN       = "PD14"   # USART9 RX
+HEARTRATE_DATA_LEN          = 50      # 数据包长度（字节）
+HEARTRATE_HEADER            = 0xFF    # 数据包头字节
+HEARTRATE_CMD_START         = 0xFF    # 采集开指令
+HEARTRATE_CMD_STOP          = 0xFE    # 采集关指令
+HEARTRATE_HR_MIN            = 0      # 心率最小值 (bpm)
+HEARTRATE_HR_MAX            = 240     # 心率最大值 (bpm)
+HEARTRATE_SPO2_MIN          = 0      # 血氧最小值 (%)
+HEARTRATE_SPO2_MAX          = 100     # 血氧最大值 (%)
+HEARTRATE_HIGH_THRESHOLD    = 190     # 心率过高阈值 (bpm)
+HEARTRATE_LOW_THRESHOLD     = 50      # 心率过低阈值 (bpm)
+HEARTRATE_SPO2_LOW_THRESHOLD = 90     # 血氧过低阈值 (%)
 
 BUTTON_DEBOUNCE_MS     = 50      # 按键防抖动时间窗口 (ms)
 
@@ -138,8 +160,17 @@ ALARM_ENABLE_LOCAL        = True   # 是否启用本地声光报警
 
 # ================= 电源管理配置 =================
 BATTERY_SAMPLE_MS         = 10000  # 电量采样间隔(ms)
-BATTERY_LOW_THRESHOLD     = 20     # 低电量阈值(%)
-BATTERY_CRITICAL_THRESHOLD = 10    # 严重不足阈值(%)
+BATTERY_ADC_PIN           = "PC4"  # 电池电压 ADC 引脚（ADC1_IN14）
+BATTERY_DIVIDER_RATIO     = 1.45   # 分压比（电池电压 / ADC 电压）
+# 六档 ADC 电压阈值 (mV)，基于锂电池放电曲线映射
+# 档位0: <2000mV (电池<2.9V, 没电/未接电池)
+# 档位1: ≥2000mV (电池≥2.9V, 危急, <5%)
+# 档位2: ≥2614mV (电池≥3.79V, 低, 5-20%)
+# 档位3: ≥2669mV (电池≥3.87V, 中等, 20-40%)
+# 档位4: ≥2724mV (电池≥3.95V, 良好, 40-60%)
+# 档位5: ≥2772mV (电池≥4.02V, 满, 60%+)
+BATTERY_LEVEL_THRESHOLDS  = [2000, 2614, 2669, 2724, 2772]  # 五个分界点，分为六档
+BATTERY_AUTO_SUSPEND_LEVEL = 2     # ≤2档自动进入省电模式
 
 # ================= 功耗策略配置 =================
 POWER_STATE_ACTIVE        = "ACTIVE"        # 正常工作状态
@@ -223,7 +254,7 @@ LBS_SAMPLE_MS           = 30000    # LBS 采样间隔 (ms)
 
 # ================= PWM LED 配置 =================
 EVENT_PWM_LED_ERROR     = "PWM_LED_ERROR"      # PWM控制错误
-PWM_LED_PIN             = "PE11"               # PWM引脚（STM32 PE11, TIM1_CH2）
+PWM_LED_PIN             = "PE11"               # PWM引脚（STM32 PE11, TIM1_CH2, D5）
 PWM_LED_TIMER_ID        = 1                    # Timer1
 PWM_LED_TIMER_CHANNEL   = 2                    # Channel 2
 PWM_LED_FREQ            = 1000                 # PWM频率 (Hz)
@@ -270,6 +301,8 @@ VOICE_CMD_MAP = {
     0x11: "query_humid",
     0x12: "query_location",
     0x13: "query_battery",
+    0x14: "query_heartrate",
+    0x15: "query_spo2",
 }
 
 # ================= 控制指令 TTS 播报映射表 =================
