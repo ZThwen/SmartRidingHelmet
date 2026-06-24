@@ -47,8 +47,10 @@
 | 事件 | 回调方法 | 做什么 |
 |:----|:--------|:-------|
 | `EVENT_LIGHT_READY` | `_on_light_ready(payload)` | 光照数据就绪，计算目标亮度并调用 PWM LED |
-| `EVENT_LIGHT_CONTROL` | `_on_light_control(payload)` | 灯光控制指令（on/off/auto/brightness_up/brightness_down） |
+| `EVENT_LIGHT_CONTROL` | `_on_light_control(payload)` | 灯光控制指令（on/off/auto/brightness_up/brightness_down/blink） |
 | `EVENT_CONFIG_UPDATE` | `_on_config_update(payload)` | 更新阈值参数、功耗状态 |
+| `EVENT_ALARM_TRIGGERED` | `_on_alarm_triggered(payload)` | 报警触发 → level >= 3 时自动启动 PWM 闪烁 |
+| `EVENT_ALARM_CANCELED` | `_on_alarm_canceled(payload)` | 报警取消 → 停止闪烁 |
 
 ---
 
@@ -85,6 +87,7 @@ GL5528 光敏电阻特性：ADC 值大 → 光照弱，ADC 值小 → 光照强�
 |:----|:--------|:-----|
 | **自动** | 默认 / `set_auto_mode()` / `EVENT_LIGHT_CONTROL{auto}` | 根据光照事件自动调节 |
 | **手动** | `set_manual_brightness(duty_cycle)` / `EVENT_LIGHT_CONTROL{on/off/brightness_up/down}` | 覆盖自动调节，固定亮度 |
+| **闪烁** | `EVENT_LIGHT_CONTROL{blink}` / `EVENT_ALARM_TRIGGERED`（level≥3） | PWM 以 500ms 间隔闪烁（占空比 20%） |
 
 ---
 
@@ -141,7 +144,9 @@ get_data() → {
 ### 阶段 C：实现核心算法
 1. `_calculate_brightness(light_intensity)` → gamma 映射
 2. `_on_light_ready()` → 阈值检查 + 防抖 + 调用 PWM LED
-3. `_on_light_control()` → 模式切换 / 手动亮度
+3. `_on_light_control()` → 模式切换 / 手动亮度 / blink 指令处理
+4. `_on_alarm_triggered()` → SOS（level≥3）自动启动闪烁
+5. `_on_alarm_canceled()` → 停止闪烁
 
 ### 阶段 D：实现辅助方法
 1. `set_manual_brightness(duty_cycle)` → 手动模式
@@ -158,4 +163,6 @@ get_data() → {
 | **亮度上限 50%** | 18W 灯散热限制，`LIGHT_BRIGHTNESS_MAX` 控制 |
 | **非 ACTIVE 模式不调节** | power_state != ACTIVE 时跳过自动调节 |
 | **手动覆盖自动** | 手动设置后切换为手动模式，需显式调用 `set_auto_mode()` 恢复 |
+| **闪烁冲突处理** | 报警触发闪烁时拒绝任何灯光指令；手动闪烁可被开灯/关灯/调亮度覆盖 |
+| **闪烁保护** | 亮时占空比固定 20%，间隔 500ms，保护大功率 LED |
 | **PWM LED 异常容错** | 连续失败才上报错误，单次失败不阻塞 |

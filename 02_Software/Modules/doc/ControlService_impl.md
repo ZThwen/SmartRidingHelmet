@@ -48,7 +48,7 @@
 
 | 事件 | payload | 触发时机 |
 |------|---------|----------|
-| `EVENT_LIGHT_CONTROL` | `{cmd: "on"/"off"/"auto"/"brightness_up"/"brightness_down"}` | 灯光指令 |
+| `EVENT_LIGHT_CONTROL` | `{cmd: "on"/"off"/"auto"/"brightness_up"/"brightness_down"/"blink"}` | 灯光指令 |
 | `EVENT_VOLUME_CONTROL` | `{cmd: "up"/"down"}` | 音量指令 |
 | `EVENT_ALARM_CONTROL` | `{cmd: "cancel"/"sos"/"stealth"}` | 报警指令 |
 | `EVENT_POWER_STATE_CHANGE` | `{power_state: "ACTIVE"/"SUSPENDED"/"EMERGENCY"/"CUSTOM"}` | 电源切换 |
@@ -57,9 +57,9 @@
 
 ---
 
-## 5. 指令表（19 个）
+## 5. 指令表（23 个）
 
-### 5.1 控制指令（13 个）
+### 5.1 控制指令（17 个）
 
 | 指令 | 发布事件 | 响应模块 | CUSTOM 切换 |
 |------|----------|----------|:-----------:|
@@ -68,6 +68,7 @@
 | `brightness_up` | EVENT_LIGHT_CONTROL{brightness_up} | LightService | ✅ |
 | `brightness_down` | EVENT_LIGHT_CONTROL{brightness_down} | LightService | ✅ |
 | `light_auto` | EVENT_LIGHT_CONTROL{auto} | LightService | ✅ |
+| `light_blink` | EVENT_LIGHT_CONTROL{blink} | LightService | ✅ |
 | `volume_up` | EVENT_VOLUME_CONTROL{up} | AudioDriver | ✅ |
 | `volume_down` | EVENT_VOLUME_CONTROL{down} | AudioDriver | ✅ |
 | `alarm_cancel` | EVENT_ALARM_CONTROL{cancel} | AlarmService | ✅ |
@@ -76,6 +77,9 @@
 | `power_save` | EVENT_POWER_STATE_CHANGE{SUSPENDED} | 全系统 | ❌ |
 | `power_normal` | EVENT_POWER_STATE_CHANGE{ACTIVE} | 全系统 | ❌ |
 | `power_emergency` | EVENT_POWER_STATE_CHANGE{EMERGENCY} | 全系统 | ❌ |
+| `ble_connect` | 直接调用 ble_driver.restart() | BLEDriver | ❌ |
+| `ble_disconnect` | 直接调用 ble_driver.deinit() | BLEDriver | ❌ |
+| `voice_sleep` | 设 _voice_active=False | — | ❌ |
 
 ### 5.2 查询指令（8 个）
 
@@ -219,6 +223,38 @@ if cmd 非电源类 and cmd 非查询类:
 ## 13. 报警中 TTS 保护
 
 `_alarm_active` 标志由 EVENT_ALARM_TRIGGERED/CANCELED 维护。`_maybe_tts()` 和 `_tts()` 均检查此标志：如果 `_alarm_active == True`，不发 TTS，避免 `stop()` 中断报警音频。静默报警期间同样阻塞 TTS。
+
+---
+
+## 14. 语音休眠门控
+
+当用户说"休眠"（voice_sleep）时，ControlService 将 `_voice_active` 标志设为 False。
+
+此后所有语音指令（除 wake 外）在 `_on_voice_cmd` 阶段被忽略：
+
+```python
+def _on_voice_cmd(self, payload):
+    cmd = payload.get("cmd", "")
+    if cmd != "wake" and not self._voice_active:
+        return
+    self._execute_cmd(cmd, source="voice")
+```
+
+用户说"小洛包"（wake）时通过门控将 `_voice_active` 恢复为 True，TTS "小洛包在，有什么指示"。
+
+---
+
+## 15. PWM LED 闪烁冲突处理
+
+| 当前状态 | 用户指令 | 行为 |
+|----------|----------|------|
+| 闪烁（报警触发） | 任何灯光指令 | **忽略**（报警优先级最高） |
+| 闪烁（手动触发） | 开灯/关灯 | 停止闪烁 + 执行 |
+| 闪烁（手动触发） | 调亮/调暗 | 改变闪烁亮度（20% ± 5%） |
+| 闪烁（手动触发） | 闪烁 | 停止闪烁（toggle） |
+| 非闪烁 | 任何指令 | 正常执行 |
+
+闪烁参数：亮时占空比 20%，间隔 500ms，保护大功率 LED。
 
 ---
 
