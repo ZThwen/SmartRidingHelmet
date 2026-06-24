@@ -28,6 +28,7 @@ from core.config import (
     POWER_STATE_CUSTOM, EVENT_TTS_REQUEST,
     EVENT_TEMP_HUMID_READY, EVENT_GNSS_READY,
     EVENT_ALARM_TRIGGERED, EVENT_ALARM_CANCELED,
+    EVENT_BATTERY_READY,
     LIGHT_BRIGHTNESS_MAX, CMD_TTS_MAP, PRIORITY_CTRL,
 )
 
@@ -49,18 +50,22 @@ class ControlService(BaseModule):
     _LIGHT_MODE_MAP = {"auto": 0, "manual": 1}
     _POWER_MODE_MAP = {"active": 0, "suspended": 1, "emergency": 2, "custom": 3}
 
-    def __init__(self, event_bus=None, temp_humid=None, gnss=None):
+    def __init__(self, event_bus=None, temp_humid=None, gnss=None, power_svc=None, heart_rate=None):
         """
         brief 初始化控制服务实例
         param event_bus: 事件总线实例引用
         param temp_humid: 温湿度驱动实例（可选，用于查询时强制读取）
         param gnss: GNSS驱动实例（可选，用于查询时强制读取）
+        param power_svc: 电源管理服务实例（可选，用于查询电量）
+        param heart_rate: 心率驱动实例（可选，用于查询时强制读取）
         """
         super().__init__()
         self.event_bus = event_bus
         self.name = "control_service"
         self.temp_humid = temp_humid
         self.gnss = gnss
+        self.power_svc = power_svc
+        self.heart_rate = heart_rate
 
         # ===================== 四元组：静态配置 =====================
         self.cfg = {
@@ -102,6 +107,9 @@ class ControlService(BaseModule):
             "speed_kmh": None,
             "latitude": None,
             "longitude": None,
+            "battery_level": None,
+            "heart_rate": None,
+            "spo2": None,
         }
 
         # 报警状态标志（查询时保护报警不被 TTS 中断）
@@ -131,7 +139,9 @@ class ControlService(BaseModule):
             "query_temp":      lambda: self._query_temp(),
             "query_humid":     lambda: self._query_humid(),
             "query_location":  lambda: self._query_location(),
-            "query_battery":   lambda: self._tts("电量信息暂不可用"),
+            "query_battery":   lambda: self._query_battery(),
+            "query_heartrate": lambda: self._query_heartrate(),
+            "query_spo2":      lambda: self._query_spo2(),
         }
 
     def init(self):
@@ -145,8 +155,10 @@ class ControlService(BaseModule):
                 self.event_bus.subscribe(EVENT_VOICE_CMD, self._on_voice_cmd)
                 self.event_bus.subscribe(EVENT_TEMP_HUMID_READY, self._on_temp_humid)
                 self.event_bus.subscribe(EVENT_GNSS_READY, self._on_gnss)
+                self.event_bus.subscribe(EVENT_BATTERY_READY, self._on_battery)
                 self.event_bus.subscribe(EVENT_ALARM_TRIGGERED, self._on_alarm_triggered)
                 self.event_bus.subscribe(EVENT_ALARM_CANCELED, self._on_alarm_canceled)
+                self.event_bus.subscribe(EVENT_POWER_STATE_CHANGE, self._on_power_state)
 
             self.ctx["is_init"] = True
             print("[{}] OK init".format(self.name))
@@ -303,6 +315,31 @@ class ControlService(BaseModule):
             self._sensor_cache["latitude"] = payload.get("latitude")
             self._sensor_cache["longitude"] = payload.get("longitude")
 
+    def _on_battery(self, payload):
+        if payload.get("valid"):
+            self._sensor_cache["battery_level"] = payload.get("level")
+
+    def _on_power_state(self, payload):
+        """
+        brief 电源状态变更回调（来自 PowerService 或其他模块）
+        note 更新本地状态缓存并推送到小程序
+        param payload: {"power_state": "ACTIVE"|"SUSPENDED"|"EMERGENCY"|"CUSTOM"}
+        """
+        new_state = payload.get("power_state", POWER_STATE_ACTIVE)
+        # 映射大写常量到 UI 字符串
+        mode_map = {
+            POWER_STATE_ACTIVE: "active",
+            POWER_STATE_SUSPENDED: "suspended",
+            POWER_STATE_EMERGENCY: "emergency",
+            POWER_STATE_CUSTOM: "custom",
+        }
+        mapped = mode_map.get(new_state, "active")
+        if self._control_state["power_mode"] != mapped:
+            old_mode = self._control_state["power_mode"]
+            self._control_state["power_mode"] = mapped
+            self._push_state()  # 推送到 BLE → 小程序
+            print("[%s] power_mode: %s -> %s" % (self.name, old_mode, mapped))
+
     def _on_alarm_triggered(self, payload):
         """保存报警前状态快照"""
         self._pre_alarm_state = dict(self._control_state)
@@ -406,6 +443,51 @@ class ControlService(BaseModule):
             self._tts("当前位置北纬%.4f东经%.4f" % (lat, lon))
         else:
             self._tts("位置信息暂不可用")
+
+    def _query_battery(self):
+        level = self._sensor_cache.get("battery_level")
+        if level is not None:
+            if self._alarm_active:
+                return
+            if self.event_bus:
+                self.event_bus.publish(EVENT_TTS_REQUEST, {
+                    "text": "当前电量%d档" % level,
+                    "priority": PRIORITY_CTRL,
+                })
+        else:
+            self._tts("电量信息暂不可用")
+
+    def _query_heartrate(self):
+        hr = self._sensor_cache.get("heart_rate")
+        if hr is None and self.heart_rate:
+            try:
+                data = self.heart_rate.force_read()
+                if data and data.get("valid"):
+                    hr = data.get("heart_rate")
+                    self._sensor_cache["heart_rate"] = hr
+                    self._sensor_cache["spo2"] = data.get("spo2")
+            except:
+                pass
+        if hr is not None:
+            self._tts("当前心率%d次每分钟" % hr)
+        else:
+            self._tts("心率数据暂不可用")
+
+    def _query_spo2(self):
+        spo2 = self._sensor_cache.get("spo2")
+        if spo2 is None and self.heart_rate:
+            try:
+                data = self.heart_rate.force_read()
+                if data and data.get("valid"):
+                    spo2 = data.get("spo2")
+                    self._sensor_cache["spo2"] = spo2
+                    self._sensor_cache["heart_rate"] = data.get("heart_rate")
+            except:
+                pass
+        if spo2 is not None:
+            self._tts("当前血氧饱和度百分之%d" % spo2)
+        else:
+            self._tts("血氧数据暂不可用")
 
     # ==================== 状态回推 ====================
 
