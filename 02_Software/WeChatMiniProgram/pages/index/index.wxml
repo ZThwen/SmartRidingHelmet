@@ -69,6 +69,27 @@
       <text class="time-text" wx:if="{{time}}">更新 {{time}}</text>
     </view>
 
+    <!-- 心率/血氧状态栏 -->
+    <view class="heart-rate-bar">
+      <view class="hr-icon-wrap {{heartClass}}">
+        <text class="hr-icon">{{heartIcon}}</text>
+      </view>
+      <view class="hr-sep"></view>
+      <view class="hr-value-wrap">
+        <text class="hr-value {{heartClass}}">{{heartRate}}</text>
+        <text class="hr-unit">bpm</text>
+      </view>
+      <view class="hr-sep"></view>
+      <view class="spo2-value-wrap">
+        <text class="spo2-value {{spo2Class}}">{{spo2}}</text>
+        <text class="spo2-unit">SpO2</text>
+      </view>
+      <view class="hr-corners">
+        <view class="hr-corner tl"></view><view class="hr-corner tr"></view>
+        <view class="hr-corner bl"></view><view class="hr-corner br"></view>
+      </view>
+    </view>
+
     <!-- 环境卡片 -->
     <view class="tac-card">
       <view class="card-header">
@@ -236,6 +257,14 @@
         polyline="{{_summaryPolyline}}"
         style="width:100%;height:360rpx;border-radius:16rpx;overflow:hidden"
       ></map>
+      <!-- 心率变化折线图 -->
+      <view class="hr-chart-wrap" wx:if="{{summary.hrTimeSeries.length > 0}}">
+        <text class="hr-chart-title">心率变化</text>
+        <canvas type="2d" id="hrChart" style="width:620rpx;height:240rpx;"></canvas>
+      </view>
+      <view class="hr-chart-empty" wx:else>
+        <text class="hr-chart-empty-text">暂无心率数据</text>
+      </view>
       <view class="summary-table">
         <view class="row"><text class="lbl">总时长</text><text class="val">{{summary.duration}}</text></view>
         <view class="row"><text class="lbl">平均速度</text><text class="val">{{summary.avgSpeed}}</text></view>
@@ -243,6 +272,10 @@
         <view class="row"><text class="lbl">平均温度</text><text class="val">{{summary.avgTemp}}</text></view>
         <view class="row"><text class="lbl">最高温度</text><text class="val">{{summary.maxTemp}}</text></view>
         <view class="row"><text class="lbl">总里程</text><text class="val">{{summary.distance}}</text></view>
+        <view class="row"><text class="lbl">平均心率</text><text class="val">{{summary.avgHeartRate}}</text></view>
+        <view class="row"><text class="lbl">最高心率</text><text class="val">{{summary.maxHeartRate}}</text></view>
+        <view class="row"><text class="lbl">平均血氧</text><text class="val">{{summary.avgSpO2}}</text></view>
+        <view class="row"><text class="lbl">最低血氧</text><text class="val">{{summary.minSpO2}}</text></view>
         <view class="row"><text class="lbl">报警次数</text><text class="val">{{summary.alarmCount}}</text></view>
         <view class="row"><text class="lbl">采集点数</text><text class="val">{{summary.points}}</text></view>
       </view>

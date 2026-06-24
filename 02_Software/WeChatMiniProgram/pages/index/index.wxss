@@ -261,6 +261,150 @@ page {
   color: #9aa8b5;
 }
 
+/* ===== 心率/血氧状态栏 ===== */
+.heart-rate-bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  padding: 20rpx 24rpx;
+  margin-bottom: 16rpx;
+  background: #f5f8fb;
+  border: 1rpx solid #e2e8f0;
+  border-radius: 12rpx;
+  overflow: hidden;
+}
+
+/* 心率图标容器 */
+.hr-icon-wrap {
+  width: 64rpx;
+  height: 64rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(102, 204, 255, 0.08);
+  flex-shrink: 0;
+}
+
+/* 心跳图标 */
+.hr-icon {
+  font-size: 36rpx;
+  color: #66ccff;
+  line-height: 1;
+  animation: heartbeat-pulse 2s ease-in-out infinite;
+}
+
+/* 预警态 - 心率异常（黄色加速） */
+.hr-icon-wrap.hr-warn .hr-icon {
+  color: #f6ad55;
+  animation: heartbeat-pulse 0.8s ease-in-out infinite;
+}
+
+.hr-value-wrap .hr-value.hr-warn {
+  color: #f6ad55;
+}
+
+/* 危险态 - 血氧不足（红色加速 + 辉光） */
+.hr-icon-wrap.hr-danger .hr-icon {
+  color: #e53e3e;
+  animation: heartbeat-pulse 0.8s ease-in-out infinite;
+  text-shadow: 0 0 16rpx rgba(229, 62, 62, 0.5), 0 0 32rpx rgba(229, 62, 62, 0.2);
+}
+
+.hr-value-wrap .hr-value.hr-danger {
+  color: #e53e3e;
+}
+
+/* 无数据态（灰色，无动画） */
+.hr-icon-wrap.hr-off .hr-icon {
+  color: #cbd5e0;
+  animation: none;
+}
+
+/* 分隔竖线 */
+.hr-sep {
+  width: 2rpx;
+  height: 48rpx;
+  background: #e2e8f0;
+  flex-shrink: 0;
+}
+
+/* BPM 数值区 */
+.hr-value-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4rpx;
+  min-width: 80rpx;
+}
+
+.hr-value {
+  font-size: 36rpx;
+  font-weight: 700;
+  color: #1a1a2e;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.hr-unit {
+  font-size: 20rpx;
+  color: #9aa8b5;
+  letter-spacing: 1rpx;
+}
+
+/* SpO2 数值区 */
+.spo2-value-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4rpx;
+  min-width: 80rpx;
+}
+
+.spo2-value {
+  font-size: 36rpx;
+  font-weight: 700;
+  color: #1a1a2e;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.spo2-value.spo2-danger {
+  color: #e53e3e;
+  text-shadow: 0 0 12rpx rgba(229, 62, 62, 0.3);
+}
+
+.spo2-unit {
+  font-size: 20rpx;
+  color: #9aa8b5;
+  letter-spacing: 1rpx;
+}
+
+/* 四角装饰 */
+.hr-corners .hr-corner {
+  position: absolute;
+  width: 8rpx;
+  height: 8rpx;
+  background: rgba(102, 204, 255, 0.5);
+}
+
+.hr-corners .hr-corner.tl { top: 0; left: 0; border-top-left-radius: 12rpx; }
+.hr-corners .hr-corner.tr { top: 0; right: 0; border-top-right-radius: 12rpx; }
+.hr-corners .hr-corner.bl { bottom: 0; left: 0; border-bottom-left-radius: 12rpx; }
+.hr-corners .hr-corner.br { bottom: 0; right: 0; border-bottom-right-radius: 12rpx; }
+
+/* 心跳脉冲动画 */
+@keyframes heartbeat-pulse {
+  0%, 100% { transform: scale(0.85); opacity: 0.7; }
+  14% { transform: scale(1.1); opacity: 1; }
+  28% { transform: scale(0.9); opacity: 0.85; }
+  42% { transform: scale(1.15); opacity: 1; }
+  56% { transform: scale(0.85); opacity: 0.7; }
+  70% { transform: scale(1.05); opacity: 0.9; }
+  85% { transform: scale(0.9); opacity: 0.75; }
+}
+
 /* ===== 战术卡片 ===== */
 .tac-card {
   position: relative;
@@ -519,6 +663,34 @@ page {
 .alarm-cancel-btn:active {
   background: rgba(255, 255, 255, 0.1);
   border-color: rgba(255, 255, 255, 0.5);
+}
+
+/* ===== 心率折线图（总结弹窗内） ===== */
+.hr-chart-wrap {
+  margin: 20rpx 0;
+  padding: 16rpx;
+  border: 1rpx solid rgba(102, 204, 255, 0.3);
+  border-radius: 12rpx;
+  background: #f8fbff;
+}
+
+.hr-chart-title {
+  font-size: 22rpx;
+  color: #66ccff;
+  letter-spacing: 2rpx;
+  margin-bottom: 12rpx;
+  display: block;
+}
+
+.hr-chart-empty {
+  text-align: center;
+  padding: 40rpx 0;
+  margin: 16rpx 0;
+}
+
+.hr-chart-empty-text {
+  font-size: 24rpx;
+  color: #9aa8b5;
 }
 
 /* ===== 总结弹窗 ===== */

@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>洛天依主题预览 - 智能骑行头盔</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            /* 天依蓝 9 阶色板 */
+            --tianyi-50: #e6f7ff;
+            --tianyi-100: #b3e0ff;
+            --tianyi-200: #66ccff;
+            --tianyi-300: #33bbff;
+            --tianyi-400: #0099ff;
+            --tianyi-500: #0077cc;
+            --tianyi-600: #0055aa;
+            --tianyi-700: #003388;
+            --tianyi-900: #001144;
+
+            /* 碧玉绿 (碧瞳) */
+            --biyu-200: #86efac;
+            --biyu-400: #4ade80;
+            --biyu-600: #2ecc71;
+
+            /* 星空暗色背景 */
+            --space-900: #0a0a1a;
+            --space-800: #0f0f2a;
+            --space-700: #1a1a3e;
+            --space-600: #252550;
+            --space-500: #333366;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, var(--space-900) 0%, var(--space-700) 50%, var(--space-800) 100%);
+            color: #ffffff;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .preview-container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .preview-header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding: 30px;
+            background: rgba(102, 204, 255, 0.1);
+            border-radius: 20px;
+            border: 1px solid rgba(102, 204, 255, 0.3);
+        }
+
+        .preview-header h1 {
+            font-size: 32px;
+            background: linear-gradient(90deg, var(--tianyi-200), var(--biyu-400));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 10px;
+        }
+
+        .preview-header p {
+            color: var(--tianyi-100);
+            font-size: 16px;
+        }
+
+        .design-tokens {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+
+        .token-section {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 15px;
+            padding: 20px;
+            border: 1px solid rgba(102, 204, 255, 0.2);
+        }
+
+        .token-section h3 {
+            color: var(--tianyi-200);
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+
+        .color-palette {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+        }
+
+        .color-item {
+            text-align: center;
+        }
+
+        .color-swatch {
+            width: 100%;
+            height: 50px;
+            border-radius: 8px;
+            margin-bottom: 5px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .color-label {
+            font-size: 12px;
+            color: #ccc;
+        }
+
+        .symbol-showcase {
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin-top: 15px;
+        }
+
+        .symbol-item {
+            text-align: center;
+            padding: 15px;
+            background: rgba(102, 204, 255, 0.1);
+            border-radius: 10px;
+            min-width: 100px;
+        }
+
+        .symbol-item .symbol {
+            font-size: 48px;
+            margin-bottom: 10px;
+            display: block;
+        }
+
+        .symbol-item .label {
+            font-size: 14px;
+            color: var(--tianyi-100);
+        }
+
+        .phone-mockup {
+            width: 375px;
+            height: 812px;
+            background: var(--space-900);
+            border-radius: 40px;
+            margin: 20px auto;
+            overflow: hidden;
+            position: relative;
+            box-shadow: 0 20px 60px rgba(102, 204, 255, 0.3);
+            border: 8px solid #333;
+        }
+
+        .phone-screen {
+            width: 100%;
+            height: 100%;
+            overflow-y: auto;
+            position: relative;
+        }
+
+        .phone-screen::-webkit-scrollbar {
+            display: none;
+        }
+
+        /* 登录页样式 */
+        .login-page {
+            padding: 60px 30px 30px;
+            min-height: 100%;
+            background: linear-gradient(180deg, var(--space-900) 0%, var(--space-700) 100%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .welcome-section {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .tiandian-mascot {
+            width: 120px;
+            height: 120px;
+            background: radial-gradient(circle, #ffffff 0%, #e0e0e0 100%);
+            border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
+            margin: 0 auto 20px;
+            position: relative;
+            animation: float 3s ease-in-out infinite;
+            box-shadow: 0 10px 30px rgba(255, 255, 255, 0.3);
+        }
+
+        .tiandian-mascot::before {
+            content: '🕊️';
+            position: absolute;
+            top: -20px;
+            right: -10px;
+            font-size: 30px;
+            transform: rotate(45deg);
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-15px); }
+        }
+
+        .welcome-title {
+            font-size: 28px;
+            font-weight: bold;
+            background: linear-gradient(90deg, var(--tianyi-200), var(--biyu-400));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 10px;
+        }
+
+        .welcome-subtitle {
+            color: var(--tianyi-100);
+            font-size: 14px;
+        }
+
+        .input-group {
+            width: 100%;
+            margin-bottom: 20px;
+        }
+
+        .input-field {
+            width: 100%;
+            padding: 15px 20px;
+            background: rgba(102, 204, 255, 0.1);
+            border: 1px solid rgba(102, 204, 255, 0.3);
+            border-radius: 10px;
+            color: #ffffff;
+            font-size: 16px;
+            margin-bottom: 15px;
+            position: relative;
+        }
+
+        .input-field::before {
+            content: '≋';
+            position: absolute;
+            left: 10px;
+            color: var(--tianyi-200);
+        }
+
+        .login-btn {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(90deg, var(--tianyi-400), var(--tianyi-500));
+            border: none;
+            border-radius: 10px;
+            color: #ffffff;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+
+        /* 骑行首页样式 */
+        .index-page {
+            min-height: 100%;
+            background: var(--space-900);
+        }
+
+        .custom-nav {
+            padding: 60px 20px 15px;
+            background: linear-gradient(90deg, var(--tianyi-600), var(--tianyi-500));
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .custom-nav::before {
+            content: '∞';
+            position: absolute;
+            right: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 60px;
+            color: rgba(255, 255, 255, 0.1);
+        }
+
+        .nav-title {
+            font-size: 20px;
+            font-weight: bold;
+            color: #ffffff;
+        }
+
+        .map-container {
+            height: 300px;
+            background: linear-gradient(180deg, var(--space-800) 0%, var(--space-700) 100%);
+            margin: 20px;
+            border-radius: 15px;
+            border: 2px solid rgba(102, 204, 255, 0.3);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .map-container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: repeating-linear-gradient(
+                0deg,
+                transparent,
+                transparent 20px,
+                rgba(102, 204, 255, 0.1) 20px,
+                rgba(102, 204, 255, 0.1) 21px
+            );
+        }
+
+        .status-panel {
+            margin: 20px;
+            padding: 20px;
+            background: rgba(102, 204, 255, 0.1);
+            border-radius: 15px;
+            border: 1px solid rgba(102, 204, 255, 0.2);
+        }
+
+        .status-title {
+            color: var(--tianyi-200);
+            font-size: 16px;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-title::before {
+            content: 'प';
+            font-size: 24px;
+            color: var(--biyu-400);
+        }
+
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+        }
+
+        .status-item {
+            text-align: center;
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+        }
+
+        .status-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: var(--tianyi-200);
+            margin-bottom: 5px;
+        }
+
+        .status-label {
+            font-size: 12px;
+            color: #aaa;
+        }
+
+        /* 控制页样式 */
+        .control-page {
+            min-height: 100%;
+            background: var(--space-900);
+            padding: 60px 20px 20px;
+        }
+
+        .control-section {
+            margin-bottom: 30px;
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid;
+            border-image: linear-gradient(90deg, var(--tianyi-400), transparent) 1;
+        }
+
+        .section-header::before {
+            content: '🎀';
+            font-size: 20px;
+        }
+
+        .control-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+        }
+
+        .control-btn {
+            padding: 20px;
+            background: rgba(102, 204, 255, 0.1);
+            border: 1px solid rgba(102, 204, 255, 0.3);
+            border-radius: 10px;
+            color: #ffffff;
+            font-size: 16px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .control-btn:hover {
+            background: rgba(102, 204, 255, 0.2);
+            transform: translateY(-2px);
+        }
+
+        .slider-container {
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            margin-top: 10px;
+        }
+
+        .slider-label {
+            color: var(--tianyi-100);
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .slider {
+            width: 100%;
+            height: 6px;
+            background: rgba(102, 204, 255, 0.2);
+            border-radius: 3px;
+            position: relative;
+        }
+
+        .slider-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--biyu-400), var(--biyu-600));
+            border-radius: 3px;
+            width: 70%;
+        }
+
+        /* TabBar 样式 */
+        .tab-bar {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 80px;
+            background: rgba(10, 10, 26, 0.95);
+            border-top: 1px solid rgba(102, 204, 255, 0.3);
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            padding-bottom: 20px;
+        }
+
+        .tab-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: #666;
+            font-size: 12px;
+        }
+
+        .tab-item.active {
+            color: var(--tianyi-200);
+        }
+
+        .tab-icon {
+            font-size: 24px;
+            margin-bottom: 5px;
+        }
+
+        .ride-btn {
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(135deg, var(--tianyi-400), var(--tianyi-500));
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #ffffff;
+            font-size: 24px;
+            margin-top: -30px;
+            box-shadow: 0 5px 20px rgba(102, 204, 255, 0.5);
+            animation: breathe 2s ease-in-out infinite;
+        }
+
+        @keyframes breathe {
+            0%, 100% { box-shadow: 0 5px 20px rgba(102, 204, 255, 0.5); }
+            50% { box-shadow: 0 5px 30px rgba(102, 204, 255, 0.8); }
+        }
+
+        /* 加载动画 */
+        .loading-demo {
+            text-align: center;
+            padding: 30px;
+        }
+
+        .xiaolongbao {
+            font-size: 60px;
+            animation: bounce 1s ease-in-out infinite;
+        }
+
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0px) rotate(0deg); }
+            25% { transform: translateY(-20px) rotate(-10deg); }
+            75% { transform: translateY(-20px) rotate(10deg); }
+        }
+
+        .loading-text {
+            margin-top: 20px;
+            color: var(--tianyi-200);
+            font-size: 16px;
+        }
+
+        /* 页面切换 */
+        .page-tabs {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .page-tab {
+            padding: 10px 30px;
+            background: rgba(102, 204, 255, 0.1);
+            border: 1px solid rgba(102, 204, 255, 0.3);
+            border-radius: 10px;
+            color: #ffffff;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .page-tab.active {
+            background: rgba(102, 204, 255, 0.3);
+            border-color: var(--tianyi-200);
+        }
+
+        .page-mockup {
+            display: none;
+        }
+
+        .page-mockup.active {
+            display: block;
+        }
+
+        .preview-note {
+            text-align: center;
+            margin-top: 40px;
+            padding: 20px;
+            background: rgba(46, 204, 113, 0.1);
+            border-radius: 10px;
+            border: 1px solid rgba(46, 204, 113, 0.3);
+            color: var(--biyu-400);
+        }
+    </style>
+</head>
+<body>
+    <div class="preview-container">
+        <div class="preview-header">
+            <h1>🎤 洛天依主题视觉预览</h1>
+            <p>智能骑行头盔微信小程序 - 洛天依视觉元素融入方案</p>
+        </div>
+
+        <div class="design-tokens">
+            <div class="token-section">
+                <h3>🎨 天依蓝色板</h3>
+                <div class="color-palette">
+                    <div class="color-item">
+                        <div class="color-swatch" style="background: #e6f7ff;"></div>
+                        <div class="color-label">50</div>
+                    </div>
+                    <div class="color-item">
+                        <div class="color-swatch" style="background: #b3e0ff;"></div>
+                        <div class="color-label">100</div>
+                    </div>
+                    <div class="color-item">
+                        <div class="color-swatch" style="background: #66ccff;"></div>
+                        <div class="color-label">200</div>
+                    </div>
+                    <div class="color-item">
+                        <div class="color-swatch" style="background: #33bbff;"></div>
+                        <div class="color-label">300</div>
+                    </div>
+                    <div class="color-item">
+                        <div class="color-swatch" style="background: #0099ff;"></div>
+                        <div class="color-label">400</div>
+                    </div>
+                    <div class="color-item">
+                        <div class="color-swatch" style="background: #0077cc;"></div>
+                        <div class="color-label">500</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="token-section">
+                <h3>✨ 碧玉绿 (碧瞳)</h3>
+                <div class="color-palette">
+                    <div class="color-item">
+                        <div class="color-swatch" style="background: #86efac;"></div>
+                        <div class="color-label">200</div>
+                    </div>
+                    <div class="color-item">
+                        <div class="color-swatch" style="background: #4ade80;"></div>
+                        <div class="color-label">400</div>
+                    </div>
+                    <div class="color-item">
+                        <div class="color-swatch" style="background: #2ecc71;"></div>
+                        <div class="color-label">600</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="token-section">
+                <h3>🔮 标志性符号</h3>
+                <div class="symbol-showcase">
+                    <div class="symbol-item">
+                        <span class="symbol">∞</span>
+                        <div class="label">环形辫</div>
+                    </div>
+                    <div class="symbol-item">
+                        <span class="symbol">प</span>
+                        <div class="label">梵文"羽"</div>
+                    </div>
+                    <div class="symbol-item">
+                        <span class="symbol">≋</span>
+                        <div class="label">水波纹</div>
+                    </div>
+                    <div class="symbol-item">
+                        <span class="symbol">🎀</span>
+                        <div class="label">中国结</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="page-tabs">
+            <div class="page-tab active" onclick="showPage('login')">登录页</div>
+            <div class="page-tab" onclick="showPage('index')">骑行首页</div>
+            <div class="page-tab" onclick="showPage('control')">控制页</div>
+            <div class="page-tab" onclick="showPage('loading')">加载动画</div>
+        </div>
+
+        <div class="phone-mockup">
+            <div class="phone-screen">
+                <!-- 登录页 -->
+                <div class="page-mockup active" id="page-login">
+                    <div class="login-page">
+                        <div class="welcome-section">
+                            <div class="tiandian-mascot"></div>
+                            <div class="welcome-title">欢迎回来</div>
+                            <div class="welcome-subtitle">智能骑行头盔 · 洛天依主题</div>
+                        </div>
+
+                        <div class="input-group">
+                            <div class="input-field">请输入设备 ID</div>
+                            <div class="input-field">请输入密码</div>
+                        </div>
+
+                        <button class="login-btn">连接设备</button>
+
+                        <div style="margin-top: 30px; color: var(--tianyi-100); font-size: 14px;">
+                            <p>≋ 水波纹装饰输入框</p>
+                            <p style="margin-top: 10px;">🕊️ 天钿迎宾动画</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 骑行首页 -->
+                <div class="page-mockup" id="page-index">
+                    <div class="index-page">
+                        <div class="custom-nav">
+                            <div class="nav-title">智能骑行头盔</div>
+                        </div>
+
+                        <div class="map-container">
+                            <div style="padding: 20px; color: var(--tianyi-100);">
+                                📍 地图区域<br>
+                                水波纹边框装饰
+                            </div>
+                        </div>
+
+                        <div class="status-panel">
+                            <div class="status-title">骑行状态</div>
+                            <div class="status-grid">
+                                <div class="status-item">
+                                    <div class="status-value">25.6</div>
+                                    <div class="status-label">速度 (km/h)</div>
+                                </div>
+                                <div class="status-item">
+                                    <div class="status-value">12.3</div>
+                                    <div class="status-label">距离 (km)</div>
+                                </div>
+                                <div class="status-item">
+                                    <div class="status-value">36°C</div>
+                                    <div class="status-label">温度</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="tab-bar">
+                        <div class="tab-item active">
+                            <div class="tab-icon">🏠</div>
+                            <div>首页</div>
+                        </div>
+                        <div class="ride-btn">🚴</div>
+                        <div class="tab-item">
+                            <div class="tab-icon">⚙️</div>
+                            <div>控制</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 控制页 -->
+                <div class="page-mockup" id="page-control">
+                    <div class="control-page">
+                        <div class="control-section">
+                            <div class="section-header">灯光控制</div>
+                            <div class="control-grid">
+                                <div class="control-btn">💡 开启大灯</div>
+                                <div class="control-btn">🔦 开启尾灯</div>
+                            </div>
+                        </div>
+
+                        <div class="control-section">
+                            <div class="section-header">音量调节</div>
+                            <div class="slider-container">
+                                <div class="slider-label">
+                                    <span>当前音量</span>
+                                    <span>70%</span>
+                                </div>
+                                <div class="slider">
+                                    <div class="slider-fill"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="control-section">
+                            <div class="section-header">报警设置</div>
+                            <div class="control-grid">
+                                <div class="control-btn">🔔 碰撞报警</div>
+                                <div class="control-btn">📢 静默模式</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="tab-bar">
+                        <div class="tab-item">
+                            <div class="tab-icon">🏠</div>
+                            <div>首页</div>
+                        </div>
+                        <div class="ride-btn">🚴</div>
+                        <div class="tab-item active">
+                            <div class="tab-icon">⚙️</div>
+                            <div>控制</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 加载动画 -->
+                <div class="page-mockup" id="page-loading">
+                    <div class="login-page" style="justify-content: center;">
+                        <div class="loading-demo">
+                            <div class="xiaolongbao">🥟</div>
+                            <div class="loading-text">加载中... 洛天依为你护航</div>
+                            <div style="margin-top: 30px; color: var(--tianyi-100);">
+                                <p>🥟 小笼包弹跳加载 (二次设定彩蛋)</p>
+                                <p style="margin-top: 20px;">🕊️ 天钿提示动画</p>
+                                <p style="margin-top: 20px;">🌌 星空投影背景</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="preview-note">
+            <p>💡 这是一个视觉预览页面，展示了洛天依主题在小程序中的效果</p>
+            <p style="margin-top: 10px;">如果确认这个设计方向，我将开始执行代码修改</p>
+        </div>
+    </div>
+
+    <script>
+        function showPage(pageName) {
+            // 隐藏所有页面
+            const pages = document.querySelectorAll('.page-mockup');
+            pages.forEach(page => {
+                page.classList.remove('active');
+            });
+
+            // 显示选中的页面
+            const targetPage = document.getElementById('page-' + pageName);
+            if (targetPage) {
+                targetPage.classList.add('active');
+            }
+
+            // 更新 tab 样式
+            const tabs = document.querySelectorAll('.page-tab');
+            tabs.forEach(tab => {
+                tab.classList.remove('active');
+            });
+            event.target.classList.add('active');
+        }
+    </script>
+</body>
+</html>

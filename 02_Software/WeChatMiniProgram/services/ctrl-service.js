@@ -12,6 +12,7 @@ var logger = require('../utils/logger');
 var CMD = {
   LIGHT_ON: 'light_on',
   LIGHT_OFF: 'light_off',
+  LIGHT_BLINK: 'light_blink',
   BRIGHTNESS_UP: 'brightness_up',
   BRIGHTNESS_DOWN: 'brightness_down',
   LIGHT_AUTO: 'light_auto',
@@ -37,6 +38,7 @@ var _state = {
   brightness: 0,
   volume: 5,
   powerMode: 'active',
+  blink: false,
 };
 
 // ==================== 指令发送 ====================
@@ -54,6 +56,11 @@ function lightOff() {
 function lightAuto() {
   BleService.sendCtrl(CMD.LIGHT_AUTO);
   logger.log('CTRL', 'light_auto sent');
+}
+
+function blink() {
+  BleService.sendCtrl(CMD.LIGHT_BLINK);
+  logger.log('CTRL', 'light_blink (toggle) sent');
 }
 
 function brightnessUp() {
@@ -147,10 +154,11 @@ function queryBattery() {
 function parseCtrlState(data) {
   try {
     if (!data) return null;
-    // t=7: 灯光 {m:0=auto/1=manual, b:brightness}
+    // t=7: 灯光 {m:0=auto/1=manual, b:brightness, f:0/1=闪烁}
     if (data.t === 7) {
       if (data.m != null) _state.lightMode = data.m === 1 ? 'manual' : 'auto';
       if (data.b != null) _state.brightness = data.b * 2;
+      if (data.f != null) _state.blink = data.f === 1;
     }
     // t=8: 音量 {v:volume}
     if (data.t === 8) {
@@ -169,7 +177,8 @@ function parseCtrlState(data) {
     }
     logger.log('CTRL', 'state recv: t=' + data.t +
       ' light=' + _state.lightMode + '/' + _state.brightness +
-      ' vol=' + _state.volume + ' power=' + _state.powerMode);
+      ' vol=' + _state.volume + ' power=' + _state.powerMode +
+      ' blink=' + _state.blink);
     return getState();
   } catch (e) {
     console.error('[ctrl-service] parseCtrlState error:', e);
@@ -183,11 +192,12 @@ function getState() {
     brightness: _state.brightness,
     volume: _state.volume,
     powerMode: _state.powerMode,
+    blink: _state.blink,
   };
 }
 
 function reset() {
-  _state = { lightMode: 'auto', brightness: 0, volume: 5, powerMode: 'active' };
+  _state = { lightMode: 'auto', brightness: 0, volume: 5, powerMode: 'active', blink: false };
   logger.log('CTRL', 'state reset');
 }
 
@@ -196,6 +206,7 @@ module.exports = {
   lightOn: lightOn,
   lightOff: lightOff,
   lightAuto: lightAuto,
+  blink: blink,
   brightnessUp: brightnessUp,
   brightnessDown: brightnessDown,
   volumeUp: volumeUp,

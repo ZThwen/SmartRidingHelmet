@@ -352,6 +352,15 @@ type(scope): description
 - **测试文件版本管理** — test_control_service.py 有 4 个版本，旧版本应及时归档
 - **gitignore 应在项目初期配置** — thonny 目录之前被 git 跟踪，后来才加入 gitignore，导致删除后需要重新创建
 
+### 12.6 微信小程序 (P1/P2 修复 2026-06-24)
+
+- **两个页面 BLE onData 回调不一致是 P1 Bug 根源** — index.js 和 control.js 各有自己的 onData 处理逻辑，导致状态不同步。解决：创建 StateService 全局 BLE 回调中心 → EventBus 广播
+- **StateService.init() 必须在 app.js onLaunch 中调用** — 否则 _app/_bus 为 null，所有事件都不会触发
+- **trackPoints 数据所有权迁移防止页面切换数据丢失** — 原来 trackPoints 在 Page data 中，页面切换可能清空。解决：迁移到 RideService 模块级变量，页面从 RideService 读取
+- **_endRide 中必须在 RideService.clear() 之前获取轨迹数据** — clear() 会清空 _trackPoints，之后 getTrackPoints() 返回空数组
+- **BLE 重连场景适配器已打开错误需捕获** — wx.openBluetoothAdapter 报 "already open" 时，需要用 setCallbacks 更新回调后直接 scan
+- **移远云完全移除后需搜索所有引用确认零残留** — 删除 data-service/ws-client/crypto 后，grep 确认无 require 引用
+
 ---
 
 ## 13. 参考文档
@@ -376,7 +385,7 @@ type(scope): description
 | Core (main, config, EventBus, BaseModule) | ✅ 完成 | `02_Software/core/` |
 | Sensors (Temp_Humid, IMU, GNSS, Light) | ✅ 完成 | `02_Software/Drivers/sensor/` |
 | Actuators (LED, Audio, LCD) | ✅ 完成 | `02_Software/Drivers/actuator/` |
-| PWM_LED (PE11, TIM1_CH2) | ✅ 完成（未集成 main.py） | `02_Software/Drivers/actuator/PWM_LED.py` |
+| PWM_LED (PE11, TIM1_CH2) | ✅ 完成（已集成 main.py） | `02_Software/Drivers/actuator/PWM_LED.py` |
 | Button | ✅ 完成 | `02_Software/Drivers/interface/` |
 | Network, MQTT, BLE | ✅ 完成 | `02_Software/Drivers/network/` |
 | Qth (Quectel Cloud SDK) | ⚠️ 已废弃 | `02_Software/Drivers/network/Qth.py` |
@@ -390,6 +399,6 @@ type(scope): description
 | BatteryDriver (电池ADC) | ✅ 完成（已集成 main.py） | `02_Software/Drivers/sensor/Battery.py` |
 | HeartRate | 📅 v2 计划（等硬件） | `02_Software/Drivers/sensor/HeartRate.py` |
 | VoiceDriver (ASRPRO) | ✅ 完成（已集成 main.py） | `02_Software/Drivers/interface/Voice.py` |
-| WeChatMiniProgram | Step A + Step B（导航+远端控制）完成 | `02_Software/WeChatMiniProgram/` |
+| WeChatMiniProgram | ✅ P1/P2 修复完成（移远云移除、StateService 全局状态、trackPoints 迁移） | `02_Software/WeChatMiniProgram/` |
 
 **注意**：Network.py 和 MQTT.py 放在 `02_Software/Drivers/network/`（不是 `02_Software/Drivers/interface/`）。

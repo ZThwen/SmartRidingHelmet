@@ -1,13 +1,15 @@
 /**
  * 自定义底部导航栏 — 骑行/控制切换 + 浮动骑行/导航按钮
  *
- * v2 修复：updateNav/_syncSelected 直接从 NavService 读取状态，
- *          绕过页面异步 setData 导致读到旧数据的 bug；
- *          isNavigating 包含 planning 状态；
- *          onNavBtn 处理控制页场景。
+ * v3 修复：渲染不及时问题
+ *  - wx:if→hidden（DOM 不销毁，切换更可靠）
+ *  - eventBus 自动同步（ride:start/end + nav:stateChange）
+ *  - getTabBar() 仅作兜底，不再依赖页面手动 _syncTabBar
+ *  - 取消导航→结束导航（用户预期语义）
  */
 var app = getApp();
 var NavService = require('../services/navigation-service');
+var RideService = require('../services/ride-service');
 
 /** 导航活跃状态：planning(规划中) / navigating(导航中) / paused(暂停) */
 function _isNavActive(navState) {
@@ -58,7 +60,7 @@ Component({
       if (!current) return;
 
       if (this.data.isNavigating) {
-        // 导航中/规划中 → 取消导航
+        // 导航中/规划中 → 结束导航
         if (current.onCancelNavigation) {
           current.onCancelNavigation();
         }
@@ -80,6 +82,7 @@ Component({
       this.setData({ isNavigating: _isNavActive(navState) });
     },
 
+    /** 全量同步 — 从全局数据 + NavService 读取真实状态 */
     _syncSelected: function() {
       var globalData = app.globalData;
       var pages = getCurrentPages();
@@ -96,16 +99,47 @@ Component({
       var navState = NavService.getState().state;
       this.setData({
         selected: selected,
-        riding: globalData.isRiding,
+        riding: !!globalData.isRiding,
         isNavigating: _isNavActive(navState),
-        bleConnected: globalData.bleConnected,
+        bleConnected: !!globalData.bleConnected,
       });
+    },
+
+    /** eventBus 回调 — ride:start 时自动同步骑行状态 */
+    _onRideStart: function() {
+      this.setData({ riding: true });
+    },
+
+    /** eventBus 回调 — ride:end 时自动同步骑行状态 */
+    _onRideEnd: function() {
+      this.setData({ riding: false, isNavigating: false });
+    },
+
+    /** eventBus 回调 — nav:stateChange 时自动同步导航状态 */
+    _onNavStateChange: function(navState) {
+      this.setData({ isNavigating: _isNavActive(navState) });
     },
   },
 
   lifetimes: {
     attached: function() {
       this._syncSelected();
+      // 注册 eventBus 自动同步（核心修复：不再依赖页面手动 _syncTabBar）
+      var bus = app.eventBus;
+      if (bus) {
+        bus.on('ride:start', this._onRideStart.bind(this));
+        bus.on('ride:end', this._onRideEnd.bind(this));
+        bus.on('nav:stateChange', this._onNavStateChange.bind(this));
+      }
+    },
+    detached: function() {
+      // 清理 eventBus 监听
+      var bus = app.eventBus;
+      if (bus) {
+        bus.off('ride:start', this._onRideStart);
+        bus.off('ride:end', this._onRideEnd);
+        bus.off('nav:stateChange', this._onNavStateChange);
+      }
     },
   },
 

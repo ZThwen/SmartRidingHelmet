@@ -11,7 +11,7 @@ var RECONNECT_MAX = 3;
 var RECONNECT_DELAY = 2000;
 
 var TYPE_MAP = {
-  0: 'merged',
+  0: 'merged',        // 传感器合并数据（温度/湿度/速度/经纬度/海拔/光照/电量/航向/心率/血氧）
   5: 'alarm',
   6: 'alarm_cancel',
   7: 'ctrl_state',

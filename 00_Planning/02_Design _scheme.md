@@ -154,13 +154,11 @@
 
 ---
 
-#### 2.1.5 心率血氧驱动模块（HeartRate.py）✅ v1 已实现
+#### 2.1.5 心率血氧驱动模块（HeartRate.py）
 
 **所属层次**：Device层（设备封装层）
 
 **需求对应**：F-HR-01 心率监测
-
-**当前状态**：✅ **v1 已实现**（2026-06-24），UART9 通信
 
 **模块功能**：
 - 初始化 MKS SPO2-ZS-BLE 心率血氧模块（UART 通信）
@@ -363,8 +361,6 @@ LCD 内部维护 `display_mode` 状态（normal / alarm），用于防止 Servic
 **所属层次**：Device层（设备封装层）
 
 **需求对应**：F-LIGHT-01 大功率灯光调光控制
-
-**当前状态**：✅ **v1 已实现**（2026-06-10）
 
 **模块功能**（纯硬件控制，无业务逻辑）：
 
@@ -1757,7 +1753,7 @@ gnss.get_location() 返回有效数据
 
 ---
 
-### 阶段 4：v2 功能扩展（📅 规划中）
+### 阶段 4：v2 功能扩展（v2 ✅ 已完成）
 
 **核心任务**：
 - 电源管理模块 ✅ 已完成
@@ -1772,13 +1768,13 @@ gnss.get_location() 返回有效数据
 | 模块 | 类型 | 状态 | 关键依赖 |
 |:----|:----|:----:|:--------|
 | PowerService | 服务 | ✅ 已完成 | BatteryDriver (ADC PC4) |
-| HeartRate | 驱动 | 🟡 待开发 | 心率带硬件到货 |
+| HeartRate | 驱动 | ✅ 已完成 | 无                                  |
 | PWM_LED | 驱动 | ✅ 板子端已实现 | PE11 + TIM1_CH2，PWM 调光 |
 | NavigationService | 服务 | ✅ 板子端已实现 | BLE FFF2 + TTS；位置播报 📅 |
 | ControlService | 服务 | ✅ 板子端已实现 | BLE FFF3 + 统一路由；小程序端待开发 |
-| VoiceDriver | 驱动 | 📅 等 ASRPRO 硬件 | UART 串口通信 |
+| VoiceDriver | 驱动 | ✅ 已完成 | UART 串口通信 |
 | LBSDriver | 驱动 | ✅ v1 已实现 | quectel.LBS，与 GNSS 互斥 |
-| WeChatMiniProgram | 外部 | 🟢 Step A 完成 + Step B 框架 | 无 |
+| WeChatMiniProgram | 外部 | 🟢 Step A 完成 + Step B 完成 | 无 |
 
 **集成策略**：与 v1 相同的逐步集成原则，每个模块独立开发验证后加入 main.py。
 
@@ -1856,35 +1852,6 @@ gnss.get_location() 返回有效数据
 
 ---
 
-## 3.5 开发变更记录
-
-> 按时间顺序记录各阶段的关键模块新增、功能上线和架构变更。
-
-| 日期 | 阶段 | 关键变更 |
-|------|------|---------|
-| 05-05 ~ 05-06 | Phase 1 | 项目初始化、core 框架搭建（BaseModule、EventBus、config） |
-| 05-08 | Phase 1 | 新增驱动：IMU（LIS2DH12TR）、LightSensor（GL5528 ADC） |
-| 05-11 ~ 05-13 | Phase 1 | 新增驱动：Audio、Button、GNSS、LED、LCD；第一阶段验收通过 |
-| 05-14 | Phase 1 | GNSS/LCD/config 细节完善，按键事件定义 |
-| 05-17 | Phase 2 | 新增驱动：Network + MQTT；新增服务：CloudService（MQTT → ConnectLab） |
-| 05-18 ~ 05-19 | Phase 2 | 新增服务：AlarmService、CollisionService、DisplayService |
-| 05-20 | Phase 3 | **v1 系统集成完成**：12 模块 main.py 集成，`test_system_full_v1.py` 全系统测试 |
-| 05-22 | Phase 4 | 新增驱动：QthDriver；新增服务：LarkCloudService（移远云 DMP 通道） |
-| 05-28 | Phase 4 | 新增驱动：BLEDriver；新增服务：BLEService（GATT Server FFF1-FFF4）；小程序 Step A 初版 |
-| 06-01 | Phase 4 | **小程序 Step A 完成**：登录+实时数据+骑行控制+地图轨迹+报警取消 |
-| 06-02 | Phase 4 | 文档同步、密钥安全、BLE 报警载荷 t=5 压缩（15 字节） |
-| 06-09 | Phase 4 | 新增驱动：LBSDriver（基站定位）；新增服务：NavigationService；GNSS cog 字段；小程序导航推送 |
-| 06-11 | Phase 4 | 新增驱动：PWM_LED（PE11/TIM1_CH2）；新增服务：LightService（自适应灯光）、ControlService v1（BLE 远端控制）；BLE type=7 控制状态回推 |
-| 06-12 | Phase 4 | ControlService 重构为纯事件驱动架构；新增驱动：VoiceDriver（UART hex 映射 19 指令）；新增 TTS 反馈、电源模式、CUSTOM 状态；集成测试 |
-| 06-14 ~ 06-15 | Phase 4 | 小程序控制页 UI/JS/WXSS + TabBar + BLE 服务集成 + safe area 适配 |
-| 06-18 | Phase 4 | ControlService v3（合并 BLE 推送+TTS+报警快照）；BLEService v3（环形缓冲区+快照合并）；E2E 测试增强；文档同步 |
-| 06-20 | Phase 4 | 语音模块开发完成：VoiceDriver 集成验证 + ASRPRO UART 通信调试 |
-| 06-23 | Phase 4 | 电源检测模块完成：BatteryDriver (ADC PC4) + PowerService（六档映射、自动省电、TTS、BLE 推送、语音查询） |
-| 06-24 | Phase 4 | AudioDriver tick 环形缓冲区 + BatteryDriver sample_count 字段 + PowerService 启动宽限期（sample_count<3 跳过）+ PowerService 未接电池保护（battery_mv<1000）+ ControlService 订阅 EVENT_POWER_STATE_CHANGE 回推电源状态到小程序 |
-| 06-22 | Phase 5 | **AudioService 统一音频调度 + LCD 导航恢复**：新建 AudioService（优先级队列 ALARM>NAV>CTRL + 超时 5s 丢弃 + 队列上限 3）；NavigationService TTS 改用 EventBus 发布；DisplayService 订阅 EVENT_NAV_DISPLAY 渲染恢复导航文字；AudioDriver 移除 TTS 订阅改为纯硬件层；Oracle 审查修复 3 个 Bug（同优先级覆盖延迟 / 僵尸 TTS 线程 / 报警期间 LCD 泄露）；小程序报警双端同步（globalData + EventBus）；省电模式灯光控制修复（PWM_LED CUSTOM 模式 + ControlService 时序） |
-
----
-
 ## 4. 里程碑规划
 
 ### 里程碑总览
@@ -1912,7 +1879,7 @@ M1: 起步验证 ──→ M2: 本地闭环 ──→ M3: 云端打通 ──→
 | 05-22 | M4+ 移远云 | ✅ | QthDriver + LarkCloudService（移远云 DMP）E2E 通过 |
 | 05-28 ~ 06-02 | M5 Phase 4 启动 | ✅ | BLE 模块 + 小程序 Step A 完成 + Step B 导航框架 |
 | 06-09 | M5 导航+LBS | ✅ | NavigationService + LBS 驱动 + 小程序导航推送 |
-| 06-11 ~ 06-20 | M5 Phase 4 推进 | 🔵 | PWM_LED + LightService + ControlService v3 + VoiceDriver + 小程序远端控制（代码完成，待集成 main.py） |
+| 06-11 ~ 06-24 | M5 Phase 4 推进 | 🔵 | PWM_LED + LightService + ControlService v3 + VoiceDriver + 小程序远端控制（代码完成，待集成 main.py） |
 | 将来 | M6 收官 | 📅 | 设计文档、演示视频、答辩 PPT、开源整理 |
 
 ---

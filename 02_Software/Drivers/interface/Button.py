@@ -36,6 +36,7 @@ class Button(BaseModule):
             "last_tick": 0,           # 上次执行时间戳
             "err_count": 0,           # 错误计数
             "power_state": POWER_STATE_ACTIVE,  # 功耗状态
+            "button_pressed_flag": False,  # ISR 标志位：IRQ 中置位，tick() 中消费
         }
 
         # ===================== 四元组：当前数据 =====================
@@ -65,18 +66,32 @@ class Button(BaseModule):
 
     def tick(self):
         """
+        brief 主循环调度：检查 ISR 标志位并发布事件
+        note ISR 只设置标志位，这里消费标志位并发布事件，避免 ISR 中持锁
         """
-        pass
+        if not self.ctx["is_init"]:
+            return
+
+        if self.ctx["button_pressed_flag"]:
+            self.ctx["button_pressed_flag"] = False
+            if self.event_bus:
+                self.event_bus.publish(EVENT_BUTTON_PRESSED, {
+                    "timestamp": time.ticks_ms()
+                })
 
     # ==================== 事件回调 ====================
     def button_handler(self, pin):
+        """
+        brief 按键中断回调（ISR 上下文，必须快速返回）
+        note 不直接 publish()，仅设置标志位，由 tick() 消费
+        """
         now = time.ticks_ms()
         if self.cfg["debounce_ms"] > time.ticks_diff(now, self.ctx["last_tick"]):
             return
         self.ctx["last_tick"] = now
 
         if pin.value() == 1:
-            self.event_bus.publish(EVENT_BUTTON_PRESSED)
+            self.ctx["button_pressed_flag"] = True
 
     # ==================== 辅助方法 ====================
     def get_data(self):

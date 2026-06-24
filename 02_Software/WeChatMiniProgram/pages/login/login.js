@@ -1,29 +1,41 @@
 /**
- * 登录页 — 手机号 + 密码登录 QuecCloud
+ * 登录页 — UserService stub 登录
+ *
+ * 移远云登录已移除（2026-06-24）
+ * 当前使用 UserService 本地 stub，未来接入云端后端
  */
-var config;
-var crypto;
-try {
-  config = require('../../utils/config');
-  crypto = require('../../utils/crypto');
-} catch (e) {
-  console.error('Login page require failed:', e);
-}
+var UserService = require('../../services/user-service');
 
 Page({
   data: {
-    phone: '13368190189',
+    phone: '',
     pwd: '',
     loading: false,
     error: '',
   },
 
-  onPhoneInput(e) { this.setData({ phone: e.detail.value, error: '' }); },
-  onPwdInput(e)  { this.setData({ pwd: e.detail.value, error: '' }); },
+  onLoad: function() {
+    // 自动登录检查：如果本地有缓存，直接跳转
+    if (UserService.isLoggedIn()) {
+      var app = getApp();
+      app.globalData.userInfo = UserService.getUserInfo();
+      wx.reLaunch({ url: '/pages/index/index' });
+    }
+  },
 
-  onLogin() {
-    const phone = this.data.phone.trim();
-    const pwd = this.data.pwd;
+  onPhoneInput: function(e) {
+    this.setData({ phone: e.detail.value, error: '' });
+  },
+
+  onPwdInput: function(e) {
+    this.setData({ pwd: e.detail.value, error: '' });
+  },
+
+  onLogin: function() {
+    var that = this;
+    var phone = this.data.phone.trim();
+    var pwd = this.data.pwd;
+
     if (!phone || phone.length !== 11) {
       this.setData({ error: '请输入正确的 11 位手机号' });
       return;
@@ -35,46 +47,15 @@ Page({
 
     this.setData({ loading: true, error: '' });
 
-    // 1. 加密密码
-    const rand = crypto.random16();
-    const epwd = crypto.encryptPassword(pwd, rand);
+    UserService.login(phone, pwd).then(function(userInfo) {
+      // 登录成功 — 写入 globalData
+      var app = getApp();
+      app.globalData.userInfo = userInfo;
 
-    // 2. 计算签名: SHA256(internationalCode + phone + pwd + random + userDomainSecret)
-    const sigRaw = '86' + phone + epwd + rand + config.USER_DOMAIN_SECRET;
-    const sig = crypto.sha256(sigRaw);
-
-    // 3. 调用登录 API
-    const url = config.BASE_URL + '/v2/enduser/enduserapi/phonePwdLogin'
-      + '?internationalCode=86'
-      + '&phone=' + phone
-      + '&pwd=' + encodeURIComponent(epwd)
-      + '&random=' + rand
-      + '&signature=' + sig
-      + '&userDomain=' + config.USER_DOMAIN;
-
-    wx.request({
-      url: url,
-      method: 'POST',
-      header: { 'accept': '*/*' },
-      success: (res) => {
-        this.setData({ loading: false });
-        const d = res.data;
-        if (d && d.code === 200 && d.data && d.data.accessToken) {
-          // 登录成功 — 存 token 到全局
-          const app = getApp();
-          app.globalData.token = d.data.accessToken.token;
-          app.globalData.refreshToken = d.data.refreshToken.token;
-
-          // 跳转首页（redirectTo 不保留登录页在返回栈）
-          wx.reLaunch({ url: '/pages/index/index' });
-        } else {
-          const msg = d ? (d.msg || '登录失败') : '网络错误';
-          this.setData({ error: msg });
-        }
-      },
-      fail: (err) => {
-        this.setData({ loading: false, error: '网络错误: ' + err.errMsg });
-      },
+      that.setData({ loading: false });
+      wx.reLaunch({ url: '/pages/index/index' });
+    }).catch(function(err) {
+      that.setData({ loading: false, error: err.message || '登录失败' });
     });
   },
 });

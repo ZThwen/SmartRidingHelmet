@@ -83,17 +83,17 @@
   transform: scale(0.98);
 }
 
-/* 取消导航 */
-.ride-btn.cancel-nav {
+/* 结束导航（骑行中导航状态） */
+.ride-btn.end-nav {
   background: #ffffff;
   border: 2rpx solid #e53e3e;
 }
 
-.ride-btn.cancel-nav .ride-btn-text {
+.ride-btn.end-nav .ride-btn-text {
   color: #e53e3e;
 }
 
-.ride-btn.cancel-nav:active {
+.ride-btn.end-nav:active {
   background: rgba(229, 62, 62, 0.06);
   transform: scale(0.98);
 }

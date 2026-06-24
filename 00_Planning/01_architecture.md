@@ -397,7 +397,7 @@ while True:
 | IMUDriver | Drivers/sensor/imu.py | Device | ✅ | LIS2DH12TR 加速度/陀螺仪，I2C1 |
 | GNSSDriver | Drivers/sensor/Gnss.py | Device | ✅ | EC200U 内置 GNSS + LBS 基站定位 |
 | LightSensorDriver | Drivers/sensor/Light.py | Device | ✅ | GL5528 光敏电阻，ADC PC5 |
-| HeartRateDriver | Drivers/sensor/HeartRate.py | Device | ✅ | MKS SPO2-ZS-BLE 心率血氧，UART9 |
+| HeartRateDriver | Drivers/sensor/HeartRate.py | Device | ✅ 代码完成 | MKS SPO2-ZS-BLE 心率血氧，UART9（未集成 main.py，等硬件）|
 | BatteryDriver | Drivers/sensor/Battery.py | Device | ✅ | 电池电压 ADC，6 档电量 |
 | Button | Drivers/interface/Button.py | Device | ✅ | SOS 按键，GPIO + IRQ |
 | VoiceDriver | Drivers/interface/Voice.py | Device | ✅ | ASRPRO 语音识别，UART hex 映射 |
@@ -417,6 +417,7 @@ while True:
 | LightService | Modules/light_service.py | Service | ✅ v1 | 自适应灯光（光照→PWM 非线性映射） |
 | ControlService | Modules/control_service.py | Service | ✅ v3 | 纯事件驱动、19 条指令、TTS、报警快照 |
 | NavigationService | Modules/navigation_service.py | Service | ✅ v1 | 导航指令处理（腾讯地图 API） |
+| PowerService | Modules/power_service.py | Service | ✅ v1 | 电源管理，6 档电量+自动省电切换 |
 
 ### 3.5 初始化顺序
 
@@ -618,4 +619,4 @@ def tick(self):
 **文档版本**：v7.2
 **更新日期**：2026-06-24
 **维护团队**：锦依卫队
-**备注**：Phase 4 代码完成 — ControlService v3（19 指令+TTS+报警快照）、NavigationService、BLEService v3（环形缓冲+快照合并）、LightService、PWM_LED、VoiceDriver 已实现，待集成 main.py。
+**备注**：Phase 4 代码完成 — ControlService v3（19 指令+TTS+报警快照）、NavigationService、BLEService v3（环形缓冲+快照合并）、LightService、PWM_LED、VoiceDriver 均已集成 main.py。HeartRate 驱动代码完成，等待硬件接入。

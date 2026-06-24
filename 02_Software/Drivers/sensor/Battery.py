@@ -34,6 +34,9 @@ class BatteryDriver(BaseModule):
             "last_tick": 0,
             "sample_count": 0,
             "err_count": 0,
+            "last_valid_mv": 0,    # 上次有效电压（mV），用于变化率过滤
+            "last_level": -1,      # 上次有效档位，用于连续一致性检查
+            "stable_count": 0,     # 同一档位连续计数
         }
 
         self._data = {
@@ -70,6 +73,26 @@ class BatteryDriver(BaseModule):
             # 实际电池电压 = ADC 电压 * 分压比
             battery_mv = int(adc_mv * BATTERY_DIVIDER_RATIO)
             level = self._voltage_to_level(adc_mv)
+
+            # === ADC 悬空防误报：双层过滤 ===
+            # 过滤 1：变化率限制（电池电压变化很慢，悬空 ADC 跳变大）
+            last_mv = self.ctx["last_valid_mv"]
+            if last_mv != 0 and abs(battery_mv - last_mv) > 200:
+                self.ctx["err_count"] += 1
+                return  # 变化率过大，丢弃本次采样
+
+            # 过滤 2：连续一致性检查（悬空 ADC 无法连续落在同一档位）
+            if level == self.ctx["last_level"]:
+                self.ctx["stable_count"] += 1
+            else:
+                self.ctx["last_level"] = level
+                self.ctx["stable_count"] = 1
+
+            if self.ctx["stable_count"] < 3:
+                return  # 未稳定，继续等待
+
+            self.ctx["last_valid_mv"] = battery_mv
+            # === 过滤结束 ===
 
             self.ctx["sample_count"] += 1
             self._data = {

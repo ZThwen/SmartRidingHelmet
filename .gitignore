@@ -1,4 +1,5 @@
 # Claude Code 生成的文件
+.codebuddy/
 .superpowers/
 docs/superpowers/
 .mimocode/
@@ -36,3 +37,6 @@ skills-guide.md
 
 # 微信开发者工具本地配置
 02_Software/WeChatMiniProgram/project.private.config.json
+02_Software/WeChatMiniProgram/doc/ui-preview.html
+/.codebuddy
+02_Software/WeChatMiniProgram/doc/luotianyi-visual-elements.html

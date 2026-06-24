@@ -56,6 +56,10 @@
               bindtap="onLightOn">
           <text>开灯</text>
         </view>
+        <view class="toggle-btn blink-btn {{lightMode === 'auto' ? 'disabled' : ''}} {{lightBlink ? 'blink-active' : ''}}"
+              bindtap="onLightBlink">
+          <text>闪烁</text>
+        </view>
         <view class="toggle-btn {{lightMode === 'auto' ? 'disabled' : ''}}"
               bindtap="onLightOff">
           <text>关灯</text>
@@ -68,7 +72,7 @@
         <view class="slider-track">
           <view class="slider-fill" style="width: {{lightBrightness}}%;"></view>
         </view>
-        <text class="slider-value">{{lightBrightness}}%</text>
+        <text class="slider-value">{{brightnessDisplay}}</text>
         <view class="slider-btn" bindtap="onBrightnessUp"><text>▶</text></view>
       </view>
     </view>

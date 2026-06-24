@@ -96,18 +96,22 @@ class AudioDriver(BaseModule):
             print(f"[{self.name}] ✗ 初始化失败: {e}")
             raise
 
-        def tick(self):
+    def tick(self):
         """
         brief 周期调度：处理音频回调缓冲区
         note 回调缓冲区始终保持处理，不受电源模式影响。
-             电源模式只影响新播放的启动（由 play_tts/play_file 控制），
-             而回调处理必须执行以保持状态一致性。
-             静默报警时仍正常处理回调，但不启动新音频。
+              电源模式只影响新播放的启动（由 play_tts/play_file 控制），
+              而回调处理必须执行以保持状态一致性。
+              静默报警时仍正常处理回调，但不启动新音频。
         """
         # 处理回调缓冲区（回调线程只 append，主线程 pop + publish）
         # 注意：此处不判断 power_state——回调处理必须始终执行，
         #       否则 TTS/PLAY 完成事件永久积压，is_tts_playing 卡死
         while self._cb_ring:
+            # 防止内存泄漏：缓冲区超过 10 条时丢弃旧事件
+            if len(self._cb_ring) > 10:
+                self._cb_ring.pop(0)
+                continue
             try:
                 event = self._cb_ring.pop(0)
             except IndexError:

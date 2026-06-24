@@ -1,16 +1,16 @@
 <view class="tabbar-container">
-  <!-- 骑行中：两个按钮 -->
-  <view class="ride-btn-wrap dual" wx:if="{{riding}}">
+  <!-- 骑行中：两个按钮（hidden 不销毁 DOM，渲染更可靠） -->
+  <view class="ride-btn-wrap dual" hidden="{{!riding}}">
     <button class="ride-btn end" bindtap="onRideBtn">
       <text class="ride-btn-text">结束骑行</text>
     </button>
-    <!-- 导航中 → 取消导航 | 未导航 → 开始导航 -->
-    <button class="ride-btn {{isNavigating ? 'cancel-nav' : 'start-nav'}}" bindtap="onNavBtn">
-      <text class="ride-btn-text">{{isNavigating ? '取消导航' : '开始导航'}}</text>
+    <!-- 导航中 → 结束导航 | 未导航 → 开始导航 -->
+    <button class="ride-btn {{isNavigating ? 'end-nav' : 'start-nav'}}" bindtap="onNavBtn">
+      <text class="ride-btn-text">{{isNavigating ? '结束导航' : '开始导航'}}</text>
     </button>
   </view>
   <!-- 未骑行：单按钮 -->
-  <view class="ride-btn-wrap" wx:else>
+  <view class="ride-btn-wrap" hidden="{{riding}}">
     <button class="ride-btn start" bindtap="onRideBtn">
       <text class="ride-btn-text">开始骑行</text>
     </button>

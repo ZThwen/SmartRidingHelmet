@@ -145,37 +145,57 @@ class HeartRateDriver(BaseModule):
             return
 
         self.ctx["last_tick"] = now
-        self._read_uart()
+
+        try:
+            self._read_uart()
+        except Exception as e:
+            self.ctx["err_count"] += 1
+            print("[%s] tick err: %s" % (self.name, e))
+            if self.ctx["err_count"] > 10:
+                print("[%s] too many errors, stopping" % self.name)
+                self.ctx["is_collecting"] = False
 
     def _read_uart(self):
         """
         brief 读取串口数据，解析数据包
-        note 批量读取所有可用数据，扫描帧头0xFF，解析完整帧
+        note 限制每次读取字节数 + 帧扫描上限，防止阻塞主循环
         """
         try:
-            if not self.uart or self.uart.any() < self.cfg["data_len"]:
+            if not self.uart:
+                return
+
+            available = self.uart.any()
+            if available < self.cfg["data_len"]:
                 return
 
             self.ctx["is_busy"] = True
 
-            buf = self.uart.read(self.uart.any())
+            # 限制读取量，防止阻塞（最多 200 字节 ≈ 4 帧）
+            max_read = min(available, 200)
+            buf = self.uart.read(max_read)
             if not buf:
                 return
 
+            # 扫描帧头，最多处理 4 帧
+            frames_processed = 0
             for i in range(len(buf)):
-                if buf[i] == self.cfg["header"] and i + 49 <= len(buf):
-                    packet = buf[i:i+50]
-                    result = self._parse_packet(packet)
-                    if result["valid"]:
-                        self._data["heart_rate"] = result["heart_rate"]
-                        self._data["spo2"] = result["spo2"]
-                        self._data["valid"] = True
-                        self.ctx["err_count"] = 0
-                        self.ctx["packet_count"] += 1
-
-                        if self.event_bus:
-                            self.event_bus.publish(EVENT_HEARTRATE_READY, self.get_data())
-                        break
+                if frames_processed >= 4:
+                    break
+                if buf[i] == self.cfg["header"]:
+                    # 检查是否有足够字节组成完整帧
+                    if i + self.cfg["data_len"] <= len(buf):
+                        frame = buf[i:i + self.cfg["data_len"]]
+                        result = self._parse_packet(frame)
+                        if result:
+                            self._data["heart_rate"] = result["heart_rate"]
+                            self._data["spo2"] = result["spo2"]
+                            self._data["valid"] = True
+                            self._data["timestamp"] = time.ticks_ms()
+                            self.ctx["err_count"] = 0
+                            self.ctx["packet_count"] += 1
+                            if self.event_bus:
+                                self.event_bus.publish(EVENT_HEARTRATE_READY, self.get_data())
+                            frames_processed += 1
 
         except Exception as e:
             self.ctx["err_count"] += 1
@@ -185,24 +205,45 @@ class HeartRateDriver(BaseModule):
 
     def _parse_packet(self, data_bytes):
         """
-        brief 解析50字节数据包
+        brief 解析50字节数据包，多重验证确保有效数据
         param data_bytes: 数据字节（bytes对象）
-        return dict 解析结果 {heart_rate, spo2, valid}
+        return dict|None 解析结果 {"heart_rate", "spo2", "valid"} 或 None（无效帧）
         """
+        # 检查 1: 长度必须正好等于配置长度
+        if len(data_bytes) != self.cfg["data_len"]:
+            return None
+
+        # 检查 2: 帧头必须是配置头字节
+        if data_bytes[0] != self.cfg["header"]:
+            return None
+
+        # 检查 3: 心率值范围验证
         raw_hr = data_bytes[40]
+        if not (self.cfg["hr_min"] <= raw_hr <= self.cfg["hr_max"]):
+            return None
+
+        # 检查 4: 血氧值范围验证
         raw_spo2 = data_bytes[41]
+        if not (self.cfg["spo2_min"] <= raw_spo2 <= self.cfg["spo2_max"]):
+            return None
 
-        hr_valid = self.cfg["hr_min"] <= raw_hr <= self.cfg["hr_max"]
-        spo2_valid = self.cfg["spo2_min"] <= raw_spo2 <= self.cfg["spo2_max"]
-
-        elapsed = time.ticks_diff(time.ticks_ms(), self.ctx["start_time"])
-        warmup_done = elapsed >= self.cfg["warmup_ms"]
+        # 检查 5: 预热期检查
+        if not self._check_warmup():
+            return None
 
         return {
             "heart_rate": raw_hr,
             "spo2": raw_spo2,
-            "valid": hr_valid and spo2_valid and warmup_done,
+            "valid": True,
         }
+
+    def _check_warmup(self):
+        """
+        brief 检查传感器预热是否完成
+        return bool 预热完成返回True
+        """
+        elapsed = time.ticks_diff(time.ticks_ms(), self.ctx["start_time"])
+        return elapsed >= self.cfg["warmup_ms"]
 
     def force_read(self):
         """

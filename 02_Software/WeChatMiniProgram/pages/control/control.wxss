@@ -243,6 +243,17 @@ page {
   opacity: 0.35;
 }
 
+/* 闪烁按钮选中态（琥珀色） */
+.toggle-btn.blink-active {
+  background: rgba(245, 158, 11, 0.1);
+  border-color: #F59E0B;
+  box-shadow: 0 0 12rpx rgba(245, 158, 11, 0.2);
+}
+
+.toggle-btn.blink-active text {
+  color: #F59E0B;
+}
+
 /* ===== 亮度滑条 ===== */
 .slider-row {
   display: flex;
