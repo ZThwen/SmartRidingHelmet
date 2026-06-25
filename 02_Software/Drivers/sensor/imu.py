@@ -53,6 +53,7 @@ class IMUDriver(BaseModule):
         
         self.i2c = None             # I2C 实例句柄
         self.sensor = None          # LIS2DH12 传感器实例
+        self._abandoned = False     # 连续10次失败后放弃标志
 
     def init(self):
         """
@@ -94,6 +95,9 @@ class IMUDriver(BaseModule):
         note 主循环每轮调用，必须快速返回（<5ms），不能阻塞
         note IMU为安全保障模块，不判断功耗状态，始终持续采集
         """
+        # 放弃检查：连续10次失败后不再尝试
+        if self._abandoned:
+            return
         # 时间片校验：未到采样间隔立即返回
         now = time.ticks_ms()
         if time.ticks_diff(now, self.ctx["last_tick"]) < self.cfg["sample_ms"]:
@@ -123,10 +127,12 @@ class IMUDriver(BaseModule):
         except Exception as e:
             self.ctx["err_count"] += 1
             self._data["valid"] = False
-            print(f"[{self.name}] 读取异常 ({self.ctx['err_count']}): {e}")
-            
+            print("[%s] 读取异常 (%d): %s" % (self.name, self.ctx["err_count"], e))
+            if self.ctx["err_count"] >= 10:
+                self._abandoned = True
+                print("[%s] 放弃: 连续 10 次读取失败" % self.name)
             # 连续失败超限则发布故障事件
-            if self.ctx["err_count"] > self.cfg["max_retry"]:
+            elif self.ctx["err_count"] > self.cfg["max_retry"]:
                 if self.event_bus:
                     self.event_bus.publish(EVENT_SENSOR_ERROR, self.get_error_data(e))
         finally:

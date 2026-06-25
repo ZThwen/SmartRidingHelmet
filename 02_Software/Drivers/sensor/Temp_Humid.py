@@ -46,6 +46,7 @@ class TempHumidDriver(BaseModule):
         
         self.i2c = None             # I2C 实例句柄
         self.sensor = None          # AHT20 传感器实例
+        self._abandoned = False     # 连续10次失败后放弃标志
 
     def init(self):
         """
@@ -84,6 +85,9 @@ class TempHumidDriver(BaseModule):
         brief 周期调度：数据采集 + 事件发布
         note 主循环每轮调用，必须快速返回（<5ms）
         """
+        # 放弃检查：连续10次失败后不再尝试
+        if self._abandoned:
+            return
         # 状态守卫：功耗模式控制
         if self.ctx["power_state"] == POWER_STATE_EMERGENCY:
             return
@@ -119,10 +123,12 @@ class TempHumidDriver(BaseModule):
         except Exception as e:
             self.ctx["err_count"] += 1
             self._data["valid"] = False
-            print(f"[{self.name}] 读取异常 ({self.ctx['err_count']}): {e}")
-            
+            print("[%s] 读取异常 (%d): %s" % (self.name, self.ctx["err_count"], e))
+            if self.ctx["err_count"] >= 10:
+                self._abandoned = True
+                print("[%s] 放弃: 连续 10 次读取失败" % self.name)
             # 连续失败超限则发布故障事件
-            if self.ctx["err_count"] > self.cfg["max_retry"]:
+            elif self.ctx["err_count"] > self.cfg["max_retry"]:
                 if self.event_bus:
                     self.event_bus.publish(EVENT_SENSOR_ERROR, self.get_error_data(e))
         finally:
