@@ -123,3 +123,41 @@
 - 🔧 **重大修复** — 电源管理 TTS 死锁修复（移除 AudioDriver tick 中 power_state 守卫，防止 TTS 回调处理被阻塞）
 - 🔧 **重大修复** — ControlService 订阅 EVENT_POWER_STATE_CHANGE 实现电源状态回推到小程序
 - 📝 **文档同步** — 架构文档、设计文档、模块文档、测试指南全量对齐（15 个文件）
+
+## 2026-06-25
+
+- 🟢 **性能优化 + UART9 冲突修复**
+  - HeartRate UART9 → UART5 切换，解决 HeartRate 初始化破坏 EC200U AT 通道问题
+  - GNSS 线程延迟 5 秒启动，避免初始化期间 AT 通道抢占
+  - Temp_Humid 超时跳过保护 + DisplayService 脏标志模式（消除回调中 LCD 渲染）
+  - GC 阈值优化（15000→8000，检查间隔 100→500）
+  - 创建主循环 CPU 占用监测系统
+
+- 🔧 **BLE 重连与 GATT 修复**
+  - `init()` 去掉 `advertise()`，开机只初始化不广播
+  - `restart()` 重命名为 `connect()`，完整重写为 `stop → init → advertise` 流程
+  - `connect()` 确保 GATT 特征值（4 通道）完整重配置
+  - `BLEService._on_disconnected()` 去掉 `restart()`，只更新状态清队列
+  - `ControlService._ble_connect()` 调用 `connect()` 替代 `restart()`
+  - 蓝牙调试工具验证 4 个特征值通道正常，小程序可连接收发数据
+
+- 🔧 **碰撞报警 TTS + SMS 修复**
+  - 删除 SD 卡 MP3 播放（`play_file`），改为统一 `EVENT_TTS_REQUEST` 发布
+  - 碰撞报警 TTS "碰撞报警，等级X"，SOS 报警 TTS "SOS报警，请注意安全"
+  - AudioService 报警状态下每 5 秒循环入队报警 TTS，取消后停止
+  - 静默报警 `trigger_stealth_alarm()` 增加 SMS 发送，内容 "stealth:1"
+  - `_build_sms_message()` 增加 `alarm_type` 参数，SMS 内容从固定 "SOS:N" 变为 "{alarm_type}:{level}"
+
+- 🔧 **LCD 显示修复**
+  - `tick()` 脏标志渲染 + `_render_normal_screen()` 增加 `display_mode` 守卫，禁止 boot/alarm 时叠加渲染
+  - 进入省电/紧急模式时 `lcd_driver.clear()` 清屏
+  - 从省电模式唤醒时设 `_dirty=True` 强制重新渲染，消除报警取消后画面空白
+
+- 🔧 **传感器看门狗**
+  - IMU 和 Temp_Humid 添加 `_abandoned` 标志
+  - 连续 10 次 I2C 读取失败后完全放弃，防止 I2C 死锁时无限重试占用 CPU
+
+- 📝 **文档与报告**
+  - 更新架构文档、模块实现文档、测试指南
+  - 添加 Bug 修复报告（碰撞报警/BLE/LCD/传感器综合修复）
+  - 添加 UART9 AT 通道冲突审计报告
