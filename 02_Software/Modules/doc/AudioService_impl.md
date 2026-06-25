@@ -108,9 +108,11 @@ IDLE ──收到 TTS 请求──> PLAYING (修改 current_priority)
   │                          │
   │                          └── 收到低优先级请求 ──> 入队
   │
-  └── EVENT_ALARM_TRIGGERED ──> 设置 alarm_playing=True
+  └── EVENT_ALARM_TRIGGERED ──> 设置 alarm_playing=True + 缓存报警TTS文本
                                    │
-                                   └── EVENT_ALARM_CANCELED ──> 清除 alarm_playing
+                                   ├── tick() 每5秒自动入队报警TTS（循环播报）
+                                   │
+                                   └── EVENT_ALARM_CANCELED ──> 清除 alarm_playing + 清空队列
 ```
 
 ---
@@ -146,7 +148,7 @@ IDLE ──收到 TTS 请求──> PLAYING (修改 current_priority)
 | 接口 | 职责 | 说明 |
 |:----|:-----|:-----|
 | `init()` | 订阅事件，设置 `is_init=True` | 订阅 3 个事件 |
-| `tick()` | 轮询 `is_busy` → 播放结束时出队下一个 | 每次执行清理超时项 + 出队，<0.2ms |
+| `tick()` | 轮询 `is_busy` → 播放结束时出队下一个；报警期间每5秒自动入队报警TTS | 每次执行清理超时项 + 出队，<0.2ms |
 | `get_data()` | 返回数据快照 | `{queue_size, total_played, total_dropped, timestamp}` |
 | `get_status()` | 返回状态快照 | `{is_init, err_count, alarm_playing, current_priority, queue_size}` |
 
@@ -370,7 +372,7 @@ class AudioService(BaseModule):
         # alarm_playing = True + 清除非报警队列
 
     def _on_alarm_canceled(self, payload):
-        # alarm_playing = False
+        # alarm_playing = False + 清空队列 + 重置报警TTS状态
 
     def _clean_expired(self, now):
         # 过滤超时项（>5s）
@@ -382,5 +384,5 @@ class AudioService(BaseModule):
     def get_status(self): ...
 ```
 
-**总行数**：255 行（含注释和空行）
+**总行数**：284 行（含注释和空行）
 **核心逻辑**：~180 行

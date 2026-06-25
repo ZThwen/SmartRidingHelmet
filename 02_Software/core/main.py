@@ -142,7 +142,7 @@ def main():
 
             # 5c. CPU 总忙碌时间测量
             cpu_busy_time = time.ticks_diff(time.ticks_ms(), loop_start)
-            if cpu_busy_time > 8:
+            if cpu_busy_time > 100:
                 print(f"🔴 警告: 主循环 CPU 忙碌时间 {cpu_busy_time}ms，挤压了 sleep 时间！")
 
             time.sleep_ms(10)

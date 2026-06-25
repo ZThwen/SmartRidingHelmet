@@ -54,7 +54,10 @@
 
 ## 5. 事件发布
 
-无（纯消费者模块）。
+| 事件 | 携带数据 | 发布时机 |
+|:----|:--------|:--------|
+| `EVENT_TTS_REQUEST` | `{text, priority: PRIORITY_NAV}` | 收到导航指令时（静默报警期间不发布） |
+| `EVENT_NAV_DISPLAY` | `{text: "> 200m 中山路"}` | 收到导航指令时（由 DisplayService 订阅缓存） |
 
 ---
 
@@ -97,7 +100,7 @@
 | 到达 | `"已到达目的地"` | `TTS_NAV_ARRIVE` |
 | 取消 | `"导航已结束"` | `TTS_NAV_CANCEL` |
 
-**TTS 播放方式**：子线程 `_thread.start_new_thread()` 非阻塞播放，防止阻塞主循环。
+**TTS 播放方式**：通过 EventBus 发布 `EVENT_TTS_REQUEST`（priority=PRIORITY_NAV），由 AudioService 统一调度优先级，非阻塞。
 
 ---
 
@@ -112,7 +115,7 @@
 | 到达 | `已到达` |
 | 取消 | `导航结束` |
 
-显示前先用黑色矩形清除旧内容，再写入新文本。
+显示前先用黑色矩形清除旧内容，再写入新文本。同时发布 `EVENT_NAV_DISPLAY`（DisplayService 订阅缓存，渲染时恢复到第5行 y=110）。首次收到指令时直接写入 LCD，后续由 DisplayService 在渲染周期中恢复。
 
 ---
 
@@ -129,8 +132,8 @@
                        │
                        └── NavigationService._on_nav_cmd()
                             ├── JSON 解析 → 提取 dir/dist/road
-                            ├── TTS 播报（子线程）: "前方200米右转进入中山路"
-                            └── LCD 显示（y=110）: "> 200m 中山路"
+                            ├── EventBus.publish(EVENT_TTS_REQUEST) → AudioService 调度播放
+                            └── EventBus.publish(EVENT_NAV_DISPLAY) → DisplayService 缓存渲染
 ```
 
 ---
@@ -183,7 +186,7 @@
 | 规则 | 说明 |
 |:----|:-----|
 | **tick 为空** | 纯事件驱动，不需要周期调度 |
-| **TTS 非阻塞** | 子线程播放，不阻塞主循环 |
+| **TTS 非阻塞** | 通过 EVENT_TTS_REQUEST 事件发布，AudioService 统一调度 |
 | **EMERGENCY 暂停** | 紧急省电模式下忽略导航指令 |
 | **静默报警跳过 TTS** | stealth 模式下不播放导航语音 |
 | **LCD 行固定位置** | 导航行 y=110，不随其他画面变化 |

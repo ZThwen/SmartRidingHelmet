@@ -56,6 +56,7 @@
 | `EVENT_ALARM_CANCELED` | `_on_alarm_canceled(payload)` | AlarmService 取消报警 | 恢复正常画面 |
 | `EVENT_POWER_STATE_CHANGE` | `_on_power_state_change(payload)` | PowerService 切换功耗状态 | 休眠关闭背光/唤醒恢复背光 |
 | `EVENT_CONFIG_UPDATE` | `_on_config_update(payload)` | 云端配置下发 | 更新开机时长、背光等参数 |
+| `EVENT_NAV_DISPLAY` | `_on_nav_display(payload)` | NavigationService 导航内容变更 | 缓存导航文字，渲染时显示在第5行 |
 
 ---
 
@@ -112,6 +113,12 @@ _data:
   "light_intensity":     None        # 光照强度(lux)
   "logo_loaded":         False       # Logo是否加载成功
   "sos_icon_loaded":     False       # SOS图标是否加载成功
+
+内部标志:
+  "_dirty":              False       # 脏标志：回调中只设标志，tick() 中统一渲染
+  "_last_render_time":   0           # 上次渲染时间戳
+  "_min_render_interval": 100        # 最小渲染间隔 100ms（防频繁刷新）
+  "_nav_text":           ""          # 导航文字缓存（由 EVENT_NAV_DISPLAY 更新）
 ```
 
 ---
@@ -127,7 +134,7 @@ _data:
 
 ### 步骤 2：实现 init()
 1. 调用 `_load_images()` 加载开机Logo和SOS图标
-2. 订阅 7 个事件（见第 4 节）
+2. 订阅 8 个事件（见第 4 节）
 3. 调用 `_show_boot_screen()` 显示开机画面
 4. 设置 `is_init = True`
 5. 打印 `[display] 初始化完成`
@@ -148,7 +155,7 @@ _data:
 1. 清屏 `lcd_driver.clear()`
 2. 验证并显示 Logo `lcd_driver.show_image()`
 3. 设置开机背光 `lcd_driver.set_backlight(80)`
-4. 播放 TTS `audio_driver.play_tts("智能骑行头盔已就绪")`
+4. 发布 TTS 事件 `EVENT_TTS_REQUEST(text="智能骑行头盔已就绪", priority=PRIORITY_NAV)`
 5. 设置 `display_mode = "boot"`
 6. 记录 `boot_start_time = time.ticks_ms()`
 
@@ -186,6 +193,7 @@ _data:
 - `_get_backlight_by_light(light_intensity)`：光照→背光映射
 - `_validate_image_data(data, width, height)`：验证图片数据
 - `_format_temperature/humidity/location/speed()`：数据格式化
+- `_on_nav_display(payload)`：缓存导航文字（`self._nav_text = payload.get("text", "")`），渲染时恢复到第5行
 - `get_data()`、`get_status()`：返回数据快照
 
 ---
@@ -216,6 +224,10 @@ from config import (
     EVENT_ALARM_CANCELED,
     EVENT_POWER_STATE_CHANGE,
     EVENT_CONFIG_UPDATE,
+    EVENT_NAV_DISPLAY,
+    EVENT_TTS_REQUEST,
+    # TTS 优先级
+    PRIORITY_NAV,
     # 功耗
     POWER_STATE_ACTIVE,
 )
@@ -285,10 +297,11 @@ from config import (
 
 **正常骑行画面**：
 ```
-第1行 (y=20):  T:25.5°C              (温度)
-第2行 (y=60):  H:65%                 (湿度)
-第3行 (y=100): Lat:31.23 Lon:121.47  (定位)
-第4行 (y=140): V:18.5km/h            (速度)
+第1行 (y=10):  T:25.5°C              (温度)
+第2行 (y=35):  H:65%                 (湿度)
+第3行 (y=60):  Lat:31.23 Lon:121.47  (定位)
+第4行 (y=85):  V:18.5km/h            (速度)
+第5行 (y=110): [导航行]              (由 NavigationService 通过 EVENT_NAV_DISPLAY 写入)
 ```
 
 ### 11.4 光照-背光映射验证

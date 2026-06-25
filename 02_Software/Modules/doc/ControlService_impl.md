@@ -41,6 +41,10 @@
 | `EVENT_ALARM_CANCELED` | `_on_alarm_canceled` | 清除报警状态 |
 | `EVENT_BATTERY_READY` | `_on_battery` | 缓存电量数据供查询 |
 | `EVENT_POWER_STATE_CHANGE` | `_on_power_state` | 回推电源状态到 BLE |
+| `EVENT_HEARTRATE_READY` | `_on_heartrate` | 缓存心率/血氧数据供查询 |
+| `EVENT_BLE_CONNECTED` | `_on_ble_connected` | 缓存 BLE 连接状态 |
+| `EVENT_BLE_DISCONNECTED` | `_on_ble_disconnected` | 缓存 BLE 断开状态 |
+| `EVENT_LIGHT_BLINK_STATE` | `_on_light_blink_state` | 缓存灯光闪烁状态并推送 BLE |
 
 ---
 
@@ -57,9 +61,9 @@
 
 ---
 
-## 5. 指令表（23 个）
+## 5. 指令表（27 个）
 
-### 5.1 控制指令（17 个）
+### 5.1 控制指令（19 个）
 
 | 指令 | 发布事件 | 响应模块 | CUSTOM 切换 |
 |------|----------|----------|:-----------:|
@@ -80,6 +84,8 @@
 | `ble_connect` | 直接调用 ble_driver.restart() | BLEDriver | ❌ |
 | `ble_disconnect` | 直接调用 ble_driver.deinit() | BLEDriver | ❌ |
 | `voice_sleep` | 设 _voice_active=False | — | ❌ |
+| `wake` | 设 _voice_active=True | — | ❌ |
+| `set_phone` | EVENT_SMS_PHONE_CONFIG{phone} | AlarmService | ❌ |
 
 ### 5.2 查询指令（8 个）
 
@@ -102,9 +108,9 @@
 
 | 类型码 | 内容 | 格式 | 示例 |
 |:------:|------|------|------|
-| t=7 | 灯光 + 音量 + 电源 | `{"t":7,"m":0/1,"b":0-100,"v":0-5,"p":0-3}` | `{"t":7,"m":1,"b":50,"v":5,"p":0}` |
+| t=7 | 灯光 + 音量 + 电源 + 闪烁 | `{"t":7,"m":0/1,"b":0-100,"v":0-5,"p":0-3,"f":0/1}` | `{"t":7,"m":1,"b":50,"v":5,"p":0,"f":0}` |
 
-编码：m=0 auto/1 manual，v=0-5，p=0 active/1 suspended/2 emergency/3 custom
+编码：m=0 auto/1 manual，v=0-5，p=0 active/1 suspended/2 emergency/3 custom，f=0 非闪烁/1 闪烁中
 原理：BLEService 内部维护控制状态快照（_ctrl_snapshot），每收到 `EVENT_CONTROL_STATE_CHANGED` 更新快照字段，tick 周期统一推送 1 条，避免密集指令导致 notify 队列爆炸。
 
 ## 7. 指令来源
@@ -161,6 +167,7 @@ def _on_alarm_triggered(self, payload):
 
 def _on_alarm_canceled(self, payload):
     self._alarm_active = False
+    self._tts("报警已取消")  # alarm_active 已清除，TTS 不被阻塞
     if self._pre_alarm_state:
         self._control_state.update(self._pre_alarm_state)
         self._pre_alarm_state = None
@@ -307,3 +314,24 @@ def _on_voice_cmd(self, payload):
 
 ### 传感器缓存扩展
 - `_sensor_cache` 新增 3 个字段：`battery_level`（EVENT_BATTERY_READY）、`heart_rate` 和 `spo2`（EVENT_HEARTRATE_READY）
+
+---
+
+## v5 变更记录（2026-06-25）
+
+### 事件订阅扩展
+- 新增 `EVENT_HEARTRATE_READY` → `_on_heartrate`，缓存心率/血氧数据
+- 新增 `EVENT_BLE_CONNECTED` → `_on_ble_connected`，缓存 BLE 连接状态
+- 新增 `EVENT_BLE_DISCONNECTED` → `_on_ble_disconnected`，缓存 BLE 断开状态
+- 新增 `EVENT_LIGHT_BLINK_STATE` → `_on_light_blink_state`，缓存灯光闪烁状态并推送 BLE
+
+### 指令扩展
+- 新增 `wake` 指令：唤醒语音系统（_voice_active=True）
+- 新增 `set_phone` 指令：配置 SMS 报警手机号（BLE FFF3 传入 phone 字段）
+- 指令总数从 23 个增至 27 个
+
+### BLE 回推格式扩展
+- `_push_state()` 新增 `f` 字段（闪烁标志），格式从 `{"t":7,"m","b","v","p"}` 扩展为 `{"t":7,"m","b","v","p","f"}`
+
+### 报警取消 TTS
+- `_on_alarm_canceled` 中新增 `self._tts("报警已取消")`，报警取消后自动播报

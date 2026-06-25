@@ -100,6 +100,8 @@ notify_thread → send_queue.get() → BLEDriver.notify_data()
 | `EVENT_ALARM_TRIGGERED` | `_on_alarm` | 立即推送报警通知 |
 | `EVENT_ALARM_CANCELED` | `_on_alarm_canceled` | 推送报警取消通知 |
 | `EVENT_CONTROL_STATE_CHANGED` | `_on_control_state` | 快照合并（不直接入队） |
+| `EVENT_BATTERY_READY` | `_on_battery` | 缓存电量数据 |
+| `EVENT_HEARTRATE_READY` | `_on_heartrate` | 缓存心率/血氧数据 |
 
 ---
 
@@ -107,10 +109,10 @@ notify_thread → send_queue.get() → BLEDriver.notify_data()
 
 | t | 内容 | 格式 | 来源 |
 |---|------|------|------|
-| 0 | 传感器数据 | `{"t":0,"d":{tmp,hum,lat,lon,spd,alt,cog,lux}}` | tick 周期推送 |
+| 0 | 传感器数据 | `{"t":0,"d":{tmp,hum,lat,lon,spd,alt,cog,lux,bat,hr,spo2}}` | tick 周期推送 |
 | 5 | 报警触发 | `{"t":5,"a":1/2,"l":1-3}` | EVENT_ALARM_TRIGGERED |
 | 6 | 报警取消 | `{"t":6,"d":{}}` | EVENT_ALARM_CANCELED |
-| 7 | 控制状态（合并） | `{"t":7,"m":0/1,"b":0-100,"v":0-5,"p":0-3}` | 快照合并推送 |
+| 7 | 控制状态（合并） | `{"t":7,"m":0/1,"b":0-100,"v":0-5,"p":0-3,"f":0/1}` | 快照合并推送 |
 | 99 | 心跳 | `{"t":99,"d":{"s":"ok"}}` | keepalive 周期 |
 
 ---
@@ -148,6 +150,7 @@ self._ctrl_snapshot = {
     "m": 0, "b": 0,   # t=7: 灯光模式 + 亮度
     "v": 5,            # t=8: 音量
     "p": 0,            # t=9: 电源模式
+    "f": 0,            # t=7: 闪烁标志
     "dirty": False,    # 是否有未推送的控制状态
 }
 ```
@@ -234,6 +237,9 @@ _data = {
     "latest_lat": None, "latest_lon": None, "latest_alt": None,
     "latest_spd": None, "latest_cog": None,
     "latest_lux": None,
+    "latest_battery": None,
+    "latest_heart_rate": None,
+    "latest_spo2": None,
 }
 ```
 

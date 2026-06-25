@@ -48,7 +48,7 @@
 |:----|:--------|:-------|
 | `EVENT_LIGHT_READY` | `_on_light_ready(payload)` | 光照数据就绪，计算目标亮度并调用 PWM LED |
 | `EVENT_LIGHT_CONTROL` | `_on_light_control(payload)` | 灯光控制指令（on/off/auto/brightness_up/brightness_down/blink） |
-| `EVENT_CONFIG_UPDATE` | `_on_config_update(payload)` | 更新阈值参数、功耗状态 |
+| `EVENT_POWER_STATE_CHANGE` | `_on_config_update(payload)` | 电源状态变化，功耗联动 |
 | `EVENT_ALARM_TRIGGERED` | `_on_alarm_triggered(payload)` | 报警触发 → level >= 3 时自动启动 PWM 闪烁 |
 | `EVENT_ALARM_CANCELED` | `_on_alarm_canceled(payload)` | 报警取消 → 停止闪烁 |
 
@@ -56,7 +56,9 @@
 
 ## 5. 事件发布
 
-无（纯消费者模块）。
+| 事件 | 携带数据 | 发布时机 |
+|:----|:--------|:--------|
+| `EVENT_LIGHT_BLINK_STATE` | `{blink: bool, duty: int}` | 闪烁状态变更时（开/关/报警触发/取消） |
 
 ---
 
@@ -138,7 +140,7 @@ get_data() → {
 3. `_data`：current_brightness、light_intensity、mode、light_level
 
 ### 阶段 B：实现 init()
-1. 订阅 `EVENT_LIGHT_READY`、`EVENT_LIGHT_CONTROL`、`EVENT_CONFIG_UPDATE`
+1. 订阅 `EVENT_LIGHT_READY`、`EVENT_LIGHT_CONTROL`、`EVENT_POWER_STATE_CHANGE`、`EVENT_ALARM_TRIGGERED`、`EVENT_ALARM_CANCELED`
 2. 设置 `is_init = True`
 
 ### 阶段 C：实现核心算法
@@ -151,7 +153,8 @@ get_data() → {
 ### 阶段 D：实现辅助方法
 1. `set_manual_brightness(duty_cycle)` → 手动模式
 2. `set_auto_mode()` → 恢复自动
-3. `get_data()` / `get_status()` → 数据快照
+3. `_publish_blink_state()` → 发布 `EVENT_LIGHT_BLINK_STATE`（供 ControlService 缓存闪烁状态）
+4. `get_data()` / `get_status()` → 数据快照
 
 ---
 

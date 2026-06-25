@@ -88,9 +88,16 @@ def _on_battery(self, payload):
         self.event_bus.publish(EVENT_POWER_STATE_CHANGE, {"power_state": POWER_STATE_SUSPENDED})
         self.event_bus.publish(EVENT_BATTERY_LOW, {"level": level})
         self.event_bus.publish(EVENT_TTS_REQUEST, {"text": TTS_BATTERY_LOW, "priority": PRIORITY_CTRL})
+
+    # 电量回升 → 自动恢复 ACTIVE
+    if level > self.cfg["auto_suspend_level"] and self._data["auto_suspended"]:
+        self._data["auto_suspended"] = False
+        self.event_bus.publish(EVENT_POWER_STATE_CHANGE, {"power_state": POWER_STATE_ACTIVE})
 ```
 
-**防重复发布**：`auto_suspended` 标记确保低电量只触发一次省电。用户手动 `power_normal` 后标记清除，允许再次触发。
+**防重复发布**：`auto_suspended` 标记确保低电量只触发一次省电。以下两种情况会清除标记并恢复 ACTIVE：
+1. 电量回升到 > `auto_suspend_level`（自动恢复）
+2. 用户手动切换到正常模式（通过 ControlService 发布 `EVENT_POWER_STATE_CHANGE(ACTIVE)`）
 
 ---
 
@@ -134,3 +141,4 @@ def _query_battery(self):
 | 版本 | 日期 | 内容 |
 |------|------|------|
 | v1 | 2026-06-23 | 初始版本：六档映射、自动省电、TTS 通知、BLE 推送、语音查询 |
+| v2 | 2026-06-25 | 新增电量回升自动恢复 ACTIVE 逻辑 |
