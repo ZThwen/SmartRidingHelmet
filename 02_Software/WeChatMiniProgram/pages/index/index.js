@@ -321,12 +321,28 @@ Page({
 
     // BLE 连接/断开
     this._onBleConnected = function() {
-      that.setData({ bleConnected: true, bleStatus: '已连接', status: '骑行中...', isOnline: true });
+      // 根据骑行状态设置 status，避免未骑行时显示"骑行中..."
+      if (RideService.isActive()) {
+        that.setData({ bleConnected: true, bleStatus: '已连接', status: '骑行中...', isOnline: true });
+      } else {
+        that.setData({ bleConnected: true, bleStatus: '已连接', status: '已连接', isOnline: true });
+      }
       that._syncTabBar();
     };
 
     this._onBleDisconnected = function() {
-      that.setData({ bleConnected: false, bleStatus: '已断开' });
+      // 断连时：重置状态 + 清除残留传感器数据
+      var resetData = {
+        bleConnected: false, bleStatus: '已断开',
+        isOnline: false,
+        temp: '--', humid: '--', speed: '--', cog: '--',
+        lat: '--', lon: '--', alt: '--',
+        lux: '--', battery: '--', time: '',
+        heartRate: '--', spo2: '--', heartClass: '', spo2Class: '', heartIcon: '\u2665',
+      };
+      // 骑行中断连：状态显示"已断开"；非骑行断连：显示"未连接"
+      resetData.status = RideService.isActive() ? '已断开' : '未连接';
+      that.setData(resetData);
       that._syncTabBar();
     };
 

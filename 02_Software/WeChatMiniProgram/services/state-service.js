@@ -53,6 +53,7 @@ function getBleCallbacks() {
       logger.log('STATE', 'BLE 断开');
       _app.globalData.bleConnected = false;
       _app.globalData.bleStatus = '已断开';
+      _app.globalData.latestSensorData = null;
       CtrlService.reset();
       if (_bus) _bus.emit('ble:disconnected');
     },
@@ -221,7 +222,7 @@ function syncToPageData() {
   data.lightBlink = cs.blink;
   data.brightnessDisplay = cs.blink ? '跳变' : cs.brightness + '%';
 
-  // 传感器数据（仅已连接时恢复）
+  // 传感器数据：已连接时恢复，断连时重置为 '--'
   if (gd.bleConnected && cached) {
     if (cached.temp) data.temp = cached.temp;
     if (cached.humid) data.humid = cached.humid;
@@ -240,6 +241,14 @@ function syncToPageData() {
     }
     if (cached.spo2 != null) data.spo2 = cached.spo2;
     if (cached.spo2Class) data.spo2Class = cached.spo2Class;
+  } else {
+    // 断连时清除残留数据
+    data.temp = '--'; data.humid = '--'; data.speed = '--'; data.cog = '--';
+    data.lat = '--'; data.lon = '--'; data.alt = '--';
+    data.lux = '--'; data.battery = '--'; data.time = '';
+    data.heartRate = '--'; data.spo2 = '--';
+    data.heartClass = ''; data.spo2Class = ''; data.heartIcon = '\u2665';
+    data.isOnline = false;
   }
 
   return data;
