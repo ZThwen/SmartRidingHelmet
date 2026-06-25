@@ -40,3 +40,9 @@ skills-guide.md
 02_Software/WeChatMiniProgram/doc/ui-preview.html
 /.codebuddy
 02_Software/WeChatMiniProgram/doc/luotianyi-visual-elements.html
+
+# Office 临时锁文件
+~$*.docx
+
+# 临时调试废纸
+02_Software/Tests/[0-9].py
