@@ -435,8 +435,9 @@ class ControlService(BaseModule):
         if self._ble_connected:
             self._tts("蓝牙已连接")
             return
-        if self.ble_driver and not self.ble_driver.ctx.get("is_init", False):
-            self.ble_driver.restart()
+        # 未初始化（is_init=False）时 connect 内部会自动 init；已初始化时直接广播
+        if self.ble_driver:
+            self.ble_driver.connect()
         self._tts("蓝牙正在连接")
 
     def _ble_disconnect(self):

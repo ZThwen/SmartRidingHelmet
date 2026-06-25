@@ -57,7 +57,7 @@ class BLEDriver(BaseModule):
 
     def init(self):
         """
-        brief 初始化 BLE：创建实例 → 配置 → 添加 GATT 服务 → 广播
+        brief 初始化 BLE：创建实例 → 配置 → 添加 GATT 服务（不广播，广播由 connect() 控制）
         """
         try:
             self._ble = BLE()
@@ -91,7 +91,7 @@ class BLEDriver(BaseModule):
             self._ble.set_character_value(0, 3, perm, self.cfg["char_ack"], char_max_len, "00")
             self._ble.add_descriptor(0, 3, perm, CCCD_UUID, "0000")
 
-            self._ble.advertise()
+            # 不在此处广播，由 connect() 控制
 
             if self.event_bus:
                 self.event_bus.subscribe(EVENT_CONFIG_UPDATE, self._on_config_update)
@@ -175,20 +175,25 @@ class BLEDriver(BaseModule):
         except Exception as e:
             print("[%s] deinit err: %s" % (self.name, e))
 
-    def restart(self):
+    def connect(self):
         """
-        brief 重新初始化 BLE（deinit → init 全流程）
+        brief 开始连接：完整初始化 GATT（含特征值配置），然后广播
         note 供 ControlService 语音"蓝牙连接"调用
+             已初始化时先 stop 清理，再调 init 完整重新配置
         """
         try:
             if self.ctx["is_init"]:
-                print("[%s] restart: deinit first" % self.name)
-                self.deinit()
-            time.sleep_ms(200)
+                # 已初始化，先关闭 BLE 硬件
+                self._ble.stop()
+                time.sleep_ms(100)
+                self.ctx["is_init"] = False
+            # 完整初始化（含 GATT 特征值配置）
             self.init()
-            print("[%s] restart OK" % self.name)
+            # 开始广播
+            self._ble.advertise()
+            print("[%s] 已开始广播" % self.name)
         except Exception as e:
-            print("[%s] restart err: %s" % (self.name, e))
+            print("[%s] connect err: %s" % (self.name, e))
 
     def set_data_handler(self, handler):
         """
