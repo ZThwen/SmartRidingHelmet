@@ -361,6 +361,84 @@ page {
 }
 
 /* ===== 连接状态 ===== */
+
+/* ===== 紧急联系人 ===== */
+.phone-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.phone-input {
+  flex: 1;
+  height: 72rpx;
+  padding: 0 16rpx;
+  border: 1rpx solid #e2e8f0;
+  border-radius: 12rpx;
+  font-size: 26rpx;
+  color: #1a1a2e;
+  background: #f5f8fb;
+}
+
+.phone-send-btn {
+  width: 100rpx;
+  height: 72rpx;
+  border: 1rpx solid #66ccff;
+  border-radius: 12rpx;
+  background: rgba(102, 204, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.phone-send-btn text {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #66ccff;
+}
+
+.phone-send-btn:active {
+  background: rgba(102, 204, 255, 0.2);
+}
+
+.phone-saved {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  margin-top: 16rpx;
+  padding: 12rpx 16rpx;
+  background: #f5f8fb;
+  border-radius: 8rpx;
+}
+
+.phone-saved-label {
+  font-size: 24rpx;
+  color: #6b7b8d;
+}
+
+.phone-saved-num {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #1a1a2e;
+  flex: 1;
+}
+
+.phone-clear-btn {
+  padding: 6rpx 16rpx;
+  border: 1rpx solid #e2e8f0;
+  border-radius: 8rpx;
+}
+
+.phone-clear-btn text {
+  font-size: 22rpx;
+  color: #6b7b8d;
+}
+
+.phone-clear-btn:active {
+  background: #edf2f7;
+}
+
 .conn-status {
   display: flex;
   align-items: center;

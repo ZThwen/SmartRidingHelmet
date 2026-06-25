@@ -140,6 +140,28 @@
       </view>
     </view>
 
+    <!-- 紧急联系人 -->
+    <view class="ctrl-section">
+      <view class="ctrl-section-title">
+        <text>紧急联系人</text>
+        <view class="deco-line"></view>
+      </view>
+      <view class="phone-row">
+        <input class="phone-input" type="number" maxlength="11" placeholder="输入11位手机号"
+               value="{{emergencyPhoneInput}}" bindinput="onPhoneInput" />
+        <view class="phone-send-btn" bindtap="onSetPhone">
+          <text>配置</text>
+        </view>
+      </view>
+      <view class="phone-saved" wx:if="{{emergencyPhoneSaved}}">
+        <text class="phone-saved-label">当前号码：</text>
+        <text class="phone-saved-num">{{emergencyPhoneSaved}}</text>
+        <view class="phone-clear-btn" bindtap="onClearPhone">
+          <text>清除</text>
+        </view>
+      </view>
+    </view>
+
     <!-- 连接状态 -->
     <view class="ctrl-section">
       <view class="ctrl-section-title">

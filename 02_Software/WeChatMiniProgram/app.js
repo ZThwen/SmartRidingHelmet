@@ -7,7 +7,7 @@ var StateService = require('./services/state-service');
 App({
   onLaunch: function() {
     this.eventBus = new EventBus();
-    StateService.init();
+    StateService.init(this);
   },
   globalData: {
     // 用户系统（UserService 管理）
@@ -32,6 +32,9 @@ App({
 
     // 报警
     alarmActive: false,
+
+    // 紧急联系人（SMS 手机号，本地缓存）
+    smsPhone: '',
 
     // 传感器数据缓存（页面切换恢复用）
     latestSensorData: null,

@@ -192,6 +192,14 @@ function sendCtrl(cmd) {
   _write(_state.charCtrl, json);
 }
 
+function sendCtrlWithParams(cmd, params) {
+  var d = { cmd: cmd };
+  for (var k in params) { d[k] = params[k]; }
+  var json = JSON.stringify({ a: 'ctrl', d: d });
+  logger.log('BLE', 'sendCtrlWithParams -> FFF3: ' + json + ' connected=' + _state.connected);
+  _write(_state.charCtrl, json);
+}
+
 function sendAck(id) {
   var json = JSON.stringify({ a: 'ack', d: { id: id } });
   _write(_state.charAck, json);
@@ -294,4 +302,4 @@ function _str2ab(str) {
   return buf;
 }
 
-module.exports = { init, scan, stopScan, connect, connectById, sendNav, sendCtrl, sendAck, disconnect, isConnected, setCallbacks };
+module.exports = { init, scan, stopScan, connect, connectById, sendNav, sendCtrl, sendCtrlWithParams, sendAck, disconnect, isConnected, setCallbacks };

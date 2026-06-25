@@ -29,8 +29,8 @@ var _bus = null;
  * 初始化 — 获取 app 和 bus 引用
  * 在 app.js onLaunch 之后调用
  */
-function init() {
-  _app = getApp();
+function init(appInstance) {
+  _app = appInstance || getApp();
   _bus = _app.eventBus;
   logger.log('STATE', 'StateService 初始化');
 }

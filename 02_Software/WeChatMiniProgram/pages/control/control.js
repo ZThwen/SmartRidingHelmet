@@ -35,6 +35,9 @@ Page({
     riding: false,
     lightBlink: false,
     brightnessDisplay: '0%',
+    emergencyPhone: '',
+    emergencyPhoneSaved: '',
+    emergencyPhoneInput: '',
   },
 
   onLoad: function() {
@@ -52,6 +55,11 @@ Page({
     // 控制页额外补充
     syncData.deviceName = syncData.bleConnected ? 'SmartHelmet-66ccff' : '';
     syncData.showAlarmPopup = syncData.alarmActive;
+    this.setData(syncData);
+    // 同步紧急联系人号码（本地缓存）
+    var savedPhone = app.globalData.smsPhone || '';
+    syncData.emergencyPhoneSaved = savedPhone;
+    syncData.emergencyPhoneInput = savedPhone;
     this.setData(syncData);
 
     // 同步导航状态
@@ -289,6 +297,37 @@ Page({
   onCancelAlarm: function() {
     this.setData({ alarmActive: false, showAlarmPopup: false });
     if (this.data.bleConnected) CtrlService.alarmCancel();
+  },
+
+  // ==================== 紧急联系人 ====================
+
+  onPhoneInput: function(e) {
+    this.setData({ emergencyPhoneInput: e.detail.value });
+  },
+
+  onSetPhone: function() {
+    if (!this.data.bleConnected) {
+      wx.showToast({ title: '请先连接蓝牙设备', icon: 'none' });
+      return;
+    }
+    var phone = this.data.emergencyPhoneInput.trim();
+    if (!phone || phone.length !== 11 || !/^1\d{10}$/.test(phone)) {
+      wx.showToast({ title: '请输入正确的11位手机号', icon: 'none' });
+      return;
+    }
+    CtrlService.setPhone(phone);
+    app.globalData.smsPhone = phone;
+    this.setData({ emergencyPhoneSaved: phone });
+    wx.showToast({ title: '紧急联系人已配置', icon: 'success' });
+  },
+
+  onClearPhone: function() {
+    if (!this.data.bleConnected) {
+      wx.showToast({ title: '请先连接蓝牙设备', icon: 'none' });
+      return;
+    }
+    this.setData({ emergencyPhoneInput: '', emergencyPhoneSaved: '' });
+    app.globalData.smsPhone = '';
   },
 
   // ==================== 导航 ====================

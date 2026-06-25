@@ -24,6 +24,7 @@ var CMD = {
   POWER_SAVE: 'power_save',
   POWER_NORMAL: 'power_normal',
   POWER_EMERGENCY: 'power_emergency',
+  SET_PHONE: 'set_phone',
   QUERY_STATUS: 'query_status',
   QUERY_SPEED: 'query_speed',
   QUERY_TEMP: 'query_temp',
@@ -143,6 +144,11 @@ function queryBattery() {
   logger.log('CTRL', 'query_battery sent');
 }
 
+function setPhone(phone) {
+  BleService.sendCtrlWithParams(CMD.SET_PHONE, { phone: phone });
+  logger.log('CTRL', 'set_phone sent: ' + phone);
+}
+
 // ==================== 状态解析 ====================
 
 /**
@@ -217,6 +223,7 @@ module.exports = {
   alarmCancel: alarmCancel,
   alarmStealth: alarmStealth,
   powerEmergency: powerEmergency,
+  setPhone: setPhone,
   queryStatus: queryStatus,
   querySpeed: querySpeed,
   queryTemp: queryTemp,
