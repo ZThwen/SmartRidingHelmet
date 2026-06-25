@@ -139,6 +139,7 @@ class LightService(BaseModule):
                     current = self.pwm_led.cfg["blink_on_duty"]
                     new_duty = current + (5 if cmd == "brightness_up" else -5)
                     self.pwm_led.set_blink_duty(new_duty)
+                    self._data["current_brightness"] = new_duty
                 except Exception as e:
                     print("[%s] blink brightness error: %s" % (self.name, e))
                 return
@@ -153,7 +154,8 @@ class LightService(BaseModule):
         """brief 发布闪烁状态变更事件（供 ControlService 缓存）"""
         if self.event_bus and self.pwm_led:
             blink_active = self.pwm_led.is_blink_active()
-            self.event_bus.publish(EVENT_LIGHT_BLINK_STATE, {"blink": blink_active})
+            duty = self.pwm_led.cfg.get("blink_on_duty", 0) if blink_active else 0
+            self.event_bus.publish(EVENT_LIGHT_BLINK_STATE, {"blink": blink_active, "duty": duty})
 
     def _on_alarm_triggered(self, payload):
         """

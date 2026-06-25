@@ -158,10 +158,11 @@ class BLEDriver(BaseModule):
         note 安全可重复调用；清空连接状态
         """
         try:
+            # 必须在 stop/deinit 之前记录状态，防止回调先设 is_connected=False
+            was_connected = self.ctx["is_connected"]
             if self._ble:
                 self._ble.stop()
                 self._ble.deinit()
-            was_connected = self.ctx["is_connected"]
             self.ctx["is_init"] = False
             self.ctx["is_connected"] = False
             self._data["connected_addr"] = ""

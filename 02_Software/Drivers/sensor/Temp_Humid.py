@@ -34,7 +34,8 @@ class TempHumidDriver(BaseModule):
             "is_busy": False,       # I2C 操作中标志
             "last_tick": 0,         # 上次采样时间戳
             "err_count": 0,         # 连续采样错误计数
-            "power_state": POWER_STATE_ACTIVE  # 功耗状态
+            "power_state": POWER_STATE_ACTIVE,  # 功耗状态
+            "skip_until": 0,        # 跳过冷却期（tick 太慢时跳过）
         }
 
         self._data = {              # 传感器数据
@@ -87,13 +88,19 @@ class TempHumidDriver(BaseModule):
         if self.ctx["power_state"] == POWER_STATE_EMERGENCY:
             return
 
-        # 时间片校验：未到采样间隔立即返回
         now = time.ticks_ms()
+        
+        # 跳过冷却期：上次 tick 太慢时跳过
+        if now < self.ctx["skip_until"]:
+            return
+
+        # 时间片校验：未到采样间隔立即返回
         if time.ticks_diff(now, self.ctx["last_tick"]) < self.cfg["sample_ms"]:
             return
 
         # 执行采集
         self.ctx["is_busy"] = True
+        start = time.ticks_ms()
         try:
             # 读取传感器数据
             temp = self.sensor.temperature
@@ -121,6 +128,11 @@ class TempHumidDriver(BaseModule):
         finally:
             self.ctx["is_busy"] = False
             self.ctx["last_tick"] = now
+            # 超时保护：tick 耗时 > 200ms 时跳过 3 秒
+            elapsed = time.ticks_diff(time.ticks_ms(), start)
+            if elapsed > 200:
+                print(f"[{self.name}] tick 耗时 {elapsed}ms，跳过 3s")
+                self.ctx["skip_until"] = time.ticks_ms() + 3000
 
     # ================= 辅助方法 =================
     def _on_config_update(self, payload):

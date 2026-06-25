@@ -98,6 +98,11 @@ class DisplayService(BaseModule):
             "err_count": 0,
         }
         
+        # 脏标志：回调中只设标志，tick() 中统一渲染
+        self._dirty = False
+        self._last_render_time = 0
+        self._min_render_interval = 100  # 最小渲染间隔 100ms
+
         self._data = {
             "temp": None,
             "humid": None,
@@ -150,6 +155,14 @@ class DisplayService(BaseModule):
         # 非 ACTIVE 模式跳过正常画面渲染
         if self.ctx["power_state"] != POWER_STATE_ACTIVE:
             return
+        
+        # 脏标志检查：只在有新数据时渲染
+        if self._dirty:
+            elapsed = time.ticks_diff(now, self._last_render_time)
+            if elapsed >= self._min_render_interval:
+                self._render_normal_screen()
+                self._dirty = False
+                self._last_render_time = now
     
     def _load_images(self):
         """加载两个图片"""
@@ -359,7 +372,7 @@ class DisplayService(BaseModule):
             return self.cfg["backlight_level_4"]
     
     def _on_temp_humid_ready(self, payload):
-        """温湿度数据回调：更新数据并刷新画面"""
+        """温湿度数据回调：更新数据 + 设脏标志"""
         if not self.ctx["is_init"]:
             return
         temp = payload.get("temp")
@@ -368,10 +381,10 @@ class DisplayService(BaseModule):
             self._data["temp"] = temp
         if humid is not None:
             self._data["humid"] = humid
-        self._update_normal_display()
+        self._dirty = True  # 只设标志，不渲染
     
     def _on_gnss_ready(self, payload):
-        """GNSS数据回调：更新数据并刷新画面"""
+        """GNSS数据回调：更新数据 + 设脏标志"""
         if not self.ctx["is_init"]:
             return
         lat = payload.get("latitude")
@@ -383,7 +396,7 @@ class DisplayService(BaseModule):
             self._data["lon"] = lon
         if speed is not None:
             self._data["speed"] = speed
-        self._update_normal_display()
+        self._dirty = True  # 只设标志，不渲染
     
     def _on_light_ready(self, payload):
         """光照数据回调：自动调节背光"""
@@ -491,7 +504,7 @@ class DisplayService(BaseModule):
                 self.ctx["current_backlight"] = backlight
             
             self.ctx["display_mode"] = "normal"
-            self._render_normal_screen()
+            self._dirty = True  # 设脏标志，下次 tick 渲染
             print("[{}] 报警取消，恢复正常画面".format(self.name))
             
         except Exception as e:

@@ -1,8 +1,8 @@
 """
 brief 心率血氧传感器驱动 (MKS SPO2-ZS-BLE)
-note 严格遵循四元组架构规范，适配USART6通信
+note 严格遵循四元组架构规范，适配UART5通信
       Device层纯硬件控制，不包含业务逻辑
-      硬件：USART6 (TX=PG14, RX=PG9)
+      硬件：UART5 (TX=PC12, RX=PD2)
       核心功能：读取心率、血氧数据，发布事件
       
 数据包格式（50字节）：
@@ -105,7 +105,6 @@ class HeartRateDriver(BaseModule):
 
             print("[%s] Step3: 发送采集开指令 0x%02X..." % (self.name, self.cfg["cmd_start"]))
             self._send_cmd(self.cfg["cmd_start"])
-            time.sleep_ms(500)
 
             print("[%s] Step4: 检查模块响应..." % self.name)
             if self.uart.any() >= self.cfg["data_len"]:

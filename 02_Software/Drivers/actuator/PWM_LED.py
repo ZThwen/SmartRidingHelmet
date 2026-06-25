@@ -14,6 +14,7 @@ from core.config import (
     PWM_LED_PIN, PWM_LED_TIMER_ID, PWM_LED_TIMER_CHANNEL,
     PWM_LED_FREQ, POWER_STATE_ACTIVE, POWER_STATE_CUSTOM,
     PWM_BLINK_ON_DUTY, PWM_BLINK_INTERVAL_MS,
+    LIGHT_BRIGHTNESS_MAX,
 )
 
 
@@ -132,8 +133,8 @@ class PWMLEDDriver(BaseModule):
         
         if duty_cycle < 0:
             duty_cycle = 0
-        elif duty_cycle > 100:
-            duty_cycle = 100
+        elif duty_cycle > LIGHT_BRIGHTNESS_MAX:
+            duty_cycle = LIGHT_BRIGHTNESS_MAX
         
         try:
             self.ctx["is_busy"] = True
@@ -166,7 +167,7 @@ class PWMLEDDriver(BaseModule):
         param from_alarm: 是否报警触发（True 时不可被手动指令中断）
         """
         if on_duty is not None:
-            self.cfg["blink_on_duty"] = max(0, min(100, on_duty))
+            self.cfg["blink_on_duty"] = max(0, min(LIGHT_BRIGHTNESS_MAX, on_duty))
         if interval_ms is not None:
             self.cfg["blink_interval_ms"] = max(50, interval_ms)
         self.ctx["blink_active"] = True
@@ -188,7 +189,7 @@ class PWMLEDDriver(BaseModule):
     
     def set_blink_duty(self, duty):
         """brief 改变闪烁亮时占空比（闪烁中调用）"""
-        duty = max(0, min(100, duty))
+        duty = max(0, min(LIGHT_BRIGHTNESS_MAX, duty))
         self.cfg["blink_on_duty"] = duty
     
     def is_blink_active(self):

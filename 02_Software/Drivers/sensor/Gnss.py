@@ -51,6 +51,8 @@ class GNSSDriver(BaseModule):
             "no_fix_count": 0,        # 连续无定位次数
             "gps_lost_reported": False,  # 是否已上报丢失（防重复上报）
             "thread_running": False,     # 后台线程运行标志
+            "thread_started": False,     # 后台线程是否已启动
+            "thread_start_time": 0,      # 线程启动时间
             "last_publish": 0,           # 上次发布事件时间戳
         }
 
@@ -80,18 +82,16 @@ class GNSSDriver(BaseModule):
 
             self.ctx["gnss_state"] = GNSS_STATE_SEARCH
 
-            # 3. 启动后台线程（阻塞的 get_location() 在线程中执行）
+            # 3. 记录启动时间，延迟到 tick() 中启动线程（避免阻塞其他模块初始化）
             self.ctx["thread_running"] = True
-            old_stack = _thread.stack_size(self.cfg["thread_stack_size"])
-            _thread.start_new_thread(self._gnss_thread, ())
-            _thread.stack_size(old_stack)
+            self.ctx["thread_start_time"] = time.ticks_ms()
 
             # 4. 订阅事件
             if self.event_bus:
                 self.event_bus.subscribe(EVENT_POWER_STATE_CHANGE, self._on_config_update)
 
             self.ctx["is_init"] = True
-            print(f"[{self.name}] ✓ 初始化完成 | 采样间隔:{self.cfg['sample_ms']}ms | 线程已启动")
+            print(f"[{self.name}] ✓ 初始化完成 | 采样间隔:{self.cfg['sample_ms']}ms | 线程延迟启动")
 
         except Exception as e:
             print(f"[{self.name}] ✗ 初始化失败: {e}")
@@ -99,6 +99,15 @@ class GNSSDriver(BaseModule):
 
     def tick(self):
         """周期调度（非阻塞）：从队列读取最新定位结果并发布事件"""
+        # 延迟 5 秒启动 GNSS 后台线程，避免阻塞 Audio/BLE/SMS 初始化
+        if not self.ctx["thread_started"] and self.ctx["is_init"]:
+            now = time.ticks_ms()
+            if time.ticks_diff(now, self.ctx["thread_start_time"]) > 5000:
+                old_stack = _thread.stack_size(self.cfg["thread_stack_size"])
+                _thread.start_new_thread(self._gnss_thread, ())
+                _thread.stack_size(old_stack)
+                self.ctx["thread_started"] = True
+                print(f"[{self.name}] 后台线程已启动")
         now = time.ticks_ms()
         if time.ticks_diff(now, self.ctx["last_tick"]) < self.cfg["sample_ms"]:
             return
