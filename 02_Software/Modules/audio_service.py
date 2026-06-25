@@ -75,6 +75,10 @@ class AudioService(BaseModule):
         # TTS 队列：list of {"text": str, "priority": int, "enqueue_time": int}
         self._queue = []
 
+        # 报警 TTS 循环播报
+        self._alarm_tts_text = None
+        self._alarm_tts_tick = 0
+
     def init(self):
         """
         brief 初始化服务：订阅事件
@@ -96,11 +100,23 @@ class AudioService(BaseModule):
         """
         brief 周期调度：检查 is_busy，播放结束时出队下一个
         note 每 10ms 调用一次，耗时 <0.2ms
+             报警状态下每 5s 循环入队报警 TTS
         """
         if not self.ctx["is_init"]:
             return
         if not self.audio_driver:
             return
+
+        now = _ticks_ms()
+
+        # 报警状态下循环播报 TTS（每 5 秒重新入队一次）
+        if self.ctx["alarm_playing"] and self._alarm_tts_text:
+            if self._alarm_tts_tick == 0 or _ticks_diff(now, self._alarm_tts_tick) >= 5000:
+                self._queue.append({
+                    "text": self._alarm_tts_text,
+                    "priority": PRIORITY_ALARM,
+                })
+                self._alarm_tts_tick = now
 
         # 检查是否正在播放
         is_busy = self.audio_driver.ctx.get("is_tts_playing", False) or \
@@ -113,7 +129,6 @@ class AudioService(BaseModule):
         self.ctx["current_priority"] = PRIORITY_CTRL + 1
 
         # 清理超时项
-        now = _ticks_ms()
         self._clean_expired(now)
 
         # 出队下一个
@@ -178,20 +193,34 @@ class AudioService(BaseModule):
 
     def _on_alarm_triggered(self, payload):
         """
-        brief 报警触发：设置 alarm_playing 标志，清空非报警队列
+        brief 报警触发：设置 alarm_playing 标志，缓存报警 TTS 文本，清空非报警队列
         param payload: 报警触发事件负载
         """
         self.ctx["alarm_playing"] = True
+        # 缓存报警 TTS 文本
+        alarm_type = payload.get("alarm_type", "collision")
+        level = payload.get("level", 1)
+        if alarm_type == "collision":
+            self._alarm_tts_text = "碰撞报警，等级%d" % level
+        elif alarm_type == "sos":
+            self._alarm_tts_text = "SOS报警，请注意安全"
+        else:
+            self._alarm_tts_text = "报警已触发"
+        self._alarm_tts_tick = 0
         # 清空队列中的非报警项
         self._queue = [item for item in self._queue if item["priority"] <= PRIORITY_ALARM]
         self._data["queue_size"] = len(self._queue)
 
     def _on_alarm_canceled(self, payload):
         """
-        brief 报警取消：清除 alarm_playing 标志
+        brief 报警取消：清除 alarm_playing 标志和报警 TTS 状态
         param payload: 报警取消事件负载
         """
         self.ctx["alarm_playing"] = False
+        self._alarm_tts_text = None
+        self._alarm_tts_tick = 0
+        # 清空所有报警 TTS 队列
+        self._queue = []
 
     def _clean_expired(self, now):
         """

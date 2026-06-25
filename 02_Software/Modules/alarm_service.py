@@ -152,13 +152,21 @@ class AlarmService(BaseModule):
                 if self.led:
                     self.led.blink(self.cfg["alarm_duration_ms"],
                                    self._level_to_interval(level))
-                if self.audio:
-                    self.audio.play_file(self._level_to_file(level))
             elif alarm_type == "sos":
                 if self.led:
                     self.led.blink(self.cfg["alarm_duration_ms"], 200)
-                if self.audio:
-                    self.audio.play_tts("SOS 报警已触发")
+
+            if alarm_type == "collision":
+                tts_text = "碰撞报警，等级%d" % level
+            elif alarm_type == "sos":
+                tts_text = "SOS报警，请注意安全"
+            else:
+                tts_text = "报警已触发"
+            if self.event_bus:
+                self.event_bus.publish(EVENT_TTS_REQUEST, {
+                    "text": tts_text,
+                    "priority": PRIORITY_ALARM,
+                })
 
         if self.event_bus:
             self.event_bus.publish(EVENT_ALARM_TRIGGERED, {
@@ -169,7 +177,7 @@ class AlarmService(BaseModule):
 
         # 所有报警都发送 SMS（后台线程，不阻塞主循环）
         if self._sms_phone and self._sms_driver:
-            msg = self._build_sms_message(level)
+            msg = self._build_sms_message(level, alarm_type)
             print("[%s] 发送 SMS 到 %s: %s" % (self.name, self._sms_phone, msg))
             try:
                 _thread.start_new_thread(self._sms_driver.send_sms, (self._sms_phone, msg))
@@ -236,6 +244,15 @@ class AlarmService(BaseModule):
                 "level": 1,
                 "timestamp": time.ticks_ms(),
             })
+
+        # 静默报警通过 SMS 远程通知（无声光，SMS 是唯一通知渠道）
+        if self._sms_phone and self._sms_driver:
+            msg = self._build_sms_message(1, "stealth")
+            print("[%s] 发送 SMS 到 %s: %s" % (self.name, self._sms_phone, msg))
+            try:
+                _thread.start_new_thread(self._sms_driver.send_sms, (self._sms_phone, msg))
+            except Exception as e:
+                print("[%s] SMS 线程启动失败: %s" % (self.name, e))
 
         print("[{}] stealth alarm triggered".format(self.name))
 
@@ -352,7 +369,7 @@ class AlarmService(BaseModule):
 
     # ==================== SMS 辅助方法 ====================
 
-    def _build_sms_message(self, level):
+    def _build_sms_message(self, level, alarm_type="collision"):
         """
         brief 构建 SMS 内容（有 GPS 时附带高德地图链接）
         param level: 报警等级 (int)
@@ -369,9 +386,9 @@ class AlarmService(BaseModule):
 
             # 生成高德地图链接
             url = "https://uri.amap.com/marker?position={:.6f},{:.6f}&name=SOS".format(gcj_lng, gcj_lat)
-            return "SOS:{}(GPS):{}".format(level, url)
+            return "{}:{}(GPS):{}".format(alarm_type, level, url)
         else:
-            return "SOS:{}".format(level)
+            return "{}:{}".format(alarm_type, level)
 
     def _wgs84_to_gcj02(self, lng, lat):
         """
