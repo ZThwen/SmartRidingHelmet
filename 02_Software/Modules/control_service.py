@@ -30,8 +30,9 @@ from core.config import (
     EVENT_ALARM_TRIGGERED, EVENT_ALARM_CANCELED,
     EVENT_BATTERY_READY, EVENT_HEARTRATE_READY,
     EVENT_BLE_CONNECTED, EVENT_BLE_DISCONNECTED,
-    EVENT_LIGHT_BLINK_STATE,
-    LIGHT_BRIGHTNESS_MAX, CMD_TTS_MAP, PRIORITY_CTRL,
+    EVENT_LIGHT_BLINK_STATE, EVENT_SMS_PHONE_CONFIG,
+    LIGHT_BRIGHTNESS_MAX, LIGHT_BRIGHTNESS_DEFAULT,
+    CMD_TTS_MAP, PRIORITY_CTRL,
 )
 
 # CPython 兼容
@@ -78,7 +79,7 @@ class ControlService(BaseModule):
             "volume_step": 1,            # 音量调节步长
             "volume_max": 5,             # 最大音量（对齐 AudioDriver 0-5）
             "volume_min": 0,             # 最小音量
-            "default_brightness": LIGHT_BRIGHTNESS_MAX,  # 开灯默认亮度
+            "default_brightness": LIGHT_BRIGHTNESS_DEFAULT,  # 开灯默认亮度
             "cmd_debounce_ms": 300,      # 指令防抖间隔 (ms)
         }
 
@@ -130,6 +131,7 @@ class ControlService(BaseModule):
 
         # 灯光闪烁状态（来自 LightService 事件）
         self._blink_active = False
+        self._blink_duty = 0
 
         # 指令分发表 — 全部发布事件，不直接调用模块
         self._cmd_handlers = {
@@ -159,6 +161,9 @@ class ControlService(BaseModule):
             "ble_disconnect":  lambda: self._ble_disconnect(),
             "voice_sleep":     lambda: self._sleep_voice(),
             "light_blink":     lambda: self._pub(EVENT_LIGHT_CONTROL, {"cmd": "blink"}),
+
+            # SMS 手机号配置
+            "set_phone":       lambda: self._set_phone(),
         }
 
     def init(self):
@@ -224,8 +229,16 @@ class ControlService(BaseModule):
         if cmd_obj.get("a") != "ctrl":
             return
 
-        cmd = cmd_obj.get("d", {}).get("cmd", "")
-        self._execute_cmd(cmd, source="ble")
+        d = cmd_obj.get("d", {})
+        cmd = d.get("cmd", "")
+
+        # 提取额外参数（如 phone 字段），排除 cmd 本身
+        params = {}
+        for k, v in d.items():
+            if k != "cmd":
+                params[k] = v
+
+        self._execute_cmd(cmd, source="ble", params=params)
 
     def _on_voice_cmd(self, payload):
         """
@@ -240,11 +253,12 @@ class ControlService(BaseModule):
 
     # ==================== 指令执行 ====================
 
-    def _execute_cmd(self, cmd, source="unknown"):
+    def _execute_cmd(self, cmd, source="unknown", params=None):
         """
         brief 执行控制指令（统一入口）
         param cmd: 指令字符串
         param source: 指令来源（ble / voice）
+        param params: 额外参数 dict（如 set_phone 的 phone 字段）
         """
         if not cmd:
             return
@@ -253,6 +267,10 @@ class ControlService(BaseModule):
         now = _ticks_ms()
         if time.ticks_diff(now, self.ctx["last_cmd_tick"]) < self.cfg["cmd_debounce_ms"]:
             return
+
+        # 保存参数供 handler 使用
+        if params:
+            self._data["last_params"] = params
 
         handler = self._cmd_handlers.get(cmd)
         if handler:
@@ -399,6 +417,7 @@ class ControlService(BaseModule):
     def _on_light_blink_state(self, payload):
         """brief 缓存灯光闪烁状态并推送 BLE"""
         self._blink_active = payload.get("blink", False)
+        self._blink_duty = payload.get("duty", 0)
         self._push_state()
 
     def _wake(self):
@@ -561,6 +580,29 @@ class ControlService(BaseModule):
         else:
             self._tts("血氧数据暂不可用")
 
+    def _set_phone(self):
+        """
+        brief 配置 SMS 报警手机号
+        note BLE 传入 {"a":"ctrl","d":{"cmd":"set_phone","phone":"13800138000"}}
+        """
+        params = self._data.get("last_params", {})
+        phone = params.get("phone", "")
+
+        if not phone or len(phone) != 11:
+            print("[control_service] set_phone: invalid phone=%s" % phone)
+            if self.event_bus:
+                self.event_bus.publish(EVENT_TTS_REQUEST, {
+                    "text": "手机号格式错误", "priority": PRIORITY_CTRL
+                })
+            return
+
+        if self.event_bus:
+            self.event_bus.publish(EVENT_SMS_PHONE_CONFIG, {
+                "phone": phone,
+                "timestamp": _ticks_ms()
+            })
+            print("[control_service] set_phone: phone configured %s" % phone)
+
     # ==================== 状态回推 ====================
 
     def _push_state(self):
@@ -572,9 +614,10 @@ class ControlService(BaseModule):
             return
         cs = self._control_state
         f = 1 if self._blink_active else 0
+        b = self._blink_duty if self._blink_active else cs["light_brightness"]
         self.event_bus.publish(EVENT_CONTROL_STATE_CHANGED,
             {"t": 7, "m": self._LIGHT_MODE_MAP.get(cs["light_mode"], 0),
-             "b": cs["light_brightness"],
+             "b": b,
              "v": cs["volume"],
              "p": self._POWER_MODE_MAP.get(cs["power_mode"], 0),
              "f": f})

@@ -580,6 +580,55 @@ ASRPRO 识别"开灯" → UART 发送 0x01
 
 ---
 
+#### 2.1.13 SMS 短信发送驱动模块（SMS.py）
+
+**所属层次**：Device层（网络通信驱动）
+
+**需求对应**：F-ALM-04 报警短信通知（新增）
+
+**当前状态**：✅ **已实现**（2026-06-24），已集成 main.py
+
+**模块功能**：
+- 封装 `quectel.SMS` 原生 API，提供短信发送能力
+- 供 AlarmService 在报警时调用发送 SOS 短信
+- 手机号通过 BLE FFF3 控制通道动态配置（`set_phone` 指令）
+
+**公共接口**：
+- `init()`：创建 SMS 实例，初始化短信服务（AT+CMGF=1 等）
+- `send_sms(phone, message)`：发送短信，阻塞 3-5 秒（必须在后台线程调用）
+- `deinit()`：释放 SMS 资源
+- `tick()`：pass（SMS 无周期任务）
+
+**发布事件**：无
+
+**订阅事件**：无
+
+**依赖关系**：
+- `quectel.SMS` 库（移远固件内置）
+- 需要 SIM 卡开通短信功能
+
+**SMS 内容格式**：
+- 无 GPS：`SOS:{level}`（如 `SOS:3`）
+- 有 GPS：`SOS:{level}(GPS):https://uri.amap.com/marker?position=...`
+
+**WGS84 → GCJ02 坐标转换**：参考 `examples/sms/sms.py`，将 GNSS 坐标转为高德地图坐标系，生成位置链接
+
+**数据流**：
+```
+手机配置手机号 → BLE FFF3 → ControlService → EVENT_SMS_PHONE_CONFIG
+  → AlarmService._sms_phone 存储
+碰撞/SOS 触发 → AlarmService._start_alarm
+  → _build_sms_message(level) → 有 GPS 时含高德地图链接
+  → _thread.start_new_thread(SMS.send) → 不阻塞主循环
+```
+
+**安全设计**：
+- 未配置手机号时不发送：`_sms_phone = None` 时跳过
+- 后台线程发送：不阻塞主循环 tick()
+- 发送失败不报警：`send_sms` 返回 False，AlarmService 忽略
+
+---
+
 ### 2.2 服务层模块（业务逻辑）
 
 #### 2.2.1 碰撞检测服务（CollisionService.py）（✅ v1 已实现）
@@ -629,11 +678,15 @@ ASRPRO 识别"开灯" → UART 发送 0x01
 - `EVENT_BATTERY_CRITICAL`：电量严重不足，触发紧急TTS提示
 - `EVENT_GPS_LOST`：GPS丢失事件，触发TTS语音提示
 - `EVENT_CONFIG_UPDATE`：配置更新
+- `EVENT_SMS_PHONE_CONFIG`：SMS 手机号配置（v2 新增），存储报警短信接收号码
+- `EVENT_GNSS_READY`：GNSS 坐标缓存（v2 新增），供 SMS 发送时生成位置链接
 
 **业务逻辑说明**：
 - 接收碰撞/SOS/低电量/GPS丢失等事件，协调 LED、Audio 驱动完成报警联动
 - 报警超时自动取消，恢复设备正常状态
 - 碰撞等级（Level 1-3）映射到不同的报警表现（声/光强度），具体映射方式由开发人员决定
+- **v2 新增：所有报警触发 SMS 短信**（需要先通过 BLE 配置手机号）
+- 有 GPS 定位时短信包含高德地图位置链接，无 GPS 时仅发送 `SOS:{level}`
 
 **约束规则**：
 - **优先级**：SOS 报警 > 碰撞报警，执行中的报警可被更高优先级事件打断
@@ -644,6 +697,8 @@ ASRPRO 识别"开灯" → UART 发送 0x01
 **依赖关系**：
 - 依赖Audio驱动（调用play_file、play_tts方法）
 - 依赖LED驱动（调用blink、on、off方法）
+- 依赖SMS驱动（调用send_sms方法，v2 新增）
+- GNSS 坐标通过事件订阅获取（EVENT_GNSS_READY），非直接依赖
 
 **公共接口**：
 - `cancel_alarm()`：外部取消报警（供 ControlService 调用），与内部 `_cancel_alarm()` 逻辑一致
@@ -1613,6 +1668,7 @@ gnss.get_location() 返回有效数据
 9. 网络驱动：Network → MQTT（✅已实现）
 10. 网络驱动：Qth（✅ v1 已实现）
 11. BLE 驱动（BLEDriver）（✅ 已实现，待集成到 main.py）
+11.2. SMS 驱动（SMSDriver）（✅ 已实现，已集成 main.py）
 12. 碰撞检测服务（CollisionService）（✅ v1 已实现）
 13. 电源管理服务（PowerService）（✅ v1 已完成）
 14. 报警联动服务（AlarmService）（✅ v1 已实现）
@@ -1636,6 +1692,7 @@ gnss.get_location() 返回有效数据
 | 19 | 导航引导服务（NavigationService） | ✅ 已实现 (06-09)，待集成 main.py | BLE FFF2 接收指令 + TTS 播报；位置播报升级 📅 |
 | 19.1 | 统一控制服务（ControlService） | ✅ v3 已实现 (06-18)，待集成 main.py | BLE FFF3 接收指令 + 统一路由到设备驱动 |
 | 20 | 微信小程序（WeChatMiniProgram） | ✅ Step A + Step B 完成 | 登录+BLE+骑行+地图+导航推送+远端控制 |
+| 21 | SMS 短信驱动（SMSDriver） | ✅ 已实现 (06-24)，已集成 main.py | quectel.SMS 原生 API，BLE 配置手机号，报警自动发送 |
 ```
 
 ---

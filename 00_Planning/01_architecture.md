@@ -386,6 +386,7 @@ while True:
 | EVENT_LIGHT_CONTROL | 灯光控制指令 | ControlService | LightService |
 | EVENT_VOLUME_CONTROL | 音量控制指令 | ControlService | AudioDriver |
 | EVENT_ALARM_CONTROL | 报警控制指令 | ControlService | AlarmService |
+| EVENT_SMS_PHONE_CONFIG | SMS 手机号配置 | ControlService | AlarmService |
 
 ### 3.4 模块清单
 
@@ -397,7 +398,7 @@ while True:
 | IMUDriver | Drivers/sensor/imu.py | Device | ✅ | LIS2DH12TR 加速度/陀螺仪，I2C1 |
 | GNSSDriver | Drivers/sensor/Gnss.py | Device | ✅ | EC200U 内置 GNSS + LBS 基站定位 |
 | LightSensorDriver | Drivers/sensor/Light.py | Device | ✅ | GL5528 光敏电阻，ADC PC5 |
-| HeartRateDriver | Drivers/sensor/HeartRate.py | Device | ✅ 代码完成 | MKS SPO2-ZS-BLE 心率血氧，UART9（未集成 main.py，等硬件）|
+| HeartRateDriver | Drivers/sensor/HeartRate.py | Device | ✅ 已集成 main.py | MKS SPO2-ZS-BLE 心率血氧，UART9（必须在所有 quectel 模块之后初始化）|
 | BatteryDriver | Drivers/sensor/Battery.py | Device | ✅ | 电池电压 ADC，6 档电量 |
 | Button | Drivers/interface/Button.py | Device | ✅ | SOS 按键，GPIO + IRQ |
 | VoiceDriver | Drivers/interface/Voice.py | Device | ✅ | ASRPRO 语音识别，UART hex 映射 |
@@ -408,6 +409,7 @@ while True:
 | BLEDriver | Drivers/network/BLE.py | Device | ✅ | EC200U BLE 4.2 GATT Server |
 | Network | Drivers/network/Network.py | Device | ✅ | 4G 网络模组 |
 | MQTTDriver | Drivers/network/MQTT.py | Device | ✅ | MQTT 协议封装 |
+| SMSDriver | Drivers/network/SMS.py | Device | ✅ | EC200U 短信发送（quectel.SMS） |
 | CollisionService | Modules/collision_service.py | Service | ✅ | 碰撞检测算法（多级阈值+防误报） |
 | AudioService | Modules/audio_service.py | Service | ✅ v1 | 统一音频调度（优先级队列+超时丢弃） |
 | AlarmService | Modules/alarm_service.py | Service | ✅ | 报警联动（声光+BLE+云端） |
@@ -427,21 +429,21 @@ while True:
 阶段 1 — 传感器（数据源最先就绪）
   1. Temp_Humid    → I2C1 温湿度
   2. IMU           → I2C1 加速度/陀螺仪
-  3. GNSS          → EC200U 内置 GNSS
-  4. Light         → ADC 光照
-  5. Battery       → ADC PC4 电池电压（v2 新增）
-  6. HeartRate     → UART9 心率血氧（v2 新增）
+  3. Light         → ADC 光照
+  4. Battery       → ADC PC4 电池电压（v2 新增）
 
-阶段 2 — 执行器（硬件接口就绪）
-  7. Button        → GPIO SOS 按键
-  8. LED           → Timer1 LED 指示灯
-  9. Audio         → EC200U 音频输出
-  10. LCD          → SPI1 显示屏
-  11. PWM_LED      → PE11 PWM 调光灯（v2 新增）
-  12. Voice        → UART2 语音指令（v2 新增）
+阶段 2 — 执行器 + 通信（硬件接口就绪）
+  5. Button        → GPIO SOS 按键
+  6. LED           → Timer1 LED 指示灯
+  7. Audio         → EC200U 音频输出
+  8. LCD           → SPI1 显示屏
+  9. PWM_LED       → PE11 PWM 调光灯（v2 新增）
+  10. BLE          → EC200U BLE 4.2（v2 新增）
+  11. SMS          → EC200U 短信发送（v3 新增）
+  12. GNSS         → EC200U 内置 GNSS
 
-阶段 3 — 网络（通信通道就绪）
-  13. BLE          → EC200U BLE 4.2（v2 新增）
+阶段 3 — 心率（必须在所有 quectel 模块之后）
+  13. HeartRate    → UART9 心率血氧（v2 新增，UART9 初始化破坏 EC200U AT 通道）
 
 阶段 4 — 业务服务（依赖下层模块）
   14. PowerService     → 电源管理（v2 新增）
@@ -453,6 +455,7 @@ while True:
   20. BLEService       → BLE 推送服务（v2 新增）
   21. ControlService   → 统一控制（v3 新增）
   22. NavigationService → 导航引导（v3 新增）
+  23. Voice           → ASRPRO 语音指令（UART2）
 ```
 
 **依赖注入**：Service 层模块通过构造函数注入 Device 层引用（如 `AlarmService(event_bus, led=led, audio=audio)`），禁止 Service 间直接引用。
@@ -616,7 +619,7 @@ def tick(self):
 
 ---
 
-**文档版本**：v7.2
-**更新日期**：2026-06-24
+**文档版本**：v7.4
+**更新日期**：2026-06-25
 **维护团队**：锦依卫队
-**备注**：Phase 4 代码完成 — ControlService v3（19 指令+TTS+报警快照）、NavigationService、BLEService v3（环形缓冲+快照合并）、LightService、PWM_LED、VoiceDriver 均已集成 main.py。HeartRate 驱动代码完成，等待硬件接入。
+**备注**：Phase 4 代码完成。HeartRate 已集成 main.py，初始化顺序调整为必须在所有 quectel 模块（Audio、BLE、SMS、GNSS）之后，因为 UART9 初始化破坏 EC200U AT 通道。VoiceDriver 移至最后初始化。

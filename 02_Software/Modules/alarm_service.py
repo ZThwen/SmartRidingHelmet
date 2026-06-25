@@ -4,20 +4,23 @@ note 接收碰撞/SOS/GPS丢失等事件，协调 LED + Audio 驱动完成声光
       报警超时自动取消，SW按钮双击语义：空闲→SOS，报警中→取消
       Device 驱动由构造函数注入，LCD 交由 DisplayService 负责
 """
+import math
 import time
+import _thread
 
 from core.Base_Module import BaseModule
 from core.config import (
     EVENT_ALARM_TRIGGERED, EVENT_ALARM_CANCELED,
     EVENT_COLLISION_DETECTED, EVENT_BUTTON_PRESSED,
     EVENT_BATTERY_LOW, EVENT_BATTERY_CRITICAL, EVENT_GPS_LOST,
+    EVENT_SMS_PHONE_CONFIG, EVENT_GNSS_READY,
     EVENT_CONFIG_UPDATE, EVENT_ALARM_CONTROL, EVENT_POWER_STATE_CHANGE,
     ALARM_DURATION_MS, ALARM_ENABLE_LOCAL,
     AUDIO_ALARM_FILE_L1, AUDIO_ALARM_FILE_L2, AUDIO_ALARM_FILE_L3,
     AUDIO_SOS_FILE,
     TTS_BATTERY_LOW, TTS_BATTERY_CRITICAL, TTS_GPS_LOST,
     POWER_STATE_ACTIVE,
-    EVENT_HEARTRATE_READY, EVENT_TTS_REQUEST, PRIORITY_ALARM,
+    EVENT_HEARTRATE_READY, EVENT_TTS_REQUEST, PRIORITY_ALARM, PRIORITY_CTRL,
     HEARTRATE_HIGH_THRESHOLD, HEARTRATE_LOW_THRESHOLD,
     HEARTRATE_SPO2_LOW_THRESHOLD,
     HEARTRATE_TTS_HIGH, HEARTRATE_TTS_LOW, HEARTRATE_SPO2_TTS_LOW,
@@ -26,12 +29,13 @@ from core.config import (
 
 
 class AlarmService(BaseModule):
-    def __init__(self, event_bus=None, led=None, audio=None):
+    def __init__(self, event_bus=None, led=None, audio=None, sms=None):
         """
         brief 初始化报警联动服务实例
         param event_bus: 事件总线实例引用
         param led: LED 驱动实例（由主循环创建后注入）
         param audio: Audio 驱动实例（由主循环创建后注入）
+        param sms: SMS 驱动实例（由主循环创建后注入，用于发送报警短信）
         """
         super().__init__()
         self.event_bus = event_bus
@@ -40,6 +44,7 @@ class AlarmService(BaseModule):
         # 注入的 Device 引用（可为 None，调用处有 None guard）
         self.led = led
         self.audio = audio
+        self._sms_driver = sms
 
         # ======================= cfg：静态配置 =======================
         self.cfg = {
@@ -60,6 +65,10 @@ class AlarmService(BaseModule):
             "hr_alert_tick": 0,
         }
 
+        # SMS 配置与 GPS 缓存
+        self._sms_phone = None           # 存储配置的手机号（从 BLE 接收）
+        self._gnss_cache = {}            # 缓存最新 GNSS 坐标（事件驱动更新）
+
         # ======================= _data：数据快照 =======================
         self._data = {
             "last_alarm": {},
@@ -79,6 +88,8 @@ class AlarmService(BaseModule):
                 self.event_bus.subscribe(EVENT_POWER_STATE_CHANGE, self._on_config_update)
                 self.event_bus.subscribe(EVENT_ALARM_CONTROL, self._on_alarm_control)
                 self.event_bus.subscribe(EVENT_HEARTRATE_READY, self._on_heartrate)
+                self.event_bus.subscribe(EVENT_SMS_PHONE_CONFIG, self._on_sms_phone_config)
+                self.event_bus.subscribe(EVENT_GNSS_READY, self._on_gnss)
 
             self.ctx["alarm_active"] = False
             self.ctx["alarm_type"] = ""
@@ -147,7 +158,7 @@ class AlarmService(BaseModule):
                 if self.led:
                     self.led.blink(self.cfg["alarm_duration_ms"], 200)
                 if self.audio:
-                    self.audio.play_file(AUDIO_SOS_FILE)
+                    self.audio.play_tts("SOS 报警已触发")
 
         if self.event_bus:
             self.event_bus.publish(EVENT_ALARM_TRIGGERED, {
@@ -155,6 +166,15 @@ class AlarmService(BaseModule):
                 "level": level,
                 "timestamp": time.ticks_ms(),
             })
+
+        # 所有报警都发送 SMS（后台线程，不阻塞主循环）
+        if self._sms_phone and self._sms_driver:
+            msg = self._build_sms_message(level)
+            print("[%s] 发送 SMS 到 %s: %s" % (self.name, self._sms_phone, msg))
+            try:
+                _thread.start_new_thread(self._sms_driver.send_sms, (self._sms_phone, msg))
+            except Exception as e:
+                print("[%s] SMS 线程启动失败: %s" % (self.name, e))
 
     def _cancel_alarm(self):
         """
@@ -305,6 +325,107 @@ class AlarmService(BaseModule):
                 "text": tts_text,
                 "priority": PRIORITY_ALARM,
             })
+
+    def _on_sms_phone_config(self, payload):
+        """
+        brief 接收 SMS 手机号配置
+        """
+        phone = payload.get("phone", "")
+        if phone and len(phone) == 11:
+            self._sms_phone = phone
+            print("[%s] SMS 手机号已配置: %s" % (self.name, phone))
+            if self.event_bus:
+                self.event_bus.publish(EVENT_TTS_REQUEST, {
+                    "text": "手机号已配置",
+                    "priority": PRIORITY_CTRL
+                })
+
+    def _on_gnss(self, payload):
+        """
+        brief 缓存最新 GNSS 坐标，供 SMS 发送时使用
+        """
+        self._gnss_cache = {
+            "latitude": payload.get("latitude", 0),
+            "longitude": payload.get("longitude", 0),
+            "valid": payload.get("valid", False),
+        }
+
+    # ==================== SMS 辅助方法 ====================
+
+    def _build_sms_message(self, level):
+        """
+        brief 构建 SMS 内容（有 GPS 时附带高德地图链接）
+        param level: 报警等级 (int)
+        return str SMS 文本
+        """
+        gnss = self._gnss_cache
+
+        if gnss and gnss.get("valid"):
+            lat = gnss.get("latitude", 0)
+            lng = gnss.get("longitude", 0)
+
+            # WGS84 → GCJ02 坐标转换
+            gcj_lng, gcj_lat = self._wgs84_to_gcj02(lng, lat)
+
+            # 生成高德地图链接
+            url = "https://uri.amap.com/marker?position={:.6f},{:.6f}&name=SOS".format(gcj_lng, gcj_lat)
+            return "SOS:{}(GPS):{}".format(level, url)
+        else:
+            return "SOS:{}".format(level)
+
+    def _wgs84_to_gcj02(self, lng, lat):
+        """
+        brief WGS84 坐标转 GCJ02（高德地图坐标系）
+        param lng: 经度
+        param lat: 纬度
+        return (gcj_lng, gcj_lat) 转换后的经纬度
+        """
+        PI = 3.1415926535897932384626
+        A = 6378245.0
+        EE = 0.00669342162296594323
+
+        def _out_of_china(lng, lat):
+            return not (72.004 <= lng <= 137.8347 and 0.8293 <= lat <= 55.8271)
+
+        def _transform_lat(x, y):
+            ret = -100.0 + 2.0 * x + 3.0 * y + 0.2 * y * y + \
+                  0.1 * x * y + 0.2 * math.sqrt(abs(x))
+            ret += (20.0 * math.sin(6.0 * x * PI) +
+                    20.0 * math.sin(2.0 * x * PI)) * 2.0 / 3.0
+            ret += (20.0 * math.sin(y * PI) +
+                    40.0 * math.sin(y / 3.0 * PI)) * 2.0 / 3.0
+            ret += (160.0 * math.sin(y / 12.0 * PI) +
+                    320.0 * math.sin(y * PI / 30.0)) * 2.0 / 3.0
+            return ret
+
+        def _transform_lng(x, y):
+            ret = 300.0 + x + 2.0 * y + 0.1 * x * x + \
+                  0.1 * x * y + 0.1 * math.sqrt(abs(x))
+            ret += (20.0 * math.sin(6.0 * x * PI) +
+                    20.0 * math.sin(2.0 * x * PI)) * 2.0 / 3.0
+            ret += (20.0 * math.sin(x * PI) +
+                    40.0 * math.sin(x / 3.0 * PI)) * 2.0 / 3.0
+            ret += (150.0 * math.sin(x / 12.0 * PI) +
+                    300.0 * math.sin(x / 30.0 * PI)) * 2.0 / 3.0
+            return ret
+
+        if _out_of_china(lng, lat):
+            return lng, lat
+
+        dlat = _transform_lat(lng - 105.0, lat - 35.0)
+        dlng = _transform_lng(lng - 105.0, lat - 35.0)
+
+        radlat = lat / 180.0 * PI
+        magic = math.sin(radlat)
+        magic = 1 - EE * magic * magic
+        sqrtmagic = math.sqrt(magic)
+
+        dlat = (dlat * 180.0) / ((A * (1 - EE)) / (magic * sqrtmagic) * PI)
+        dlng = (dlng * 180.0) / (A / sqrtmagic * math.cos(radlat) * PI)
+
+        mg_lat = lat + dlat
+        mg_lng = lng + dlng
+        return mg_lng, mg_lat
 
     # ==================== 辅助映射 ====================
 

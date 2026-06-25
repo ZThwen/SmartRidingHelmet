@@ -65,18 +65,25 @@ App (02_Software/core/) → Services (02_Software/Modules/) → Device (02_Softw
 ### 3.4 初始化顺序（必须严格遵守）
 
 ```
-1. 传感器: Temp_Humid → IMU → GNSS → Light
-2. 执行器: Button → LED → Audio → LCD
-3. 服务: CollisionService → AlarmService → CloudService → DisplayService
+1. 传感器: Temp_Humid → IMU → Light → Battery
+2. 执行器 + 通信: Button → LED → Audio → LCD → PWM_LED → BLE → SMS → GNSS
+3. 心率: HeartRate（必须在所有 quectel 模块之后）
+4. 服务: CollisionService → AlarmService → AudioService → DisplayService → LightService → BLEService → ControlService → NavigationService → PowerService → Voice
 ```
 
-v2 新增（已实现但未集成 main.py）：
-- PWM_LED: 在 LCD 之后
-- LightService: 在 PWM_LED 之后
-- ControlService: 在 DisplayService 之后
-- NavigationService: 在 ControlService 之后
+**注意**：Network/MQTT 不是独立模块，是 CloudService 内部创建的。
 
-**注意**：Network/MQTT 不是独立模块，是 CloudService 内部创建的。BLE 未集成 main.py。
+### 初始化顺序约束
+
+**关键规则**：HeartRate（UART9）必须在所有 quectel 模块（Audio、BLE、SMS、GNSS）之后初始化。
+
+**原因**：UART9 初始化会破坏 EC200U 的 AT 通道（懒加载机制），导致后续 AT 命令超时。
+
+**正确顺序**：
+1. 传感器：temp_humid, imu, light, battery
+2. 执行器：button, led, audio, lcd, pwm_led, ble, sms, gnss
+3. 心率：heart_rate（必须在 quectel 模块之后）
+4. 服务：collision, audio_svc, alarm, display, control_svc, power_svc, light_svc, ble_svc, nav_svc, voice
 
 ---
 
@@ -257,6 +264,7 @@ type(scope): description
 2. 去掉 docstring、注释
 3. f-string 转为 `%` 格式
 4. 每次修改源码后重新同步 + 瘦身
+5. **f-string 格式化说明符必须保留** — `0x{addr:02X}` 转为 `0x%02X`（不是 `0x%s`），否则十六进制零填充丢失
 
 ---
 
@@ -351,6 +359,7 @@ type(scope): description
 - **状态快照需要考虑并发修改** — _pre_alarm_state 保存/恢复时状态可能已被修改。恢复后需推送 BLE
 - **测试文件版本管理** — test_control_service.py 有 4 个版本，旧版本应及时归档
 - **gitignore 应在项目初期配置** — thonny 目录之前被 git 跟踪，后来才加入 gitignore，导致删除后需要重新创建
+- **Thonny 瘦身时 f-string 格式化说明符会丢失** — `f"0x{addr:02X}"` 转为 `%` 格式时，`02X` 会被错误转为 `s`，导致十六进制零填充丢失。必须用 `0x%02X` 而非 `0x%s`
 
 ### 12.6 微信小程序 (P1/P2 修复 2026-06-24)
 
@@ -388,6 +397,7 @@ type(scope): description
 | PWM_LED (PE11, TIM1_CH2) | ✅ 完成（已集成 main.py） | `02_Software/Drivers/actuator/PWM_LED.py` |
 | Button | ✅ 完成 | `02_Software/Drivers/interface/` |
 | Network, MQTT, BLE | ✅ 完成 | `02_Software/Drivers/network/` |
+| SMSDriver | ✅ 完成（已集成 main.py） | `02_Software/Drivers/network/SMS.py` |
 | Qth (Quectel Cloud SDK) | ⚠️ 已废弃 | `02_Software/Drivers/network/Qth.py` |
 | Services (Collision, Alarm, Cloud, Display, BLE, Light, Control, Navigation) | ✅ 完成 (v1) | `02_Software/Modules/` |
 | LarkCloudService (Quectel Cloud) | ⚠️ 已废弃 | `02_Software/Modules/lark_cloud.py` |
@@ -397,7 +407,7 @@ type(scope): description
 | main.py (21 模块集成) | ✅ v2 完成 | `02_Software/core/main.py` |
 | PowerService (电源管理) | ✅ 完成（已集成 main.py） | `02_Software/Modules/power_service.py` |
 | BatteryDriver (电池ADC) | ✅ 完成（已集成 main.py） | `02_Software/Drivers/sensor/Battery.py` |
-| HeartRate | 📅 v2 计划（等硬件） | `02_Software/Drivers/sensor/HeartRate.py` |
+| HeartRate | ✅ 完成（已集成 main.py，必须在 quectel 模块之后初始化） | `02_Software/Drivers/sensor/HeartRate.py` |
 | VoiceDriver (ASRPRO) | ✅ 完成（已集成 main.py） | `02_Software/Drivers/interface/Voice.py` |
 | WeChatMiniProgram | ✅ P1/P2 修复完成（移远云移除、StateService 全局状态、trackPoints 迁移） | `02_Software/WeChatMiniProgram/` |
 

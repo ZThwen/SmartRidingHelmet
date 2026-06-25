@@ -60,6 +60,7 @@ EVENT_BLE_ALARM_ACK         = "BLE_ALARM_ACK"          # 报警确认（手机�
 
 # 控制系统事件
 EVENT_CONTROL_STATE_CHANGED = "CONTROL_STATE_CHANGED"  # 控制状态变更（回推到小程序）
+EVENT_SMS_PHONE_CONFIG      = "SMS_PHONE_CONFIG"       # SMS 手机号配置
 EVENT_VOICE_CMD             = "VOICE_CMD"              # 语音指令（ASRPRO → ControlService）
 
 # 控制指令事件（ControlService → 各模块）
@@ -83,10 +84,10 @@ DEFAULT_SAMPLE_MS      = 2000    # 传感器默认采样间隔 (ms)
 HEARTRATE_SAMPLE_MS         = 2000    # 心率采样间隔 (ms)
 HEARTRATE_SUSPENDED_MS      = 5000    # 省电模式采样间隔 (ms)
 HEARTRATE_WARMUP_MS         = 10000   # 传感器预热时间 (ms)
-HEARTRATE_UART_ID           = 9       # UART总线编号（UART9, TX=PD15, RX=PD14）
+HEARTRATE_UART_ID           = 5       # UART总线编号（UART5, TX=PC12, RX=PD2）
 HEARTRATE_UART_BAUDRATE     = 115200  # 波特率
-HEARTRATE_UART_TX_PIN       = "PD15"  # USART9 TX
-HEARTRATE_UART_RX_PIN       = "PD14"   # USART9 RX
+HEARTRATE_UART_TX_PIN       = "PC12"  # UART5 TX
+HEARTRATE_UART_RX_PIN       = "PD2"   # UART5 RX
 HEARTRATE_DATA_LEN          = 50      # 数据包长度（字节）
 HEARTRATE_HEADER            = 0xFF    # 数据包头字节
 HEARTRATE_CMD_START         = 0xFF    # 采集开指令
@@ -273,6 +274,7 @@ LIGHT_DAY_ADC_THRESHOLD    = 30000   # 白天阈值（ADC值 < 此值 → 光照
 LIGHT_NIGHT_ADC_THRESHOLD  = 50000   # 晚上阈值（ADC值 > 此值 → 光照弱 → 灯最亮）
 LIGHT_BRIGHTNESS_MIN       = 5       # 最小亮度（%）
 LIGHT_BRIGHTNESS_MAX       = 50      # 最大亮度（%），50%PWM上限
+LIGHT_BRIGHTNESS_DEFAULT   = 25      # 开灯默认亮度（%），留增减空间
 LIGHT_GAMMA                = 1.5     # 非线性映射参数（>1时暗环境更敏感）
 LIGHT_BRIGHTNESS_THRESHOLD = 3       # 亮度变化阈值（小于此值不调节）
 LIGHT_DEBOUNCE_MS          = 50      # 防抖间隔（ms）

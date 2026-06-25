@@ -1,6 +1,6 @@
 """
 brief 智能骑行头盔系统入口 — v2 Step 7
-note 集成 22 个模块（6 传感器 + 6 执行器/接口 + 1 网络 + 9 Service）
+note 集成 23 个模块（6 传感器 + 6 执行器/接口 + 1 网络 + 1 SMS + 9 Service）
 """
 import sys
 import time
@@ -25,6 +25,7 @@ from Drivers.actuator.LCD import LCDDriver
 from Drivers.actuator.PWM_LED import PWMLEDDriver
 
 from Drivers.network.BLE import BLEDriver
+from Drivers.network.SMS import SMSDriver
 from Drivers.interface.Voice import VoiceDriver
 
 from Modules.collision_service import CollisionService
@@ -40,8 +41,11 @@ from Modules.power_service import PowerService
 
 def main():
     """
-    brief 系统入口: 22 个模块全集成，v2 Step 7（新增 BatteryDriver + PowerService + HeartRate）
+    brief 系统入口: 23 个模块全集成，v2 Step 7（新增 BatteryDriver + PowerService + HeartRate + SMS）
     """
+    GC_THRESHOLD = 8000  # 内存阈值（bytes）
+    GC_CHECK_INTERVAL = 500  # 每 500 次循环检查
+    
     print("🚀 智能骑行头盔系统启动...")
 
     # 1. 创建事件总线
@@ -64,11 +68,12 @@ def main():
     lcd = LCDDriver(event_bus)
     pwm_led = PWMLEDDriver(event_bus)
     ble = BLEDriver(event_bus)
+    sms = SMSDriver(event_bus)
 
     # --- 服务（注入 Device 引用）---
     collision = CollisionService(event_bus)
     audio_svc = AudioService(event_bus, audio_driver=audio)
-    alarm = AlarmService(event_bus, led=led, audio=audio)
+    alarm = AlarmService(event_bus, led=led, audio=audio, sms=sms)
     display = DisplayService(event_bus, lcd_driver=lcd, audio_driver=audio)
     control_svc = ControlService(event_bus, temp_humid=temp_humid, gnss=gnss, heart_rate=heart_rate, ble_driver=ble)
     light_svc = LightService(event_bus, pwm_led=pwm_led)
@@ -79,8 +84,9 @@ def main():
 
     # 3. 按序初始化（传感器 → 执行器 → 服务）
     init_order = [temp_humid, imu, gnss, light, battery_drv, heart_rate,
-                  button, led, audio, lcd, pwm_led, ble,
-                  collision, audio_svc, alarm, display, control_svc, power_svc, light_svc, ble_svc, nav_svc, voice]
+                  button, led, audio, lcd, pwm_led, ble, sms,
+                  collision, audio_svc, alarm, display, control_svc, power_svc,
+                  light_svc, ble_svc, nav_svc, voice]
     failed = []
 
     print("\n[初始化阶段]")
@@ -141,15 +147,14 @@ def main():
 
             time.sleep_ms(10)
 
-            # 每 100 次循环检查内存
+            # 每 500 次循环检查内存（约 5 秒）
             loop_count += 1
-            if loop_count % 100 == 0:
+            if loop_count % GC_CHECK_INTERVAL == 0:
                 free_bytes = gc.mem_free()
-                if free_bytes < 15000:
-                    print(f"[WARNING] 剩余内存 {free_bytes} bytes（<15000），触发 gc.collect()")
+                if free_bytes < GC_THRESHOLD:
+                    print(f"[GC] 内存 {free_bytes} bytes，执行回收")
                     gc.collect()
-                    free_bytes = gc.mem_free()
-                    print(f"  -> gc.collect() 后剩余 {free_bytes} bytes")
+                    print(f"  -> 回收后 {gc.mem_free()} bytes")
 
             # 每 200 次循环（约 2 秒）打印一次数据快照
             if loop_count % 200 == 0:
