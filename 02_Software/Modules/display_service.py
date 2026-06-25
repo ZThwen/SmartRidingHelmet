@@ -157,7 +157,7 @@ class DisplayService(BaseModule):
             return
         
         # 脏标志检查：只在有新数据时渲染
-        if self._dirty:
+        if self._dirty and self.ctx["display_mode"] == "normal":
             elapsed = time.ticks_diff(now, self._last_render_time)
             if elapsed >= self._min_render_interval:
                 self._render_normal_screen()
@@ -318,6 +318,8 @@ class DisplayService(BaseModule):
     def _render_normal_screen(self):
         """渲染正常骑行画面：显示温湿度、定位、速度数据"""
         if not self.lcd_driver:
+            return
+        if self.ctx["display_mode"] != "normal":
             return
         
         try:
@@ -522,10 +524,12 @@ class DisplayService(BaseModule):
         self.ctx["power_state"] = new_state
         
         if new_state != POWER_STATE_ACTIVE:
+            if self.lcd_driver:
+                self.lcd_driver.clear()
             if self.lcd_driver and hasattr(self.lcd_driver, 'set_backlight'):
                 self.lcd_driver.set_backlight(0)
                 self.ctx["current_backlight"] = 0
-            print("[{}] 进入休眠，关闭背光".format(self.name))
+            print("[{}] 进入休眠，清屏并关闭背光".format(self.name))
         elif old_state != POWER_STATE_ACTIVE:
             if self.lcd_driver and hasattr(self.lcd_driver, 'set_backlight'):
                 backlight = self.ctx.get("current_backlight", self.cfg["backlight_normal"])
@@ -533,6 +537,7 @@ class DisplayService(BaseModule):
                     backlight = self.cfg["backlight_normal"]
                 self.lcd_driver.set_backlight(backlight)
                 self.ctx["current_backlight"] = backlight
+            self._dirty = True  # 唤醒后触发 re-render
             print("[{}] 唤醒，恢复背光".format(self.name))
     
     def _on_config_update(self, payload):
