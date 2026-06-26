@@ -22,6 +22,21 @@ class EventBus:
         self._queue = []        # 事件队列: [(事件名, 数据字典), ...]
         self._lock = _thread.allocate_lock()  # 互斥锁，防止辅助线程发布时与主循环pump()冲突
         self.debug = False
+        self.QUEUE_SOFT_MAX = 40   # 软上限：超限逐出非关键事件
+        self.QUEUE_HARD_MAX = 64   # 硬上限：兜底 OOM 保护
+
+        # 可去重事件：同类型只保留最新一条（传感器数据天然可替换）
+        self._dedup_events = {
+            "TEMP_HUMID_READY", "IMU_READY", "GNSS_READY", "LIGHT_READY",
+            "HEARTRATE_READY", "BATTERY_READY", "LBS_READY",
+            "CONTROL_STATE_CHANGED", "LIGHT_BLINK_STATE", "NAV_DISPLAY",
+        }
+        # 关键事件白名单：绝不主动丢弃
+        self._critical_events = {
+            "COLLISION_DETECTED", "ALARM_TRIGGERED", "ALARM_CANCELED",
+            "ALARM_CONTROL", "BLE_ALARM_ACK", "BUTTON_PRESSED",
+            "POWER_STATE_CHANGE", "TTS_REQUEST",
+        }
 
     def subscribe(self, event_name, callback):
         """
@@ -53,6 +68,26 @@ class EventBus:
         payload.setdefault("source", "unknown")
 
         self._lock.acquire()
+
+        # LEVEL 1: 去重 — 可替换事件同类型只保留最新
+        if event_name in self._dedup_events:
+            for i in range(len(self._queue)):
+                if self._queue[i][0] == event_name:
+                    self._queue[i] = (event_name, payload)
+                    self._lock.release()
+                    return
+
+        # LEVEL 2: 软上限 — 优先逐出最旧非关键事件
+        if len(self._queue) >= self.QUEUE_SOFT_MAX:
+            for i, (evt, _) in enumerate(self._queue):
+                if evt not in self._critical_events:
+                    self._queue.pop(i)
+                    break
+
+        # LEVEL 3: 硬上限 — 兜底 OOM 保护（全关键事件极端情况）
+        if len(self._queue) >= self.QUEUE_HARD_MAX:
+            self._queue.pop(0)
+
         self._queue.append((event_name, payload))
         self._lock.release()
 

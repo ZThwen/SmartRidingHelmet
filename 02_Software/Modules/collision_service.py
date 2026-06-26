@@ -272,9 +272,9 @@ class CollisionService(BaseModule):
         end_ts = window[-1]["timestamp"]
         duration = end_ts - start_ts
 
-        if peak_val <= self.cfg["level1_max_g"] or duration <= self.cfg["level1_max_duration_ms"]:
+        if peak_val <= self.cfg["level1_max_g"] and duration <= self.cfg["level1_max_duration_ms"]:
             return 1
-        if peak_val <= self.cfg["level2_max_g"] or duration <= self.cfg["level2_max_duration_ms"]:
+        if peak_val <= self.cfg["level2_max_g"] and duration <= self.cfg["level2_max_duration_ms"]:
             return 2
         return 3
 
