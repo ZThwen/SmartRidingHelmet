@@ -22,6 +22,7 @@
 2026-06-22  ████████████████████████████  Phase 5 AudioService + LCD 导航恢复
 2026-06-23  ████████████████████████████  Phase 4 PowerService + BatteryDriver
 2026-06-24  ████████████████████████████  HeartRate + Phase 4 增强 + 文档同步
+2026-06-26  ████████████████████████████  系统级架构修复（P0 OOM + 碰撞判定 + 线程安全 + 模块隔离）
 ```
 
 ---
@@ -161,3 +162,22 @@
   - 更新架构文档、模块实现文档、测试指南
   - 添加 Bug 修复报告（碰撞报警/BLE/LCD/传感器综合修复）
   - 添加 UART9 AT 通道冲突审计报告
+
+## 2026-06-26
+
+- 🟢 **系统级架构修复与优化**
+  - P0 **EventBus 队列 OOM 保护** — 新增三级防御：传感器数据去重(同类型替换) + 软上限40(逐出非关键) + 硬上限64(兜底OOM)。关键事件白名单(碰撞/报警/SOS/BLE_ACK/电源切换/TTS)永不主动丢弃
+  - P0 **碰撞等级判定修正** — `_determine_level()` 中 `or` → `and`，修复高峰值+短持续碰撞被误判为轻微(Level 1)而非严重(Level 3)的逻辑缺陷
+  - P0 **HeartRate 阻塞移除** — `start_collect()` 删除 `time.sleep_ms(100)`，消除 EventBus 回调中 100ms 主循环冻结
+  - P1 **Audio _cb_ring 线程安全** — 加 `_thread.allocate_lock()` 保护，修复回调线程与主线程并发操作无锁列表的竞争
+
+- 🔧 **架构违规修复**
+  - **NavigationService 双路径写 LCD** — 删除 `lcd_driver` 注入和 `_write_nav_line()` 方法，导航文字仅通过 `EVENT_NAV_DISPLAY` → DisplayService 单路径管理
+  - **AlarmService 绕过 AudioService** — `_on_gps_lost()` 从直接调 `audio.play_tts()` 改为发布 `EVENT_TTS_REQUEST`，走统一优先级调度
+  - **DisplayService 脏标记缺失** — `_on_nav_display()` 补设 `_dirty=True`，确保导航文字及时渲染
+
+- 🔧 **15 个测试文件同步更新** — 移除 NavigationService `lcd_driver=` 过期参数；GPS 丢失 TTS 断言更新为 EventBus 事件捕获
+
+- 🔧 **Audio 修复残留问题** — `_on_gps_lost` 相关测试文件断言更新（test_alarm_service_unit + integration）
+
+- 📝 **文档同步** — dev_log.md 同步
