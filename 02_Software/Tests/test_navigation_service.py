@@ -51,7 +51,7 @@ def make_service():
     bus = EventBus()
     audio = FakeAudio()
     lcd = FakeLCD()
-    svc = NavigationService(bus, audio_driver=audio, lcd_driver=lcd)
+    svc = NavigationService(bus, audio_driver=audio)
     svc.init()
     return svc, bus, audio, lcd
 
@@ -124,7 +124,7 @@ def test_direction_mapping():
 def test_no_audio_no_crash():
     """无 Audio 引用时不崩溃"""
     bus = EventBus()
-    svc = NavigationService(bus, audio_driver=None, lcd_driver=None)
+    svc = NavigationService(bus, audio_driver=None)
     svc.init()
     cmd = '{"a":"nav","d":{"dir":"right","dist":200,"road":"中山路"}}'
     bus.publish(EVENT_NAV_CMD, {"raw": cmd})

@@ -98,7 +98,7 @@ def make_system():
     bus = EventBus()
     audio = FakeAudio()
     lcd = FakeLCD()
-    nav = NavigationService(bus, audio_driver=audio, lcd_driver=lcd)
+    nav = NavigationService(bus, audio_driver=audio)
     nav.init()
     return bus, audio, lcd, nav
 

@@ -83,7 +83,7 @@ def make_system():
     control_svc = ControlService(bus, temp_humid=temp_humid, gnss=gnss)
     light_svc = LightService(bus, pwm_led=pwm_led)
     ble_svc = BLEService(bus, ble_driver=ble)
-    nav_svc = NavigationService(bus, audio_driver=audio, lcd_driver=lcd)
+    nav_svc = NavigationService(bus, audio_driver=audio)
     voice = VoiceDriver(bus)
     power_svc = PowerService(bus)
 

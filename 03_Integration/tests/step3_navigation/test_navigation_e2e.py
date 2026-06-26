@@ -67,7 +67,7 @@ def make_system():
     bus = EventBus()
     audio = AudioDriver(bus)
     lcd = LCDDriver(bus)
-    nav = NavigationService(bus, audio_driver=audio, lcd_driver=lcd)
+    nav = NavigationService(bus, audio_driver=audio)
 
     print("  初始化 AudioDriver...")
     audio.init()

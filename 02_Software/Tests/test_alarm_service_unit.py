@@ -13,6 +13,7 @@ from core.config import (
     EVENT_ALARM_TRIGGERED, EVENT_ALARM_CANCELED, EVENT_ALARM_CONTROL,
     EVENT_COLLISION_DETECTED, EVENT_BUTTON_PRESSED, EVENT_GPS_LOST,
     TTS_GPS_LOST,
+    EVENT_TTS_REQUEST, PRIORITY_ALARM,
     AUDIO_ALARM_FILE_L1, AUDIO_ALARM_FILE_L2, AUDIO_ALARM_FILE_L3,
     AUDIO_SOS_FILE, POWER_STATE_SUSPENDED,
 )
@@ -177,11 +178,16 @@ def test_publish_alarm_canceled():
 
 
 def test_gps_lost_tts():
-    """GPS 丢失 → audio.play_tts(TTS_GPS_LOST)"""
-    svc, _, _, audio = make_service()
+    """GPS 丢失 → EVENT_TTS_REQUEST"""
+    svc, bus, audio, _ = make_service()
+    captured = []
+    bus.subscribe(EVENT_TTS_REQUEST, lambda p: captured.append(p))
     svc._on_gps_lost({"timestamp": time.ticks_ms()})
-    assert ("play_tts", TTS_GPS_LOST) in audio.calls
-    print("  OK GPS lost -> TTS")
+    bus.pump()
+    assert len(captured) == 1
+    assert captured[0]["text"] == TTS_GPS_LOST
+    assert captured[0]["priority"] == PRIORITY_ALARM
+    print("  OK GPS lost -> TTS event")
 
 
 def test_battery_stubs():

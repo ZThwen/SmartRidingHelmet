@@ -154,7 +154,7 @@ def main():
 
     log("初始化 NavigationService...")
     try:
-        nav_svc = NavigationService(bus, audio_driver=audio, lcd_driver=lcd)
+        nav_svc = NavigationService(bus, audio_driver=audio)
         nav_svc.init()
         log("  ✓ NavigationService")
     except Exception as e:

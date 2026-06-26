@@ -14,6 +14,7 @@ from core.config import (
     EVENT_ALARM_TRIGGERED, EVENT_ALARM_CANCELED, EVENT_ALARM_CONTROL,
     EVENT_CONFIG_UPDATE,
     TTS_GPS_LOST, POWER_STATE_ACTIVE,
+    EVENT_TTS_REQUEST, PRIORITY_ALARM,
     AUDIO_ALARM_FILE_L1, AUDIO_SOS_FILE,
 )
 from Modules.alarm_service import AlarmService
@@ -111,12 +112,16 @@ def test_mainloop_stability():
 
 
 def test_gps_lost_flow():
-    """注入 GPS_LOST → Audio TTS 播报"""
+    """注入 GPS_LOST → EVENT_TTS_REQUEST 事件"""
     svc, bus, _, audio = make_service()
+    captured = []
+    bus.subscribe(EVENT_TTS_REQUEST, lambda p: captured.append(p))
     bus.publish(EVENT_GPS_LOST, {"timestamp": time.ticks_ms()})
     bus.pump()
-    assert ("play_tts", TTS_GPS_LOST) in audio.calls
-    print("  OK GPS lost -> TTS flow")
+    assert len(captured) == 1
+    assert captured[0]["text"] == TTS_GPS_LOST
+    assert captured[0]["priority"] == PRIORITY_ALARM
+    print("  OK GPS lost -> TTS event flow")
 
 
 def test_config_update_flow():

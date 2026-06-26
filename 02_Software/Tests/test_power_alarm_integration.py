@@ -141,7 +141,7 @@ def make_system():
     alarm = AlarmService(bus, led=led, audio=audio)
     light = LightService(bus, pwm_led=pwm)
     ctrl = ControlService(event_bus=bus)
-    nav = NavigationService(bus, audio_driver=audio, lcd_driver=None)
+    nav = NavigationService(bus, audio_driver=audio)
 
     # 3. Init（对齐 main.py 顺序）
     audio.init()

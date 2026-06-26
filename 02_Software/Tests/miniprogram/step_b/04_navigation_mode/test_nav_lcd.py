@@ -87,7 +87,7 @@ def main():
         ble_driver.init()
         ble_svc = BLEService(bus, ble_driver=ble_driver)
         ble_svc.init()
-        nav_svc = NavigationService(bus, audio_driver=audio, lcd_driver=lcd)
+        nav_svc = NavigationService(bus, audio_driver=audio)
         nav_svc.init()
         log("✓ BLE + NavigationService 就绪")
     except Exception as e:

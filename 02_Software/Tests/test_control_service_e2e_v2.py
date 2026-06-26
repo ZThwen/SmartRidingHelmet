@@ -182,7 +182,7 @@ def main():
     alarm = AlarmService(event_bus, led=led, audio=audio)
     ble_svc = BLEService(event_bus, ble_driver=ble_driver)
     ctrl = ControlService(event_bus)
-    nav = NavigationService(event_bus, audio_driver=audio, lcd_driver=None)
+    nav = NavigationService(event_bus, audio_driver=audio)
 
     init_order = [led, audio, pwm_led, light_sensor, ble_driver,
                   light_svc, alarm, ble_svc, ctrl, nav]

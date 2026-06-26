@@ -109,7 +109,7 @@ def main():
     ctrl.init()
 
     log("初始化 NavigationService...")
-    nav_svc = NavigationService(bus, audio_driver=audio, lcd_driver=None)
+    nav_svc = NavigationService(bus, audio_driver=audio)
     nav_svc.init()
     log("✓ 所有模块就绪")
 

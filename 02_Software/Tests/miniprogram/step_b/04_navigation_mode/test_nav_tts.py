@@ -91,7 +91,7 @@ def main():
         return
 
     log("初始化 NavigationService...")
-    nav_svc = NavigationService(bus, audio_driver=audio, lcd_driver=None)
+    nav_svc = NavigationService(bus, audio_driver=audio)
     nav_svc.init()
     log("✓ NavigationService 就绪")
 
