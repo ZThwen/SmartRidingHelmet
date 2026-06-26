@@ -78,7 +78,7 @@ def main():
     control_svc = ControlService(event_bus, temp_humid=temp_humid, gnss=gnss, heart_rate=heart_rate, ble_driver=ble)
     light_svc = LightService(event_bus, pwm_led=pwm_led)
     ble_svc = BLEService(event_bus, ble_driver=ble)
-    nav_svc = NavigationService(event_bus, audio_driver=audio, lcd_driver=lcd)
+    nav_svc = NavigationService(event_bus, audio_driver=audio)
     voice = VoiceDriver(event_bus)
     power_svc = PowerService(event_bus)
 

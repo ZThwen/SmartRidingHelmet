@@ -17,7 +17,7 @@ from core.Base_Module import BaseModule
 from core.config import (
     EVENT_NAV_CMD, EVENT_TTS_REQUEST, EVENT_NAV_DISPLAY,
     EVENT_POWER_STATE_CHANGE, EVENT_ALARM_TRIGGERED, EVENT_ALARM_CANCELED,
-    POWER_STATE_ACTIVE, POWER_STATE_SUSPENDED, POWER_STATE_EMERGENCY,
+    POWER_STATE_ACTIVE, POWER_STATE_EMERGENCY,
     PRIORITY_NAV,
     TTS_NAV_ARRIVE, TTS_NAV_CANCEL,
 )
@@ -110,26 +110,21 @@ class NavigationService(BaseModule):
 
     注入依赖：
         audio_driver: AudioDriver.play_tts() 播报
-        lcd_driver: LCDDriver.lcd.show_string() 写LCD
     """
 
-    def __init__(self, event_bus=None, audio_driver=None, lcd_driver=None):
+    def __init__(self, event_bus=None, audio_driver=None):
         """
         brief 初始化导航指令服务实例
         param event_bus: 事件总线实例引用
         param audio_driver: Audio 驱动实例（由主循环创建后注入）
-        param lcd_driver: LCD 驱动实例（由主循环创建后注入）
         """
         super().__init__()
         self.event_bus = event_bus
         self.name = "navigation"
 
         self.audio_driver = audio_driver
-        self.lcd_driver = lcd_driver
 
         self.cfg = {
-            "nav_line_y": 110,       # LCD 导航行 y 坐标
-            "nav_line_x": 5,         # LCD 导航行 x 坐标
             "sample_ms": 1000,       # tick 检查间隔
         }
 
@@ -266,7 +261,7 @@ class NavigationService(BaseModule):
                     "priority": PRIORITY_NAV,
                 })
 
-        # LCD 显示（通过 EventBus 发布，由 DisplayService 统一管理渲染）
+        # LCD 显示（通过 EventBus 发布，由 DisplayService 统一管理渲染和写入）
         lcd_text = _build_lcd_text(dir_str, dist, road)
         self._data["last_lcd"] = lcd_text
         print("[nav] LCD: %s" % lcd_text)
@@ -274,25 +269,6 @@ class NavigationService(BaseModule):
         # 发布导航显示事件（DisplayService 订阅并缓存，渲染时恢复）
         if self.event_bus:
             self.event_bus.publish(EVENT_NAV_DISPLAY, {"text": lcd_text})
-
-        # 首次直接写入 LCD（确保立即显示，报警期间跳过）
-        if not self.ctx.get("alarm_active") and self.ctx["power_state"] not in (POWER_STATE_SUSPENDED, POWER_STATE_EMERGENCY):
-            self._write_nav_line(lcd_text)
-
-    def _write_nav_line(self, text):
-        """在 LCD 底部写导航行（通过 LCDDriver 公开接口）"""
-        if not self.lcd_driver:
-            return
-        try:
-            if hasattr(self.lcd_driver, 'show_nav_line'):
-                self.lcd_driver.show_nav_line(
-                    self.cfg["nav_line_x"],
-                    self.cfg["nav_line_y"],
-                    text
-                )
-        except Exception as e:
-            print("[{}] LCD写入失败: {}".format(self.name, e))
-            self.ctx["err_count"] += 1
 
     def get_data(self):
         """获取当前导航数据"""

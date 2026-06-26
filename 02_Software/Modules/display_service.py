@@ -556,6 +556,7 @@ class DisplayService(BaseModule):
         param payload: {"text": str} — 空字符串表示清除导航文字
         """
         self._nav_text = payload.get("text", "")
+        self._dirty = True
     
     def get_data(self):
         """获取当前显示数据"""
