@@ -261,7 +261,6 @@ class HeartRateDriver(BaseModule):
             return
 
         self._send_cmd(self.cfg["cmd_start"])
-        time.sleep_ms(100)
         self.ctx["is_collecting"] = True
         self.ctx["start_time"] = time.ticks_ms()
         self.ctx["packet_count"] = 0

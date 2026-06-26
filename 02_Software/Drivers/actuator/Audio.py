@@ -4,6 +4,7 @@ note 纯硬件控制层，封装 quectel.Audio 原生API，提供音频播放/TT
      不包含任何业务逻辑，由 AlarmService 调用公共接口触发播放
 """
 import time
+import _thread
 
 from quectel import Audio as Audio
 
@@ -61,6 +62,7 @@ class AudioDriver(BaseModule):
 
         # 回调环形缓冲区（中断线程只 append，主线程 tick() 中 pop 并发布事件）
         self._cb_ring = []
+        self._cb_ring_lock = _thread.allocate_lock()
 
         self.audio = None
 
@@ -107,15 +109,22 @@ class AudioDriver(BaseModule):
         # 处理回调缓冲区（回调线程只 append，主线程 pop + publish）
         # 注意：此处不判断 power_state——回调处理必须始终执行，
         #       否则 TTS/PLAY 完成事件永久积压，is_tts_playing 卡死
-        while self._cb_ring:
+        while True:
+            self._cb_ring_lock.acquire()
+            if not self._cb_ring:
+                self._cb_ring_lock.release()
+                break
             # 防止内存泄漏：缓冲区超过 10 条时丢弃旧事件
             if len(self._cb_ring) > 10:
                 self._cb_ring.pop(0)
+                self._cb_ring_lock.release()
                 continue
             try:
                 event = self._cb_ring.pop(0)
             except IndexError:
+                self._cb_ring_lock.release()
                 break
+            self._cb_ring_lock.release()
 
             if event == Audio.PLAY_END:
                 self.ctx["is_playing"] = False
@@ -171,7 +180,9 @@ class AudioDriver(BaseModule):
              由 tick() 在主线程中安全发布事件
         param event: 播放状态码（Audio.PLAY_END / PLAY_STOP / TTS_END / TTS_STOP）
         """
+        self._cb_ring_lock.acquire()
         self._cb_ring.append(event)
+        self._cb_ring_lock.release()
 
     def _on_config_update(self, payload):
         """

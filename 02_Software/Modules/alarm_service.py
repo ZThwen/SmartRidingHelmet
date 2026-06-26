@@ -274,9 +274,12 @@ class AlarmService(BaseModule):
             self._start_alarm("sos", 3)
 
     def _on_gps_lost(self, payload):
-        """GPS 信号丢失→TTS 语音提示"""
-        if self.audio:
-            self.audio.play_tts(TTS_GPS_LOST)
+        """GPS 信号丢失→TTS 语音提示（通过 AudioService 优先级调度）"""
+        if self.event_bus:
+            self.event_bus.publish(EVENT_TTS_REQUEST, {
+                "text": TTS_GPS_LOST,
+                "priority": PRIORITY_ALARM,
+            })
 
     def _on_battery_low(self, payload):
         """低电量事件（stub，待 PowerService 就绪后启用）"""
