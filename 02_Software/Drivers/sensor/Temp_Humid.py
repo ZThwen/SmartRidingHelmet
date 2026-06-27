@@ -26,6 +26,8 @@ class TempHumidDriver(BaseModule):
             "i2c_timeout": 50000,   # 超时 50ms
             "addr": 0x38,           # AHT20 固定地址
             "sample_ms": TEMP_HUMID_SAMPLE_MS,  # 默认采样间隔 2000ms
+            "abandon_threshold": 10,    # 连续失败进入冷却的阈值
+            "cooldown_ms": 300000,      # 冷却期时长(5分钟)
             "max_retry": 3          # 连续失败最大重试次数
         }
 
@@ -47,6 +49,8 @@ class TempHumidDriver(BaseModule):
         self.i2c = None             # I2C 实例句柄
         self.sensor = None          # AHT20 传感器实例
         self._abandoned = False     # 连续10次失败后放弃标志
+        self._cooldown_until = 0    # 冷却期结束时间戳
+        self._retried = False       # 已经复活过一次的标志
 
     def init(self):
         """
@@ -85,16 +89,26 @@ class TempHumidDriver(BaseModule):
         brief 周期调度：数据采集 + 事件发布
         note 主循环每轮调用，必须快速返回（<5ms）
         """
-        # 放弃检查：连续10次失败后不再尝试
-        if self._abandoned:
-            return
-        # 状态守卫：功耗模式控制
+        # 状态守卫：功耗模式控制（EMERGENCY 下完全停止，不设心跳）
         if self.ctx["power_state"] == POWER_STATE_EMERGENCY:
             return
 
+        self.ctx["last_hb"] = time.ticks_ms()  # 心跳在所有守卫之前（除 EMERGENCY）
         now = time.ticks_ms()
-        
-        # 跳过冷却期：上次 tick 太慢时跳过
+
+        # 永久放弃检查
+        if self._abandoned:
+            return
+
+        # 冷却期检查
+        if self._cooldown_until:
+            if time.ticks_diff(now, self._cooldown_until) < 0:
+                return  # 仍在冷却期
+            self._cooldown_until = 0  # 冷却到期，清除
+            self.ctx["err_count"] = 0
+            print("[%s] 冷却期结束，自动恢复" % self.name)
+
+        # 跳过节流：上次 tick 太慢时跳过
         if now < self.ctx["skip_until"]:
             return
 
@@ -124,9 +138,17 @@ class TempHumidDriver(BaseModule):
             self.ctx["err_count"] += 1
             self._data["valid"] = False
             print("[%s] 读取异常 (%d): %s" % (self.name, self.ctx["err_count"], e))
-            if self.ctx["err_count"] >= 10:
-                self._abandoned = True
-                print("[%s] 放弃: 连续 10 次读取失败" % self.name)
+            if self.ctx["err_count"] >= self.cfg["abandon_threshold"]:
+                if self._retried:
+                    # 已经复活过一次，再次失败 → 永久放弃
+                    self._abandoned = True
+                    print("[%s] 永久放弃: 复活后仍连续失败 %d 次" % (self.name, self.ctx["err_count"]))
+                else:
+                    # 第一次触发 → 进入冷却期
+                    self._cooldown_until = time.ticks_ms() + self.cfg["cooldown_ms"]
+                    self._retried = True
+                    self.ctx["err_count"] = 0
+                    print("[%s] 进入冷却期 %ds（首次）" % (self.name, self.cfg["cooldown_ms"] // 1000))
             # 连续失败超限则发布故障事件
             elif self.ctx["err_count"] > self.cfg["max_retry"]:
                 if self.event_bus:
@@ -183,9 +205,12 @@ class TempHumidDriver(BaseModule):
         """
         brief 强制读取传感器（绕过采样间隔和电源模式限制）
         note 用于用户主动查询时获取实时数据，耗时 <1ms
-             读取后发布 EVENT_TEMP_HUMID_READY 同步数据到 BLE/LCD
+              读取后发布 EVENT_TEMP_HUMID_READY 同步数据到 BLE/LCD
         return dict 数据副本
         """
+        # 冷却/放弃期跳过强制读取，返回缓存数据
+        if self._cooldown_until or self._abandoned:
+            return self.get_data()
         try:
             temp = self.sensor.temperature
             hum = self.sensor.relative_humidity
@@ -207,5 +232,6 @@ class TempHumidDriver(BaseModule):
             "is_init": self.ctx["is_init"],
             "is_busy": self.ctx["is_busy"],
             "err_count": self.ctx["err_count"],
-            "power_state": self.ctx["power_state"]
+            "power_state": self.ctx["power_state"],
+            "in_cooldown": self._cooldown_until > 0
         }
