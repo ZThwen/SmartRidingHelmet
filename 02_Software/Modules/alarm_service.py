@@ -8,6 +8,8 @@ import math
 import time
 import _thread
 
+from Drivers.network.thread_queue import ThreadSafeQueue
+
 from core.Base_Module import BaseModule
 from core.config import (
     EVENT_ALARM_TRIGGERED, EVENT_ALARM_CANCELED,
@@ -45,6 +47,11 @@ class AlarmService(BaseModule):
         self.led = led
         self.audio = audio
         self._sms_driver = sms
+
+        # SMS 持久后台线程（不再每次 spawn 新线程）
+        self._sms_queue = ThreadSafeQueue(max_size=5)
+        self._sms_thread_running = True
+        self._sms_tid = None
 
         # ======================= cfg：静态配置 =======================
         self.cfg = {
@@ -95,6 +102,12 @@ class AlarmService(BaseModule):
             self.ctx["alarm_type"] = ""
             self.ctx["alarm_level"] = 0
             self.ctx["alarm_start"] = 0
+
+            # 启动 SMS 持久后台线程
+            old_stack = _thread.stack_size(8192)
+            self._sms_tid = _thread.start_new_thread(self._sms_thread, ())
+            _thread.stack_size(old_stack)
+
             self.ctx["is_init"] = True
             print("[%s] OK init" % self.name)
 
@@ -106,8 +119,9 @@ class AlarmService(BaseModule):
         """
         brief 周期调度：超时检查 + 时间片控制
         note 30s 超时精度 ±100ms，完全满足需求
-             超时检查不受电源模式限制（碰撞报警必须能自动取消）
+              超时检查不受电源模式限制（碰撞报警必须能自动取消）
         """
+        self.ctx["last_hb"] = time.ticks_ms()
         now = time.ticks_ms()
         if time.ticks_diff(now, self.ctx["last_tick"]) < self.cfg["check_interval_ms"]:
             return
@@ -175,14 +189,14 @@ class AlarmService(BaseModule):
                 "timestamp": time.ticks_ms(),
             })
 
-        # 所有报警都发送 SMS（后台线程，不阻塞主循环）
+        # 所有报警都发送 SMS（通过持久后台线程）
         if self._sms_phone and self._sms_driver:
             msg = self._build_sms_message(level, alarm_type)
             print("[%s] 发送 SMS 到 %s: %s" % (self.name, self._sms_phone, msg))
             try:
-                _thread.start_new_thread(self._sms_driver.send_sms, (self._sms_phone, msg))
+                self._sms_queue.put((self._sms_phone, msg))
             except Exception as e:
-                print("[%s] SMS 线程启动失败: %s" % (self.name, e))
+                print("[%s] SMS 入队失败: %s" % (self.name, e))
 
     def _cancel_alarm(self):
         """
@@ -250,9 +264,9 @@ class AlarmService(BaseModule):
             msg = self._build_sms_message(1, "stealth")
             print("[%s] 发送 SMS 到 %s: %s" % (self.name, self._sms_phone, msg))
             try:
-                _thread.start_new_thread(self._sms_driver.send_sms, (self._sms_phone, msg))
+                self._sms_queue.put((self._sms_phone, msg))
             except Exception as e:
-                print("[%s] SMS 线程启动失败: %s" % (self.name, e))
+                print("[%s] SMS 入队失败: %s" % (self.name, e))
 
         print("[{}] stealth alarm triggered".format(self.name))
 
@@ -460,6 +474,31 @@ class AlarmService(BaseModule):
             2: AUDIO_ALARM_FILE_L2,
             3: AUDIO_ALARM_FILE_L3,
         }.get(level, AUDIO_ALARM_FILE_L1)
+
+    # ==================== SMS 持久线程 ====================
+
+    def _sms_thread(self):
+        """SMS 持久后台线程：从队列取消息，发送后循环"""
+        while self._sms_thread_running:
+            try:
+                item = self._sms_queue.get(timeout_ms=1000)
+                if item is None:
+                    continue
+                phone, msg = item
+                if self._sms_driver and phone:
+                    self._sms_driver.send_sms(phone, msg)
+            except Exception as e:
+                print("[%s] SMS thread err: %s" % (self.name, e))
+
+    def deinit(self):
+        """停止 SMS 后台线程"""
+        self._sms_thread_running = False
+        if self._sms_tid is not None:
+            try:
+                _thread.join(self._sms_tid, 3000)
+            except Exception:
+                pass
+        self.ctx["is_init"] = False
 
     # ==================== 数据接口 ====================
 
