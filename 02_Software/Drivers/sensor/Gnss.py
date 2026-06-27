@@ -38,6 +38,12 @@ class GNSSDriver(BaseModule):
             "max_retry": 3,                        # 连续错误重试次数
             "lost_count": 5,                       # 连续无定位次数阈值（判为丢失）
             "thread_stack_size": 4096,             # 后台线程栈大小
+            "suspended_sample_ms": 10000,     # 省电模式采样间隔 10s
+            "backoff_threshold": 10,          # 连续无定位多少次触发退避
+            "retry_count": 5,                 # 冷却后重试次数
+            "cooldown_ms": 30000,             # 冷却时长 30s
+            "retry_interval_ms": 2000,        # 重试间隔 2s
+            "normal_interval_ms": 2000,       # 正常轮询间隔 2s
         }
 
         # ===================== 四元组：运行时上下文 =====================
@@ -54,6 +60,9 @@ class GNSSDriver(BaseModule):
             "thread_started": False,     # 后台线程是否已启动
             "thread_start_time": 0,      # 线程启动时间
             "last_publish": 0,           # 上次发布事件时间戳
+            "phase": "normal",             # normal / cooldown / retry
+            "retry_index": 0,              # 当前重试第几次(0-based)
+            "cooldown_until": 0,           # 冷却到期时间戳
         }
 
         # ===================== 四元组：当前数据 =====================
@@ -99,6 +108,12 @@ class GNSSDriver(BaseModule):
 
     def tick(self):
         """周期调度（非阻塞）：从队列读取最新定位结果并发布事件"""
+        self.ctx["last_hb"] = time.ticks_ms()
+        # 功耗模式调整采样间隔
+        if self.ctx["power_state"] == POWER_STATE_SUSPENDED:
+            self.cfg["sample_ms"] = self.cfg["suspended_sample_ms"]
+        elif self.ctx["power_state"] == POWER_STATE_ACTIVE:
+            self.cfg["sample_ms"] = 2000  # 恢复默认
         # 延迟 5 秒启动 GNSS 后台线程，避免阻塞 Audio/BLE/SMS 初始化
         if not self.ctx["thread_started"] and self.ctx["is_init"]:
             now = time.ticks_ms()
@@ -163,17 +178,42 @@ class GNSSDriver(BaseModule):
 
     # ==================== 后台线程 ====================
     def _gnss_thread(self):
-        """后台 GNSS 轮询线程：只做 get_location()，不阻塞主循环"""
+        """后台 GNSS 轮询：退避策略 — 10次无定位→冷却30s→尝试5次→循环"""
         while self.ctx["thread_running"]:
             try:
-                # 根据电源模式决定等待时间
-                sleep_ms = self.cfg["sample_ms"]
+                phase = self.ctx["phase"]
+
+                # ====== 冷却期：无 AT 命令，等冷却到期 ======
+                if phase == "cooldown":
+                    now = time.ticks_ms()
+                    if time.ticks_diff(now, self.ctx["cooldown_until"]) < 0:
+                        time.sleep_ms(2000)
+                        continue
+                    # 冷却到期 → 进入重试阶段
+                    self.ctx["phase"] = "retry"
+                    self.ctx["retry_index"] = 0
+                    self.ctx["no_fix_count"] = 0
+                    self.ctx["cooldown_until"] = 0
+                    print("[%s] 冷却结束，开始 %d 次重试" %
+                          (self.name, self.cfg["retry_count"]))
+
+                # ====== 选择采样间隔 ======
+                if self.ctx["power_state"] == POWER_STATE_SUSPENDED:
+                    sleep_ms = self.cfg["suspended_sample_ms"]
+                else:
+                    sleep_ms = self.cfg.get("normal_interval_ms", 2000)
                 time.sleep_ms(sleep_ms)
 
-                # 阻塞调用（在后台线程，不影响主循环）
-                loc = self.gnss.get_location()
+                # ====== AT 互斥 ======
+                from core.config import AT_LOCK
+                if not AT_LOCK.acquire(0):
+                    continue
+                try:
+                    loc = self.gnss.get_location()
+                finally:
+                    AT_LOCK.release()
 
-                # 只有获取到有效定位时才入队（队列空 = 无 fix）
+                # ====== 有效定位 ======
                 if loc is not None:
                     self._data_queue.put({
                         "latitude": loc["latitude"],
@@ -184,9 +224,37 @@ class GNSSDriver(BaseModule):
                         "satellites": loc.get("satellites", 0),
                         "hdop": loc.get("hdop", 99.0),
                     })
+                    self.ctx["no_fix_count"] = 0
+                    # 重试阶段拿到定位 → 恢复正常
+                    if phase == "retry":
+                        self.ctx["phase"] = "normal"
+                        print("[%s] 重试成功，恢复正常轮询" % self.name)
+
+                # ====== 无定位 ======
+                else:
+                    self.ctx["no_fix_count"] += 1
+
+                    if phase == "normal":
+                        # 正常阶段：10 次连续无定位 → 进冷却
+                        if self.ctx["no_fix_count"] >= self.cfg["backoff_threshold"]:
+                            self.ctx["phase"] = "cooldown"
+                            self.ctx["cooldown_until"] = time.ticks_ms() + self.cfg["cooldown_ms"]
+                            print("[%s] 连续 %d 次无定位，进入冷却 %ds" %
+                                  (self.name, self.ctx["no_fix_count"],
+                                   self.cfg["cooldown_ms"] // 1000))
+
+                    elif phase == "retry":
+                        # 重试阶段：5 次全失败 → 再冷却
+                        self.ctx["retry_index"] += 1
+                        if self.ctx["retry_index"] >= self.cfg["retry_count"]:
+                            self.ctx["phase"] = "cooldown"
+                            self.ctx["cooldown_until"] = time.ticks_ms() + self.cfg["cooldown_ms"]
+                            print("[%s] 重试 %d 次全失败，再次冷却 %ds" %
+                                  (self.name, self.cfg["retry_count"],
+                                   self.cfg["cooldown_ms"] // 1000))
 
             except Exception as e:
-                print(f"[{self.name}] 后台线程异常: {e}")
+                print("[%s] 后台线程异常: %s" % (self.name, e))
                 time.sleep_ms(1000)
 
     def _update_position(self, loc):

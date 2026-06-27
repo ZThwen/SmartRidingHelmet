@@ -124,6 +124,7 @@ AUDIO_ALARM_LOOP_COUNT    = 3                      # 报警音循环次数
 TTS_BATTERY_LOW           = "当前电量不足，请及时充电"
 TTS_BATTERY_CRITICAL      = "电池电量严重不足，请立即充电"
 TTS_GPS_LOST              = "GPS信号已丢失"
+TTS_BOOT_WELCOME           = "依路护航，锦依卫队为您保驾护航"
 
 # 导航 TTS
 TTS_NAV_TURN          = "前方%d米%s"           # 前方200米右转
@@ -184,6 +185,9 @@ POWER_STATE_SUSPENDED     = "SUSPENDED"     # 挂起状态
 POWER_STATE_DEEP_SLEEP    = "DEEP_SLEEP"    # 深度休眠状态
 POWER_STATE_EMERGENCY     = "EMERGENCY"     # 超级省电（仅 GPS + 报警 + BLE）
 POWER_STATE_CUSTOM        = "CUSTOM"        # 自定义（手动操作覆盖省电模式）
+
+# ================= 看门狗配置 =================
+WDT_TIMEOUT_MS               = 8000  # 硬件看门狗超时 (ms)，8 秒
 
 # ================= 网络通信配置 =================
 NETWORK_CONNECT_TIMEOUT_MS = 60000    # 4G网络连接超时时间 (ms)
@@ -344,3 +348,9 @@ CMD_TTS_MAP = {
 PRIORITY_ALARM              = 0    # 报警语音（最高优先级）
 PRIORITY_NAV                = 1    # 导航播报
 PRIORITY_CTRL               = 2    # 控制反馈（最低优先级）
+
+# ================= AT 通道互斥锁 =================
+# 防止 GNSS/Audio/BLE/SMS 多线程并发 AT 命令导致 EC200U 固件崩溃
+# GNSS 用非阻塞获取（拿不到锁就跳过本轮），Audio 用阻塞获取（必须播放）
+import _thread as _at_thread
+AT_LOCK = _at_thread.allocate_lock()

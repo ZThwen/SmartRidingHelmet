@@ -102,10 +102,11 @@ class AudioDriver(BaseModule):
         """
         brief 周期调度：处理音频回调缓冲区
         note 回调缓冲区始终保持处理，不受电源模式影响。
-              电源模式只影响新播放的启动（由 play_tts/play_file 控制），
-              而回调处理必须执行以保持状态一致性。
-              静默报警时仍正常处理回调，但不启动新音频。
+               电源模式只影响新播放的启动（由 play_tts/play_file 控制），
+               而回调处理必须执行以保持状态一致性。
+               静默报警时仍正常处理回调，但不启动新音频。
         """
+        self.ctx["last_hb"] = time.ticks_ms()
         # 处理回调缓冲区（回调线程只 append，主线程 pop + publish）
         # 注意：此处不判断 power_state——回调处理必须始终执行，
         #       否则 TTS/PLAY 完成事件永久积压，is_tts_playing 卡死
@@ -228,7 +229,12 @@ class AudioDriver(BaseModule):
             return False
         self.ctx["is_busy"] = True
         try:
-            self.audio.play_local(file_path, False)
+            from core.config import AT_LOCK
+            AT_LOCK.acquire()  # 阻塞获取
+            try:
+                self.audio.play_local(file_path, False)
+            finally:
+                AT_LOCK.release()
             self.ctx["is_playing"] = True
             self.ctx["current_file"] = file_path
             self._data["playback_status"] = "playing"
@@ -258,7 +264,12 @@ class AudioDriver(BaseModule):
             return False
         self.ctx["is_busy"] = True
         try:
-            self.audio.tts_play(text)
+            from core.config import AT_LOCK
+            AT_LOCK.acquire()  # 阻塞获取（TTS 高优先级）
+            try:
+                self.audio.tts_play(text)
+            finally:
+                AT_LOCK.release()
             self.ctx["is_tts_playing"] = True
             self._data["playback_status"] = "playing"
             if self.event_bus:
@@ -285,8 +296,13 @@ class AudioDriver(BaseModule):
         if not self.ctx["is_init"]:
             return False
         try:
-            self.audio.play_stop()
-            self.audio.tts_stop()
+            from core.config import AT_LOCK
+            AT_LOCK.acquire()
+            try:
+                self.audio.play_stop()
+                self.audio.tts_stop()
+            finally:
+                AT_LOCK.release()
             self.ctx["is_playing"] = False
             self.ctx["is_tts_playing"] = False
             self.ctx["current_file"] = None
@@ -304,7 +320,12 @@ class AudioDriver(BaseModule):
         """
         volume = max(0, min(5, int(volume)))
         try:
-            self.audio.set_speaker_volume(volume)
+            from core.config import AT_LOCK
+            AT_LOCK.acquire()
+            try:
+                self.audio.set_speaker_volume(volume)
+            finally:
+                AT_LOCK.release()
             self.cfg["speaker_volume"] = volume
             self._data["volume"] = volume
             return True
