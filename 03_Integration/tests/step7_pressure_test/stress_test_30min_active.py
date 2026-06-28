@@ -452,6 +452,8 @@ def stress_test():
     last_op_desc = ""
     max_loop_ms = 0
     first_tts_time = 0
+    total_tick_ms = 0
+    gc_count = 0
 
     try:
         while True:
@@ -476,12 +478,15 @@ def stress_test():
                         pass
 
             # Module tick
+            tick_start = time.ticks_ms()
             for mod in ok:
                 try:
                     if mod.ctx.get("is_init", False):
                         mod.tick()
                 except Exception:
                     module_errors += 1
+            tick_cost = time.ticks_diff(time.ticks_ms(), tick_start)
+            total_tick_ms += tick_cost
 
             # EventBus pump
             try:
@@ -518,6 +523,7 @@ def stress_test():
             if time.ticks_diff(now, last_crit_check) >= 1000:
                 last_crit_check = now
                 gc.collect()
+                gc_count += 1
 
                 # Track first TTS response time
                 try:
@@ -648,7 +654,7 @@ def stress_test():
     print("========== 负载指标 ==========")
     print("TTS 已播      : %d 次" % tts_total)
     print("自动操作      : %d 次 (计划%d)" % (ops_done, ops_planned))
-    print("事件吞吐      : %.1f ops/min" % (ops_done * 60.0 / total_sec))
+    print("操作用户频率  : %.1f 次/分 (模拟真实骑行节奏)" % (ops_done * 60.0 / total_sec))
     print("泵异常        : %d 次" % pump_errors)
     print("模块异常      : %d 次" % module_errors)
     print("")
@@ -664,6 +670,23 @@ def stress_test():
     print("--- 异常计数结束 ---")
     print("WDT 馈异常    : %d 次" % wdt_feed_errors)
     print("循环次数      : %d" % loop_count)
+    print("")
+    print("========== 效率指标 ==========")
+    # CPU utilization
+    cpu_busy_ms = avg_loop_ms - 10  # subtract sleep(10ms)
+    cpu_pct = cpu_busy_ms * 100 / avg_loop_ms if avg_loop_ms > 0 else 0
+    print("CPU 有效工作    : %.1fms/轮 (%.0f%%)" % (cpu_busy_ms, cpu_pct))
+    # Tick efficiency
+    avg_tick_per_mod = total_tick_ms / (loop_count * len(ok)) * 1000 if loop_count else 0
+    print("单模块平均耗时  : %.1fμs" % avg_tick_per_mod)
+    # GC stats
+    print("GC 回收次数     : %d" % gc_count)
+    # Idle time
+    idle_pct = 100 - cpu_pct
+    print("CPU 空闲        : %.0f%%" % idle_pct)
+    # Effective throughput
+
+    print("主循环调度频率  : %.1f Hz" % (loop_count / total_sec))
     print("")
     print("========== 内部状态 ==========")
     # EventBus queue depth
