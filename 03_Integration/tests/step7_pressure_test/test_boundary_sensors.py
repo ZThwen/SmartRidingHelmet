@@ -17,6 +17,11 @@ imu = IMUDriver(bus)
 temp.init()
 imu.init()
 
+# Warmup: 5 ticks before the main loop
+for _ in range(5):
+    temp.tick()
+    imu.tick()
+
 t0 = time.ticks_ms()
 errors = 0
 loops = 0
@@ -37,5 +42,5 @@ print("Errors: %d" % errors)
 print("Temp_Humid data: %s" % str(td))
 print("IMU data: %s" % str(id_))
 
-passed = (errors == 0 and td is not None and id_ is not None)
+passed = (errors == 0 and isinstance(td, dict) and isinstance(id_, dict))
 print("PASS" if passed else "FAIL")

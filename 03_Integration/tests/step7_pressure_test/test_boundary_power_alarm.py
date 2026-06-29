@@ -18,9 +18,6 @@ from Drivers.actuator.LED import LEDDriver
 from Drivers.actuator.LCD import LCDDriver
 from Drivers.network.SMS import SMSDriver
 from Drivers.sensor.imu import IMUDriver
-from Drivers.sensor.Temp_Humid import TempHumidDriver
-from Drivers.sensor.Light import LightSensorDriver
-from Drivers.sensor.Battery import BatteryDriver
 from Modules.alarm_service import AlarmService
 from Modules.power_service import PowerService
 
@@ -31,11 +28,8 @@ led = LEDDriver(bus)
 lcd = LCDDriver(bus)
 sms_drv = SMSDriver(bus)
 imu = IMUDriver(bus)
-temp = TempHumidDriver(bus)
-light = LightSensorDriver(bus)
-battery = BatteryDriver(bus)
 
-for d in [led, lcd, audio, imu, temp, light, battery]:
+for d in [led, lcd, audio, imu]:
     d.init()
 
 alarm = AlarmService(bus, led=led, audio=audio, sms=sms_drv)

@@ -20,8 +20,8 @@ def on_critical(event):
 def on_normal(event):
     normal_count[0] += 1
 
-bus.subscribe(EVENT_COLLISION_DETECTED, "test_boundary", on_critical)
-bus.subscribe(EVENT_VOICE_CMD, "test_boundary", on_normal)
+bus.subscribe(EVENT_COLLISION_DETECTED, on_critical)
+bus.subscribe(EVENT_VOICE_CMD, on_normal)
 
 # 50 CRITICAL + 50 normal = 100 events
 for i in range(100):

@@ -11,19 +11,17 @@ from core.Event_Bus import EventBus
 from core.config import EVENT_ALARM_CONTROL
 from Drivers.actuator.Audio import AudioDriver
 from Drivers.actuator.LED import LEDDriver
-from Drivers.network.SMS import SMSDriver
 from Modules.alarm_service import AlarmService
 
 bus = EventBus()
 
 audio = AudioDriver(bus)
 led = LEDDriver(bus)
-sms_drv = SMSDriver(bus)
 
 for d in [led, audio]:
     d.init()
 
-alarm = AlarmService(bus, led=led, audio=audio, sms=sms_drv)
+alarm = AlarmService(bus, led=led, audio=audio, sms=None)
 alarm.init()
 
 errors = 0

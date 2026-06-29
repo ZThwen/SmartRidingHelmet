@@ -817,9 +817,20 @@ if __name__ == "__main__":
     main()
 ```
 
----
+### Step 7: 压力测试与边界验证
 
-## 6. 集成测试策略
+**目标**：30 分钟全场景压力测试（193 操作）+ 4 项独立边界测试，验证系统在极限负载下的稳定性。
+
+**测试文件**：
+- `stress_test_30min_v3.py`：30 分钟全场景（构造参数修复 + _manual_locked + Burst + Audio 预占 + GNSS 退避）
+- `test_boundary_sensors.py`：I2C1 总线争用（27 万次交替，0 error）
+- `test_boundary_power_alarm.py`：报警中切电源（SUSPENDED→EMERGENCY→ACTIVE）
+- `test_boundary_sos_cancel.py`：SOS 快速取消（5 组，0 状态残留）
+- `test_boundary_eventbus_queue.py`：EventBus 队列溢出（CRITICAL 50/50 保留）
+
+**通过标准**：30 分钟零 WDT 复位、23/23 模块在线、零内存泄漏、Audio 错误 0 次
+
+---
 
 ### 6.1 测试 Step 对应关系
 
@@ -831,6 +842,7 @@ if __name__ == "__main__":
 | Step 4 ✅ | 17 | `test_control_service.py`, `test_control_e2e.py`, `test_light_control.py` | 远端控制 19 指令 |
 | Step 5 ✅ | 18 | `test_voice_driver.py`, `test_voice_control_integration.py`, `test_voice_e2e.py`, `test_voice_real_debug.py` | 语音指令入口 |
 | Step 6 🔧 | 21 | `test_audio_service.py`, `test_power_battery.py`, `test_full_system_v2.py` | AudioService + Battery/Power + 全系统 E2E |
+| ✅ Step 7 | 24 | 8 个文件 | 压力测试 + 边界测试 |
 
 ### 6.2 测试模式
 
@@ -906,3 +918,64 @@ feat(main): integrate AudioService + BatteryDriver + PowerService + full system 
 6. 报警音能打断导航 TTS
 7. 主循环 tick() 稳定 < 5ms
 8. 内存 > 15000 bytes，连续运行 30 分钟无泄漏
+
+---
+
+## 8. 压力测试与稳定性评估
+
+### 8.1 测试目标
+
+验证系统在真实使用场景下长期运行的稳定性。聚焦三个核心问题：
+- 系统能不能 30 分钟不崩？
+- 内存会不会越跑越少？
+- 关键功能（BLE、报警）在压力下是否可靠？
+
+### 8.2 性能指标
+
+仅关注体现系统稳定性的核心指标：
+
+| 指标 | 定义 | 合格标准 |
+|------|------|:--:|
+| **连续运行时间** | 系统从启动到主动停止或崩溃的时长 | ≥ 30 分钟 |
+| **WDT 复位次数** | 运行期间硬件看门狗触发复位的次数 | **0 次** |
+| **内存趋势** | `gc.mem_free()` 随时间的变化趋势 | 最终内存 ≥ 初始的 60% |
+| **关键模块存活** | SystemMonitor 报告的 `critical_alive` 状态 | 始终 True |
+| **BLE 连接保持** | 与手机 BLE 连接的持续时长 | ≥ 30 分钟（允许 1 次断连重连） |
+
+### 8.3 测试场景
+
+#### 场景 1：稳态运行基线（30 分钟）
+- 系统正常启动，所有模块在线
+- BLE 保持连接，手机端接收传感器数据推送
+- 不做任何主动操作，静置观察
+- 每 30 秒记录：`gc.mem_free()`、`critical_alive`、`any_alive`
+- **验证**：系统 30 分钟不崩溃、内存不泄漏、关键模块全活
+
+#### 场景 2：导航复合场景（15 分钟）
+- 手机发送完整骑行路线导航指令（~5 秒一条转弯指令）
+- 导航过程中偶尔发语音指令（开灯/关灯）
+- BLE 持续推送传感器数据
+- **验证**：导航期间主循环不被卡死、TTS 正常播报、WDT 不触发
+
+#### 场景 3：报警链路验证
+- 敲击板子模拟碰撞 → 观测：LED 闪烁、TTS 报警播报、BLE 报警推送
+- 在报警期间发语音指令 → 验证 TTS 优先级（报警不被打断）
+- **验证**：报警链路完整、主循环在报警期间稳定
+
+### 8.4 测试通过标准
+
+| 项目 | 标准 |
+|------|------|
+| 30 分钟无崩溃 | `main.py` 持续运行，未被 WDT 复位 |
+| 内存健康 | `gc.mem_free() > 50KB` 始终成立 |
+| SystemMonitor 全绿 | `critical_alive=True` 持续保持 |
+| BLE 连接稳定 | 30 分钟内断开次数 ≤ 1 |
+| 导航 + 语音 | 全部指令正常执行，无丢失 |
+
+### 8.5 测试执行清单
+
+- [ ] 场景 1：稳态基线 30 分钟
+- [ ] 场景 2：导航复合 15 分钟  
+- [ ] 场景 3：报警链路验证
+- [ ] 数据采集：整理日志、内存快照、SystemMonitor 报告
+- [ ] 生成稳定性测试报告
