@@ -113,6 +113,9 @@ class SystemMonitor(BaseModule):
         self._grace_reported = False          # 宽限期日志是否已打印
         self._last_alert_time = {}            # {name: ticks_ms} 防重复告警
         self._last_thread_alert = {}          # {name: ticks_ms} 线程超时防重复
+        # EC200U 诊断跟踪
+        self._last_at_check_time = 0          # 上次 AT 统计检查时间
+        self._last_total_at_cmds = 0          # 上次 AT 命令总数
 
         # 分级列表（init 时填充）
         self._critical = []                   # CRITICAL 模块实例列表
@@ -141,7 +144,10 @@ class SystemMonitor(BaseModule):
             # 4. 判断是否进入安全模式
             self._check_safe_mode()
 
-            # 5. 初始化模块健康状态
+            # 5. 打印前次运行 EC200U 快照
+            self._print_ec200u_snapshot()
+
+            # 6. 初始化模块健康状态
             for mod in self._modules:
                 name = mod.name if hasattr(mod, 'name') else "unknown"
                 self.ctx["module_health"][name] = {
@@ -193,6 +199,10 @@ class SystemMonitor(BaseModule):
             self._check_threads(now)
         except Exception as e:
             print("[system_monitor] thread check error: %s" % e)
+        try:
+            self._check_ec200u_status(now)
+        except Exception as e:
+            print("[system_monitor] EC200U check error: %s" % e)
 
         # 安全模式退出检测
         if self.ctx["safe_mode"]:
@@ -517,6 +527,77 @@ class SystemMonitor(BaseModule):
             self.ctx["safe_mode"] = False
             self._clear_reset_count_file()
             print("[system_monitor] 退出安全模式，复位计数已清零")
+
+    # ==================== EC200U 诊断 ====================
+
+    AT_STATS_MODULES = [
+        "gnss",      # GNSSDriver — get_location()
+        "audio",     # AudioDriver — play/tts/volume
+        "SMS",       # SMSDriver — send
+        "ble",       # BLEDriver — notify/advertise
+    ]
+
+    def _print_ec200u_snapshot(self):
+        """重启后打印前次运行状态快照（从持久化文件读取）"""
+        try:
+            with open("ec200u_diag.cnt", "r") as f:
+                data = f.read().strip()
+            if data:
+                print("[system_monitor] === 前次运行 EC200U 快照 ===")
+                print("[system_monitor] %s" % data)
+                print("[system_monitor] ============================")
+        except Exception:
+            pass  # 首次运行或无持久化文件
+
+    def _save_ec200u_snapshot(self, total_at_cmds, at_stats):
+        """保存当前 EC200U 快照（用于重启后诊断）"""
+        try:
+            parts = ["AT_total=%d" % total_at_cmds]
+            for name in sorted(at_stats.keys()):
+                parts.append("%s=%d" % (name, at_stats[name]))
+            snapshot = " ".join(parts)
+            with open("ec200u_diag.cnt", "w") as f:
+                f.write(snapshot)
+        except Exception:
+            pass
+
+    def _check_ec200u_status(self, now):
+        """
+        brief 检查 EC200U 状态：汇总 AT 命令计数并计算速率
+        param now: 当前 ticks_ms
+        note 每 30 秒输出一次统计并保存快照
+        """
+        # 汇总所有使用 AT 命令的模块计数
+        total_at_cmds = 0
+        at_stats = {}
+        for mod_name in SystemMonitor.AT_STATS_MODULES:
+            mod = self._module_map.get(mod_name)
+            if mod and hasattr(mod, 'ctx') and 'at_cmd_count' in mod.ctx:
+                count = mod.ctx['at_cmd_count']
+                at_stats[mod_name] = count
+                total_at_cmds += count
+
+        # 首次检查：记录基线
+        if self._last_at_check_time == 0:
+            self._last_at_check_time = now
+            self._last_total_at_cmds = total_at_cmds
+            return
+
+        # 每 >30 秒输出一次统计
+        elapsed_ms = time.ticks_diff(now, self._last_at_check_time)
+        if elapsed_ms < 30000:
+            return
+
+        elapsed_sec = elapsed_ms / 1000.0
+        at_rate = (total_at_cmds - self._last_total_at_cmds) / elapsed_sec
+        print("[system_monitor] EC200U AT stats: total=%d, rate=%.1f/s, modules=%s" %
+              (total_at_cmds, at_rate, at_stats))
+
+        # 保存快照供重启后诊断
+        self._save_ec200u_snapshot(total_at_cmds, at_stats)
+
+        self._last_at_check_time = now
+        self._last_total_at_cmds = total_at_cmds
 
     def _any_module_alive(self, now):
         """
