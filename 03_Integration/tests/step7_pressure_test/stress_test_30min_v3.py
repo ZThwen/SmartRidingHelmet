@@ -148,23 +148,23 @@ OPS_TIMELINE = [
     (395, "nav",        '{"a":"nav","d":{"dir":"straight","dist":800,"road":"\u89e3\u653e\u8def"}}'),
     (405, "voice",      "query_temp"),
 
-    # --- _manual_locked 验证 (t=400~450) ---
+    # --- _manual_locked 验证 (t=400~550, 间隔 30s 避免 GNSS AT 节奏扰动) ---
     # Step 1: 注入低电量 → auto-suspend 应触发
     (400, "bat_ready",  {"level": 1, "mv": 2000}),
-    # Step 2: 手动亮度上调 → 应锁定 auto-suspend
-    (405, "ble_ctrl",   '{"a":"ctrl","d":{"cmd":"brightness_up"}}'),
-    # Step 3: 再次低电量 → 应被 _manual_locked 阻止
-    (410, "bat_ready",  {"level": 1, "mv": 2000}),
-    # Step 4: 手动 power_save → 应解锁
-    (415, "ble_ctrl",   '{"a":"ctrl","d":{"cmd":"power_save"}}'),
-    # Step 5: 再次低电量 → 应触发 auto-suspend (已解锁)
-    (420, "bat_ready",  {"level": 1, "mv": 2000}),
-    # Step 6: 恢复正常
-    (425, "ble_ctrl",   '{"a":"ctrl","d":{"cmd":"power_normal"}}'),
+    # Step 2: 手动亮度上调 → 应锁定 auto-suspend (30s 后)
+    (430, "ble_ctrl",   '{"a":"ctrl","d":{"cmd":"brightness_up"}}'),
+    # Step 3: 再次低电量 → 应被 _manual_locked 阻止 (30s 后)
+    (460, "bat_ready",  {"level": 1, "mv": 2000}),
+    # Step 4: 手动 power_save → 应解锁 (30s 后)
+    (490, "ble_ctrl",   '{"a":"ctrl","d":{"cmd":"power_save"}}'),
+    # Step 5: 再次低电量 → 应触发 auto-suspend (已解锁, 30s 后)
+    (520, "bat_ready",  {"level": 1, "mv": 2000}),
+    # Step 6: 恢复正常 (30s 后)
+    (550, "ble_ctrl",   '{"a":"ctrl","d":{"cmd":"power_normal"}}'),
 
-    # --- 电源切换 ---
-    (435, "power",      POWER_STATE_SUSPENDED),
-    (445, "power",      POWER_STATE_ACTIVE),
+    # --- 电源切换 (间隔调整，避免与 _manual_locked 重叠) ---
+    (580, "power",      POWER_STATE_SUSPENDED),
+    (610, "power",      POWER_STATE_ACTIVE),
     (455, "voice",      "query_speed"),
     (465, "ble_ctrl",   '{"a":"ctrl","d":{"cmd":"light_auto"}}'),
     (475, "nav",        '{"a":"nav","d":{"dir":"left","dist":400,"road":"\u5efa\u8bbe\u8def"}}'),
@@ -184,14 +184,14 @@ OPS_TIMELINE = [
     (520, "ble_ctrl",   '{"a":"ctrl","d":{"cmd":"volume_down"}}'),
     (530, "nav",        '{"a":"nav","d":{"dir":"slight_left","dist":200}}'),
     (540, "voice",      "query_status"),
-    (550, "gps_lost",   None),
+    (545, "gps_lost",   None),
     (555, "gps_lost",   None),
     (560, "gps_lost",   None),
     (570, "ble_ctrl",   '{"a":"ctrl","d":{"cmd":"brightness_down"}}'),
-    (580, "voice",      "query_humid"),
+    (585, "voice",      "query_humid"),
     (590, "gps_lost",   None),
     (600, "nav",        '{"a":"nav","d":{"dir":"slight_right","dist":180,"road":"\u52b3\u52a8\u8def"}}'),
-    (610, "voice",      "query_battery"),
+    (615, "voice",      "query_battery"),
     (620, "alarm",      "sos"),
     (625, "alarm",      "cancel"),
     (635, "voice",      "query_heartrate"),
