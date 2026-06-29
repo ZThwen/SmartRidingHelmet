@@ -117,6 +117,9 @@ class SystemMonitor(BaseModule):
         self._last_at_check_time = 0          # 上次 AT 统计检查时间
         self._last_total_at_cmds = 0          # 上次 AT 命令总数
 
+        # WDT 诊断
+        self._pre_feed_snapshot = None         # 最近一次喂狗前快照
+
         # 分级列表（init 时填充）
         self._critical = []                   # CRITICAL 模块实例列表
         self._important = []                  # IMPORTANT 模块实例列表
@@ -140,6 +143,10 @@ class SystemMonitor(BaseModule):
 
             # 3. 检测复位原因（WDT 复位 → 递增计数，非 WDT → 清零）
             self._check_reset_cause()
+
+            # 3.5 如果是 WDT 复位，打印前次运行快照
+            if self.ctx["reset_count"] > 0:
+                self._print_wdt_snapshot()
 
             # 4. 判断是否进入安全模式
             self._check_safe_mode()
@@ -598,6 +605,59 @@ class SystemMonitor(BaseModule):
 
         self._last_at_check_time = now
         self._last_total_at_cmds = total_at_cmds
+
+    # ==================== WDT 诊断 ====================
+
+    def _record_pre_feed_state(self, slow_modules=None):
+        """
+        brief 记录喂狗前的模块状态快照
+        param slow_modules: 主循环记录的慢模块列表 [(name, cost, ts), ...]
+        note 由 main.py 在 wdt.feed() 前调用；快照持久化到 wdt_diag.cnt 供 WDT 复位后读取
+        note 不抛异常，不阻塞主线程
+        """
+        now = time.ticks_ms()
+        snapshot = {
+            "time": now,
+            "modules": {},
+            "slow_modules": slow_modules if slow_modules else [],
+        }
+        for mod in self._modules:
+            name = mod.name if hasattr(mod, 'name') else "unknown"
+            snapshot["modules"][name] = {
+                "last_hb": mod.ctx.get("last_hb", 0) if hasattr(mod, 'ctx') else 0,
+                "is_busy": mod.ctx.get("is_busy", False) if hasattr(mod, 'ctx') else False,
+                "err_count": mod.ctx.get("err_count", 0) if hasattr(mod, 'ctx') else 0,
+            }
+
+        self._pre_feed_snapshot = snapshot
+
+        # 持久化到文件（供 WDT 复位后读取）
+        try:
+            with open("wdt_diag.cnt", "w") as f:
+                f.write("time=%d\n" % snapshot["time"])
+                for name, state in snapshot["modules"].items():
+                    f.write("%s: hb=%d busy=%s err=%d\n" % (
+                        name, state["last_hb"], str(state["is_busy"]),
+                        state["err_count"]))
+                if slow_modules:
+                    f.write("--- slow_modules ---\n")
+                    for mod_name, cost, ts in slow_modules:
+                        f.write("%s cost=%d at=%d\n" % (mod_name, cost, ts))
+        except Exception:
+            pass  # 持久化失败不阻塞主线程
+
+    def _print_wdt_snapshot(self):
+        """打印前次 WDT 复位前的状态快照（从持久化文件读取）"""
+        try:
+            with open("wdt_diag.cnt", "r") as f:
+                lines = f.readlines()
+            if lines:
+                print("[system_monitor] === 前次 WDT 复位前状态 ===")
+                for line in lines:
+                    print("[system_monitor] " + line.strip())
+                print("[system_monitor] ================================")
+        except Exception:
+            pass  # 首次运行或无持久化文件
 
     def _any_module_alive(self, now):
         """

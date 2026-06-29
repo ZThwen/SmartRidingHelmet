@@ -172,13 +172,16 @@ def main():
     # 5. 主循环
     print("▶ 进入主循环（事件驱动）")
     loop_count = 0
+    slow_modules = []          # 慢模块记录 [(name, cost_ms, ts), ...]
     try:
         while True:
             loop_start = time.ticks_ms()
 
-            # 0. 喂看门狗
+            # 0. 喂看门狗（喂狗前记录状态快照）
             if wdt and sysmon.should_feed_wdt():
+                sysmon._record_pre_feed_state(slow_modules)
                 wdt.feed()
+                slow_modules = []  # 喂狗后清空慢模块记录
 
             # 5a. 逐模块 tick + 单模块耗时监控
             for mod in init_order:
@@ -192,6 +195,9 @@ def main():
                 mod_cost = time.ticks_diff(time.ticks_ms(), mod_start)
                 if mod_cost > 5:
                     print(f"⚠️ 真阻塞: [{mod.name}] tick 耗时 {mod_cost}ms！")
+                    slow_modules.append((mod.name, mod_cost, time.ticks_ms()))
+                    if len(slow_modules) > 10:
+                        slow_modules = slow_modules[-10:]
 
             # 5b. 系统监控
             sysmon.tick()

@@ -1,8 +1,8 @@
 # 微信小程序 — 需求定义
 
 > 所属项目: 智能骑行头盔  
-> 版本: Step A v1.0  
-> 日期: 2026-05-23
+> 版本: Step B v2.0  
+> 日期: 2026-06-29
 
 ---
 
@@ -14,14 +14,15 @@
 
 ## R1 用户认证
 
-**R1.1 登录**
+**R1.1 登录** *(✅ 已实现)*
 - 手机号 + 密码登录
-- 密码 AES 加密后调用 QuecCloud `phonePwdLogin` API
-- 成功后 token 存入全局，后续所有 API 请求携带
-- 登录失败提示具体原因（密码错误/网络异常）
+- 当前为本地 stub 模式（`user-service.js`）：数据存入 `wx.setStorageSync("smart_helmet_user")`
+- 无云端后端依赖，零网络请求
+- 手机号格式校验（1 开头 11 位）
 
-**R1.2 自动登出** *(📅 后续)*
-- Token 过期自动用 refreshToken 续期
+**R1.2 云端登录** *(📅 后续)*
+- 可接入自建后端或第三方认证服务
+- 接口预留：`UserService.login(phone, pwd)` 签名已定义
 
 ---
 
@@ -31,9 +32,8 @@
 - 温度（°C）、湿度（%）、速度（km/h）
 - 纬度、经度、海拔（m）
 - 光照（lux）— BLE t=0 数据含 lux 字段
+- 心率（bpm）、血氧（%）— BLE t=0 数据含 hr/spo2 字段
 - 报警状态（正常 / 碰撞 LvX / SOS LvX）
-
-> **注**：信号质量字段仅在历史 HTTP 轮询方案中可用（TSL abId=5），当前 BLE 直连数据不含此字段。
 
 **R2.2 刷新频率**
 - 每 2 秒 BLE Notify 推送一次合并传感器 JSON
@@ -143,7 +143,7 @@
 
 ---
 
-## R8 导航 *(部分已实现 🔜)*
+## R8 导航 *(✅ 已实现)*
 
 > ⚠️ **数据通道已变更**：原设计通过移远云 `writeData` REST API 下行（R8.1-R8.2），已于 2026-05-28 决策改为 **BLE FFF2 直连 sendNav**（低延迟、无云端依赖）。旧方案保留为历史参考。
 
@@ -289,7 +289,7 @@ BLE 指令格式：`{"a":"ctrl","d":{"cmd":"<cmd>"}}`，通过 FFF3 写入头盔
 - 语音模块应做模糊匹配（"开灯"≈"打开车灯"≈"车灯开"）
 - query 类指令通过 TTS 在头盔端播报，不更新 t=7 状态
 - 控制指令有 300ms 防抖，连续语音指令需间隔发送
-- `alarm_stealth` 和 `power_emergency` 仅在 thonny 原型固件中实现，production 固件暂不支持
+- 所有 19 条指令均已在 production 固件中实现
 
 ---
 
@@ -316,11 +316,11 @@ BLE 指令格式：`{"a":"ctrl","d":{"cmd":"<cmd>"}}`，通过 FFF3 写入头盔
 
 ```
 ┌────────────────────────────────────────────────┐
-│                  AuthModule                     │
-│  职责: 身份认证                                  │
+│                  UserService                    │
+│  职责: 用户认证（本地 stub）                     │
 │  输入: phone, pwd                               │
-│  输出: token → globalData                       │
-│  依赖: crypto.js, config.js                     │
+│  输出: userInfo → globalData + 本地存储          │
+│  依赖: 无                                       │
 │  接口: login(phone, pwd) → success/fail         │
 ├────────────────────────────────────────────────┤
 │                  BleModule (主数据通道)           │
@@ -370,7 +370,7 @@ BLE 指令格式：`{"a":"ctrl","d":{"cmd":"<cmd>"}}`，通过 FFF3 写入头盔
 │  接口: init(), log(tag,msg), flush()            │
 └────────────────────────────────────────────────┘
 
-> **历史备注**：`DataModule`（HTTP 轮询）已被 `BleModule`（BLE 直连）替代，`services/data-service.js` 保留作为历史参考。
+> **历史备注**：`DataModule`（HTTP 轮询）已被 `BleModule`（BLE 直连）替代。`services/data-service.js`、`utils/ws-client.js`、`utils/crypto.js` 已于 2026-06-24 删除。
 ```
 
 ### 二、业务组件（UI 层）
@@ -389,12 +389,13 @@ BLE 指令格式：`{"a":"ctrl","d":{"cmd":"<cmd>"}}`，通过 FFF3 写入头盔
 ### 三、模块-组件对应
 
 ```
-AuthModule  →  login 页
-BleModule   →  index.DataCard + ble-service.js
-RideModule  →  index.RideButton + SummaryModal
+AuthModule  →  login 页 (user-service.js stub)
+BleModule   →  state-service.js + ble-service.js
+RideModule  →  index.RideButton + SummaryModal + 心率时序图
 MapModule   →  index.MapView
 AlarmModule →  index.AlarmBadge + DataCard 条件显示
 NavModule   →  index.NavCard + navigation-service.js
+CtrlModule  →  pages/control + ctrl-service.js + BLE FFF3
 LogModule   →  全局 logger.js
 ```
 
@@ -408,5 +409,5 @@ LogModule   →  全局 logger.js
 | 兼容 | 微信基础库 ≥ 2.20（实际 3.16.1） |
 | 依赖 | 无 npm 包，纯微信原生 API + CommonJS |
 | 安全 | Token 存储在 globalData，不硬编码 |
-| 主题 | Tactical Cyan 暗色主题：深色基底 #080d17 + 天依蓝强调 #66ccff，适合户外使用 |
+| 主题 | 白色主题：白色基底 #ffffff + 天依蓝强调 #66ccff，清晰明亮 |
 | 简单优先 | 不做过度架构，模块数 = 实际需要数 |

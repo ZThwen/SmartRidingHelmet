@@ -87,10 +87,12 @@ StateService ──BLE callbacks──→ BleComponent
 
 ```
 UserService (stub)
+  init() → void
   login(phone, pwd) → Promise(userInfo)
   logout() → void
   isLoggedIn() → bool
   getUserInfo() → userInfo|null
+  isValidPhone(phone) → bool
 
 StateService
   init() → void              获取 app + bus 引用
@@ -146,13 +148,15 @@ NavComponent
   getState() → {state, remainDistance, routePolyline, dest}
   getCurrentInstruction() → {instruction, distance}
 
-CtrlComponent
-  lightAuto/On/Off() → void
+CtrlComponent (21 指令: 灯光/音量/电源/报警/查询/SMS)
+  lightOn/Off/Auto/Blink() → void
   brightnessUp/Down() → void
   volumeUp/Down() → void
   powerSave/Emergency/Normal() → void
   alarmSos/Stealth/Cancel() → void
-  parseCtrlState(data) → {lightMode, brightness, volume, powerMode}
+  setPhone(phone) → void
+  queryStatus/Speed/Temp/Humid/Location/Battery() → void
+  parseCtrlState(data) → {lightMode, lightBrightness, lightFlash, volume, powerMode}
   reset() → void
 ```
 

@@ -30,8 +30,8 @@ C4 代码          —  给维护者看    —  每个组件的接口契约
 ### 开发阶段
 
 ```
-Step A ✅           Step B 🟡 开发中    Step C 📅       上线 📅
-需求→架构→开发→测试    导航 (BLE FFF2 直连)   语音交互         预发布→提审→全量
+Step A ✅           Step B ✅ 已完成    Step C 📅       上线 📅
+需求→架构→开发→测试    导航 + 远端控制 + 心率血氧   语音交互         预发布→提审→全量
 ```
 
 ---
@@ -169,7 +169,6 @@ Step A ✅           Step B 🟡 开发中    Step C 📅       上线 📅
 |:-----|:-----|
 | 微信开发者工具 | IDE (编辑 + 调试 + 上传) |
 | curl | API 独立验证 |
-| Node.js | crypto.js 离线验证 (仅开发用) |
 | Git | 版本管理 |
 
 ---
@@ -193,7 +192,7 @@ Step A ✅           Step B 🟡 开发中    Step C 📅       上线 📅
 | R5 | 骑行总结 | 时长/速度/温度/里程(Haversine)/报警次数，全屏页面，起点+终点标记 | ✅ |
 | R6 | 日志 | console + app.log，上限 1000 行 | ✅ |
 
-#### Step B *(🔜 部分已实现)*
+#### Step B *(✅ 已完成 2026-06-24)*
 
 | 编号 | 模块 | 需求 | 状态 |
 |:-----|:-----|:-----|:-----|
@@ -203,9 +202,9 @@ Step A ✅           Step B 🟡 开发中    Step C 📅       上线 📅
 | R9 | 导航界面 | 地图显示规划路线 + 当前指令浮层 (方向+距离+路名) | ✅ 已实现 |
 | R9.1 | polyline 修复 | 前向差分解压（参考腾讯地图官方示例） | ✅ 已修复 |
 | R9.2 | 方向映射修复 | act_desc → dir（骑行 API 无 action 字段） | ✅ 已修复 |
-| R10 | 心率显示 | 云端收心率 → 实时数值 + 异常预警 | 📅 |
-| R11 | 远端控制 | 小程序控制面板（头灯/音量）→ BLE FFF3 sendCtrl → 头盔执行 | 📅 未实现 |
-| R12 | 电量显示 | 云端收电量 → 图标 + 百分比 + 低电提醒 | 📅 |
+| R10 | 心率/血氧显示 | BLE t=0 数据含 hr/spo2 字段，骑行总结含心率时序图 (canvas 2d) | ✅ 已实现 |
+| R11 | 远端控制 | pages/control + ctrl-service.js 21 指令 + BLE FFF3 sendCtrl → 头盔执行 | ✅ 已实现 |
+| R12 | 电量显示 | 头盔端暂未采集电量，BLE t=0 不含电量字段 | 📅 待头盔端支持 |
 
 #### Step C *(📅)*
 
@@ -302,7 +301,7 @@ Step A ✅           Step B 🟡 开发中    Step C 📅       上线 📅
 | **AlarmComponent** | 无状态 (纯函数) | 报警检测、弹窗判断 | `analyze(alarmType, level)` → `{displayText,shouldPopup,icon}` |
 | **LogComponent** | 日志缓冲区 | 写日志、刷盘 | `init()` `log(tag,msg)` `flush()` |
 | **NavComponent** | 路线、指令序列、推送定时器 | 选目的地、算路、逐条 BLE FFF2 推送 | `selectDestination()` `startNavigation(dest)` `stopNavigation()` `pause()` `resume()` |
-| **RemoteControlComponent** *📅* | 远端控制状态 | 头灯开关、音量调节等 BLE FFF3 指令下发 | `toggleLight()` `setVolume(level)` `sendCommand(cmd)` |
+| **CtrlComponent** | 远端控制状态 | 21 条控制指令（灯光/音量/电源/报警） + parseCtrlState | `lightOn()` `lightOff()` `lightAuto()` `brightnessUp/Down()` `volumeUp/Down()` `powerSave/Emergency/Normal()` `alarmSos/Stealth/Cancel()` `parseCtrlState()` |
 | **VoiceComponent** *📅* | 语音会话 | 语音输入→指令 | `listen()` `onCommand(cb)` |
 
 ### 3.2 集成架构
@@ -322,6 +321,7 @@ Step A ✅           Step B 🟡 开发中    Step C 📅       上线 📅
    index.setData  index.setData  index.setData
 
 NavComponent ──BLE FFF2 sendNav──→ 头盔
+CtrlComponent ──BLE FFF3 sendCtrl──→ 头盔 ←──BLE FFF1 Notify── StateService ──EventBus──→ control.js
 
 LogComponent ←── 所有组件
 ```
@@ -422,16 +422,16 @@ LogComponent
 
 | 组件 | 文件 | 说明 |
 |:-----|:-----|:-----|
-| AuthComponent | `pages/login/login.js` + `utils/crypto.js` | 登录、token 管理 |
+| UserService | `services/user-service.js` | 用户登录 stub（本地存储） |
+| StateService | `services/state-service.js` | 全局 BLE 状态管理 + EventBus 广播（P1） |
 | BleComponent | `services/ble-service.js` | BLE Central 客户端（主数据通道） |
 | AlarmComponent | `services/alarm-service.js` | 报警检测（纯函数） |
-| RideComponent | `services/ride-service.js` | 骑行状态机 + 总结 |
+| RideComponent | `services/ride-service.js` | 骑行状态机 + 总结 + 轨迹管理（P2） |
 | MapComponent | `services/map-service.js` | 轨迹 polyline + marker |
 | NavComponent | `services/navigation-service.js` | 导航状态机 + BLE FFF2 推送 |
-| RemoteControlComponent *📅* | 首页控制面板（待实现） | 远端控制 UI + BLE FFF3 sendCtrl |
+| CtrlComponent | `services/ctrl-service.js` + `pages/control/` | 远端控制 21 指令（BLE FFF3） |
 | LogComponent | `utils/logger.js` | 日志双写 |
-
-> **历史方案备注**：`DataComponent`（`utils/ws-client.js` → `services/data-service.js`）为 HTTP 轮询方案，已被 `BleComponent` 替代。文件保留作为历史参考。
+| EventBus | `utils/event-bus.js` | 跨页面事件总线 |
 
 ---
 
@@ -523,12 +523,12 @@ SOS 有闪烁动画          │ │  独立滚动     │ │
 
 | 用途 | 色值 |
 |:-----|:-----|
-| 页面 | #0f0f1a |
-| 卡片 | #1a1a2e |
-| 主按钮 | #1a6fff |
+| 页面背景 | #ffffff |
+| 卡片 | #f5f5f5 / #ffffff |
+| 主按钮/强调色 | #66ccff |
 | 报警 | #ff4444 |
-| 文字 | #e0e0e0 / #666 / #888 |
-| 轨迹线 | #1a6fff |
+| 主文字 | #333333 / #666666 / #999999 |
+| 轨迹线 | #66ccff |
 
 ---
 
@@ -542,7 +542,7 @@ SOS 有闪烁动画          │ │  独立滚动     │ │
 View 层   login.wxml    index.wxml
 Logic 层  login.js      index.js (页面调度)
 Service   ble-service   alarm-service  ride-service  map-service  navigation-service
-Utility   config.js  crypto.js  logger.js  ble-protocol.js
+Utility   config.js  event-bus.js  logger.js  ble-protocol.js
 Global    app.js (globalData)
 ```
 
@@ -586,11 +586,14 @@ JS 单线程事件循环：
 
 | 数据 | Owner | Reader |
 |:-----|:------|:------|
-| token | AuthComponent | BleComponent |
-| isRiding | RideComponent | BleComponent, MapComponent |
+| userInfo | UserService | app.globalData |
+| isRiding | RideComponent | BleComponent, MapComponent, StateService |
 | rideCache[] | RideComponent | SummaryCalculator |
-| trackPoints[] | MapComponent | View |
-| showAlarmPopup | AlarmComponent | View |
+| trackPoints[] | RideComponent (P2) | View (map-service) |
+| ctrlState | StateService → globalData | control.js, index.js |
+| latestSensorData | StateService → globalData | index.js |
+| alarmActive | StateService → globalData | index.js, control.js |
+| showAlarmPopup | Pages (index/control) | View |
 
 | 规则 | 说明 |
 |:-----|:-----|
@@ -600,19 +603,17 @@ JS 单线程事件循环：
 ### 6.5 安全视图 — 信任边界
 
 ```
-不信任区 → 加密/HTTPS → 信任区
-用户输入   → AES      → 小程序逻辑
-移远 API   → HTTPS    → wx.request
-设备数据   → BLE GATT  → Notify 回调
+不信任区 → BLE GATT → 信任区
+设备数据   → BLE Notify → StateService 解析 → 小程序逻辑
 WXML 渲染  → 框架转义 → 无 XSS
+用户存储   → wx.setStorageSync → 本地沙箱
 ```
 
 | 边界 | 风险 | 措施 |
 |:-----|:-----|:-----|
-| 密码输入 | 明文在内存 | 加密后即丢弃 |
-| 网络 | 中间人 | 全 HTTPS |
-| Token | 反编译 | 内存不落盘 |
-| 日志 | 敏感泄露 | 不记密码/Token |
+| BLE 连接 | 未授权设备连接 | 按设备名前缀 `SmartHelmet-` 过滤 |
+| 用户数据 | 本地存储泄露 | 仅在微信沙箱内，不记敏感信息 |
+| 日志 | 敏感泄露 | 不记密码/令牌 |
 
 ### 6.6 架构决策记录 (ADR)
 
@@ -667,24 +668,27 @@ WXML 渲染  → 框架转义 → 无 XSS
 
 ```
 WeChatMiniProgram/
-├── app.js          globalData (token, isRiding, rideCache)
+├── app.js          globalData (userInfo, isRiding, rideCache, bleConnected, bleStatus, ctrlState, alarmActive, smsPhone, latestSensorData)
 ├── app.json        窗口 + 定位权限
 ├── services/
+│   ├── state-service.js        全局 BLE 状态管理中心（P1 修复）
 │   ├── ble-service.js          BLE Central 客户端（主数据通道）
 │   ├── alarm-service.js        报警检测 + 弹窗规则（纯函数）
-│   ├── ride-service.js         骑行状态 + Haversine 总结
+│   ├── ride-service.js         骑行状态机 + Haversine 总结 + 轨迹管理（P2 修复）
 │   ├── map-service.js          轨迹 polyline + marker
 │   ├── navigation-service.js   导航状态机（腾讯地图 API + BLE FFF2 sendNav）
-│   ├── data-service.js         [已弃用] HTTP 轮询 + TSL 解析
+│   ├── ctrl-service.js         远端控制 21 命令（BLE FFF3 sendCtrl）
+│   └── user-service.js         用户登录 stub（本地存储）
 ├── utils/
-│   ├── config.js       凭据
-│   ├── crypto.js       SHA256+MD5+AES
+│   ├── config.js       凭据（BLE + 腾讯地图）
+│   ├── event-bus.js    跨页面事件总线（on/off/emit）
 │   ├── logger.js       日志
-│   ├── ble-protocol.js BLE 协议常量 + 类型映射
-│   └── ws-client.js    [已弃用] 兼容层 (→ data-service)
+│   └── ble-protocol.js BLE 协议常量 + 类型映射
 ├── pages/login/        登录页 (4 文件)
 ├── pages/index/        首页 (4 文件)
-└── doc/                文档 4 篇
+├── pages/control/      控制页 (4 文件)
+├── custom-tab-bar/     自定义底部 TabBar
+└── doc/                文档 5 篇
 ```
 
 ### 8.2 关键算法
@@ -767,7 +771,11 @@ WeChatMiniProgram/
 | 2026-05-31 | BLE 报警修复 + 导航框架 | t=5 载荷压缩为 15 字节（ATT_MTU 限制 +CME ERROR: 53）；navigation-service.js 搭建（腾讯地图API + BLE FFF2 sendNav）；测试文件拆分到 Tests/miniprogram/ |
 | 2026-06-01 | Step A 完成 | 轨迹显示修复（WXML concat 根因）；canvas 蓝点 marker + show-location 条件切换；总结地图起点+终点标记；报警取消功能；小程序包瘦身（3099KB→141KB） |
 | 2026-06-09 | Step B 导航开发 | polyline 前向差分解压修复（参考腾讯地图官方示例）；act_desc 方向映射（骑行 API 无 action 字段）；BLE hex 解码修复；NavigationService 头盔端实现 |
-| 🔜 Step B 剩余 | 位置播报+远端控制 | 导航位置播报（头盔 GNSS 自主播报）R8.1、远端控制 R11、心率 R10、电量 R12 |
+| 2026-06-24 | P1 修复：StateService | 全局 BLE 回调中心 — index.js 和 control.js 的 onData 回调不一致导致状态不同步；创建 StateService 统一处理 BLE 数据 → EventBus 广播 → 所有页面同步 |
+| 2026-06-24 | P2 修复：轨迹所有权 | trackPoints 从 Page data 迁移到 RideService 模块级变量，防止页面切换数据丢失；_endRide 中在 clear() 之前获取轨迹数据 |
+| 2026-06-24 | P2 修复：移远云完全移除 | data-service.js / ws-client.js / crypto.js 全部删除，确认零残留引用 |
+| 2026-06-24 | Step B 完成 | 远端控制 R11 完成（pages/control + ctrl-service.js 21 指令）；心率/血氧 R10 完成（BLE t=0 含 hr/spo2）；自定义 TabBar 完成；BLE 重连适配器修复 |
+| 2026-06-29 | 文档对齐 | README / requirements / development / architecture / voice_feasibility 全部对齐实际代码状态；移除已删除文件的引用；修正 UI 主题描述 |
 | 📅 Step C | 语音交互 | 语音指令 R13 |
 
 ---
@@ -801,19 +809,23 @@ WeChatMiniProgram/
 |:-----|:---|
 | `app.js` | Global |
 | `app.json` | Config |
+| `services/state-service.js` | BLE 状态管理 (P1) |
 | `services/ble-service.js` | BLE Central 客户端 |
 | `services/alarm-service.js` | 报警检测（纯函数） |
-| `services/ride-service.js` | 骑行状态机 |
+| `services/ride-service.js` | 骑行状态机 + 轨迹管理 (P2) |
 | `services/map-service.js` | 地图工具 |
 | `services/navigation-service.js` | 导航状态机 |
-| `services/data-service.js` | [已弃用] HTTP 轮询 |
+| `services/ctrl-service.js` | 远端控制 (BLE FFF3) |
+| `services/user-service.js` | 用户登录 stub |
 | `utils/config.js` | Config |
-| `utils/crypto.js` | Crypto |
+| `utils/event-bus.js` | 跨页面事件总线 |
 | `utils/logger.js` | Log |
 | `utils/ble-protocol.js` | BLE 协议常量 |
-| `utils/ws-client.js` | [已弃用] 兼容层 |
 | `pages/login/login.*` | View+Logic |
 | `pages/index/index.*` | View+Logic |
+| `pages/control/control.*` | View+Logic |
+| `custom-tab-bar/index.*` | View+Logic |
+| `doc/README.md` | 项目入口文档 |
 | `doc/development.md` | 本文档 |
 | `doc/architecture.md` | 架构细节 |
 | `doc/requirements.md` | 需求细节 |
@@ -832,7 +844,7 @@ WeChatMiniProgram/
 | 2 | 导航 fallback 硬编码深圳坐标 | `wx.getLocation` 失败时路线完全错误 | 未触发（GPS 通常可用） | 提示"无法获取位置"并取消导航 |
 | 3 | `updateStep` 步进先于异步 BLE 写入完成 | 写入失败时该步被跳过不重试 | 未触发 | 写入成功回调中再步进 |
 | 4 | `logger.js` 同步文件 I/O 阻塞主线程 | 每 5 条日志阻塞事件循环 | 未触发（日志量小） | 改为异步写入 |
-| 5 | `login.js`/`crypto.js` 仍用 ES6 语法 | `index.js` 已转 ES5 但 login/crypto 未转 | 未触发 | 统一转 ES5 |
+| 5 | `login.js` 仍用 ES6 语法 | `index.js` 已转 ES5 但 login.js 未转 | 未触发 | 统一转 ES5 |
 | 6 | `wx.onLocationChange` 未在 `onUnload` 注销 | reLaunch 后旧回调操作过期数据 | 未触发 | `onUnload` 中加 `wx.offLocationChange` |
 | 7 | 总结地图依赖 `_summary*` 独立缓存字段 | 重构时误删会导致总结地图空白 | 正常工作 | 加注释说明依赖关系 |
 | 8 | `alarm-service.js` JSDoc 参数与实际不符 | 文档写 3 参数，实际 2 参数 | 未触发 | 更新 JSDoc |
