@@ -23,6 +23,9 @@
 2026-06-23  ████████████████████████████  Phase 4 PowerService + BatteryDriver
 2026-06-24  ████████████████████████████  HeartRate + Phase 4 增强 + 文档同步
 2026-06-26  ████████████████████████████  系统级架构修复（P0 OOM + 碰撞判定 + 线程安全 + 模块隔离）
+2026-06-27  ████████████████████████████  30 分钟全场景压力测试通过 + 8 缺陷修复
+2026-06-28  ████████████████████████████  边界测试 + v3 压力测试 + _manual_locked + 开机动画 + heartbeat
+2026-06-29  █████████████████████████████  8 文档全量同步 + 37 文件 6 批次提交
 ```
 
 ---
@@ -181,3 +184,67 @@
 - 🔧 **Audio 修复残留问题** — `_on_gps_lost` 相关测试文件断言更新（test_alarm_service_unit + integration）
 
 - 📝 **文档同步** — dev_log.md 同步
+
+## 2026-06-27
+
+- 🟢 **30 分钟全场景压力测试（有 SIM 卡）通过**
+  - 173/173 操作全部执行，WDT 0 次复位，23/23 模块在线
+  - 内存 119KB→91KB→91KB，零泄漏；CPU 3.5ms/轮（75% 空闲）
+  - 173 操作覆盖 BLE 控制+语音查询+导航+报警+电源 5 大域
+
+- 🔴 **8 个缺陷发现与修复**
+  - P0: AT_LOCK 全局互斥锁（GNSS/Audio/SMS 三路并发崩溃根因）
+  - P0: GNSS 三段式退避（无天线 900→100 次 AT 命令，降幅 89%）
+  - P0: SMS 持久线程+队列（替代每次 spawn 新线程的内存碎片模式）
+  - P1: Temp_Humid 冷却+一次复活（替代永久放弃）
+  - P1: SMS 冷却防抖+返回值检查（失败不静默）
+  - P1: SMS 线程栈 8KB（中文 UCS2 编码不溢出）
+  - P2: AudioService 心跳修正（移到驱动守卫之前）
+  - P2: 离线模块诊断增强
+
+- 📝 **报告** — 30 分钟全场景最终报告 + Bug 修复报告 + 基线报告
+
+## 2026-06-28
+
+- 🧪 **4 项独立边界测试全部通过**
+  - I2C1 总线争用：277,881 次交替 tick，0 error
+  - 报警中切电源：ACTIVE→SUSPENDED→EMERGENCY→ACTIVE，零崩溃
+  - SOS 极限取消：5 组 1s 间隔循环，0 状态残留
+  - EventBus 队列溢出：100 事件冲 HARD_MAX=64，CRITICAL 50/50 全保留
+
+- 🆕 **v3 压力测试** — 构造参数修复（LightService/DisplayService/BLEService 注入驱动）+ _manual_locked 验证 + Audio 预占 + Burst 密集 + GNSS 退避触发
+  - 192/193 操作，WDT 0，Audio 错误 0（timeout_ms 修复生效）
+
+- ✨ **_manual_locked 手动锁定机制**
+  - 用户调亮度/开关灯 → 永久禁止自动省电，仅 power_save 可解锁
+  - 报警期间禁止自动省电（_alarm_active 标志位）
+  - config.py 新增 EVENT_MANUAL_ACTIVITY 事件
+
+- 🏗️ **两阶段开机动画**
+  - Phase A：LCD+DisplayService 先显示开机画面（洛天依头像+队名）
+  - Phase B：后台初始化 22 个模块，LCD 硬件自主刷新不阻塞
+  - DisplayService 事件驱动 boot→normal 切换（替代固定 2500ms 定时器）
+  - WDT 8s 硬件看门狗集成 + reset_cause 复位原因检测
+  - SystemMonitor 非侵入式监控集成
+
+- 🔧 **15 个模块心跳补全** — tick() 中 `last_hb` 移到状态守卫之前，解决 SystemMonitor 误判离线
+
+- 🔧 **Audio.py timeout_ms 回退** — 撤销错误改动，190 次 TTS 报错归零
+
+- 📝 **报告** — 无 SIM 卡 v3 压力测试报告 + 边界测试结果补充到最终报告
+
+## 2026-06-29
+
+- 📝 **8 个文档全量同步**
+  - `02_Design _scheme.md`：8 处更新（BOOT 状态机、_manual_locked、CUSTOM 模式、初始化顺序重写、27 指令、场景八、里程碑 v9.0）
+  - `01_architecture.md`：6 处更新（两阶段 init、SystemMonitor、WDT 章节、3 新事件、CloudService 清理）
+  - `PowerService_impl.md`：手动锁定机制文档
+  - `DisplayService_impl.md`：Boot 动画重写+英文布局
+  - `ControlService_impl.md`：MANUAL_ACTIVITY+CUSTOM 覆盖
+  - `AGENTS.md`：init 顺序+构建状态+heartbeat 教训
+  - `测试指南.md`：Step 7 压力测试 8 个文件
+  - `integration.md`：Step 7 阶段描述
+
+- 🔧 **config.py 重复定义修复** — EVENT_MANUAL_ACTIVITY 合并为单一定义
+
+- 📝 **37 个文件 6 批次提交** — heartbeat→_manual_locked→main→display→tests→docs
