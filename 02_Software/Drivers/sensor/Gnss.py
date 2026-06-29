@@ -63,6 +63,7 @@ class GNSSDriver(BaseModule):
             "phase": "normal",             # normal / cooldown / retry
             "retry_index": 0,              # 当前重试第几次(0-based)
             "cooldown_until": 0,           # 冷却到期时间戳
+            "at_cmd_count": 0,             # AT 命令发送计数
         }
 
         # ===================== 四元组：当前数据 =====================
@@ -210,6 +211,7 @@ class GNSSDriver(BaseModule):
                     continue
                 try:
                     loc = self.gnss.get_location()
+                    self.ctx["at_cmd_count"] += 1  # AT 命令计数
                 finally:
                     AT_LOCK.release()
 
