@@ -38,6 +38,7 @@ EVENT_BATTERY_READY         = "BATTERY_READY"         # 电池电量数据就绪
 EVENT_BATTERY_LOW           = "BATTERY_LOW"           # 低电量警告
 EVENT_BATTERY_CRITICAL      = "BATTERY_CRITICAL"      # 电量严重不足
 EVENT_POWER_STATE_CHANGE    = "POWER_STATE_CHANGE"    # 功耗状态切换
+EVENT_MANUAL_ACTIVITY       = "MANUAL_ACTIVITY"       # 用户手动操作，通知 PowerService 暂停自动省电
 
 # GNSS相关事件
 EVENT_GPS_LOST              = "GPS_LOST"              # GPS信号丢失
@@ -56,6 +57,7 @@ EVENT_BLE_CONNECTED         = "BLE_CONNECTED"          # BLE 连接成功
 EVENT_BLE_DISCONNECTED      = "BLE_DISCONNECTED"       # BLE 断开连接
 EVENT_NAV_CMD               = "NAV_CMD"                # 导航指令（手机→头盔）
 EVENT_RIDE_CONTROL          = "RIDE_CONTROL"           # 骑行控制指令
+EVENT_MANUAL_ACTIVITY       = "MANUAL_ACTIVITY"        # 用户手动操作（非电源/查询指令）
 EVENT_BLE_ALARM_ACK         = "BLE_ALARM_ACK"          # 报警确认（手机取消）
 
 # 控制系统事件

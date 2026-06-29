@@ -4,6 +4,8 @@ from core.Base_Module import BaseModule
 from core.config import (
     EVENT_BATTERY_READY, EVENT_BATTERY_LOW,
     EVENT_POWER_STATE_CHANGE, EVENT_TTS_REQUEST,
+    EVENT_ALARM_TRIGGERED, EVENT_ALARM_CANCELED,
+    EVENT_MANUAL_ACTIVITY,
     POWER_STATE_ACTIVE, POWER_STATE_SUSPENDED,
     BATTERY_AUTO_SUSPEND_LEVEL,
     TTS_BATTERY_LOW, PRIORITY_CTRL,
@@ -36,11 +38,19 @@ class PowerService(BaseModule):
             "auto_suspended": False,
         }
 
+        # 手动操作锁定：用户操作后禁止自动省电，直到手动触发 power_save
+        self._manual_locked = False
+        # 报警状态标志：报警期间不自动省电（报警优先级最高）
+        self._alarm_active = False
+
     def init(self):
         try:
             if self.event_bus:
                 self.event_bus.subscribe(EVENT_BATTERY_READY, self._on_battery)
                 self.event_bus.subscribe(EVENT_POWER_STATE_CHANGE, self._on_power_state)
+                self.event_bus.subscribe(EVENT_ALARM_TRIGGERED, self._on_alarm_triggered)
+                self.event_bus.subscribe(EVENT_ALARM_CANCELED, self._on_alarm_canceled)
+                self.event_bus.subscribe(EVENT_MANUAL_ACTIVITY, self._on_manual_activity)
 
             self.ctx["is_init"] = True
             print("[%s] init OK" % self.name)
@@ -49,7 +59,7 @@ class PowerService(BaseModule):
             raise
 
     def tick(self):
-        pass
+        self.ctx["last_hb"] = time.ticks_ms()
 
     def _on_battery(self, payload):
         if not payload.get("valid", False):
@@ -71,10 +81,16 @@ class PowerService(BaseModule):
         if sample_count < 3:
             return
 
+        # 手动锁定：用户操作过 → 跳过自动省电决策（数据采集照常）
+        if self._manual_locked:
+            return
+
         # 低电量自动省电：≤auto_suspend_level 且当前 ACTIVE 且未自动省电过
+        # 报警优先级最高：报警期间不自动省电
         if (level <= self.cfg["auto_suspend_level"]
                 and not self._data["auto_suspended"]
-                and self._data["power_mode"] == POWER_STATE_ACTIVE):
+                and self._data["power_mode"] == POWER_STATE_ACTIVE
+                and not self._alarm_active):
             self._data["auto_suspended"] = True
             if self.event_bus:
                 self.event_bus.publish(EVENT_POWER_STATE_CHANGE, {
@@ -97,9 +113,28 @@ class PowerService(BaseModule):
     def _on_power_state(self, payload):
         new_mode = payload.get("power_state", POWER_STATE_ACTIVE)
         self._data["power_mode"] = new_mode
+        # 用户手动切换到 SUSPENDED → 解锁手动锁定，恢复自动省电
+        if new_mode == POWER_STATE_SUSPENDED:
+            self._manual_locked = False
         # 用户手动切换到 ACTIVE → 清除自动省电标记
         if new_mode == POWER_STATE_ACTIVE:
             self._data["auto_suspended"] = False
+
+    def _on_alarm_triggered(self, payload):
+        """报警触发：标记报警活跃，禁止自动省电"""
+        self._alarm_active = True
+        print("[%s] alarm active -> auto-suspend blocked" % self.name)
+
+    def _on_alarm_canceled(self, payload):
+        """报警取消：解除自动省电封锁"""
+        self._alarm_active = False
+        print("[%s] alarm canceled -> auto-suspend allowed" % self.name)
+
+    def _on_manual_activity(self, payload):
+        """用户手动操作 → 永久锁定，禁止自动省电"""
+        if not self._manual_locked:
+            self._manual_locked = True
+            print("[%s] manual activity detected -> auto-suspend locked" % self.name)
 
     def get_data(self):
         return dict(self._data)

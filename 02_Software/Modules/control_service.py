@@ -24,6 +24,7 @@ from core.config import (
     EVENT_RIDE_CONTROL, EVENT_CONTROL_STATE_CHANGED,
     EVENT_POWER_STATE_CHANGE, EVENT_VOICE_CMD,
     EVENT_LIGHT_CONTROL, EVENT_VOLUME_CONTROL, EVENT_ALARM_CONTROL,
+    EVENT_MANUAL_ACTIVITY,
     POWER_STATE_ACTIVE, POWER_STATE_SUSPENDED, POWER_STATE_EMERGENCY,
     POWER_STATE_CUSTOM, EVENT_TTS_REQUEST,
     EVENT_TEMP_HUMID_READY, EVENT_GNSS_READY,
@@ -197,7 +198,7 @@ class ControlService(BaseModule):
         """
         brief 周期调度：纯事件驱动，tick()为空实现
         """
-        pass
+        self.ctx["last_hb"] = time.ticks_ms()
 
     # ==================== 事件发布 ====================
 
@@ -282,6 +283,12 @@ class ControlService(BaseModule):
                         self._control_state["power_mode"] = "custom"
                         if self.event_bus:
                             self.event_bus.publish(EVENT_POWER_STATE_CHANGE, {"power_state": POWER_STATE_CUSTOM})
+
+                    # 通知 PowerService：用户手动操作，暂停自动省电
+                    if self.event_bus:
+                        self.event_bus.publish(EVENT_MANUAL_ACTIVITY, {
+                            "cmd": cmd, "source": source
+                        })
 
                 handler()
                 self.ctx["last_cmd_tick"] = now
