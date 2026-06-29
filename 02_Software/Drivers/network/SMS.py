@@ -21,6 +21,7 @@ class SMSDriver(BaseModule):
             "is_init": False,
             "is_busy": False,
             "err_count": 0,
+            "at_cmd_count": 0,
         }
         self._data = {
             "last_send_success": False,
@@ -52,6 +53,7 @@ class SMSDriver(BaseModule):
                 AT_LOCK.acquire()
                 try:
                     self.sms = SMS()  # 重新创建句柄
+                    self.ctx["at_cmd_count"] += 1  # AT 命令计数
                 finally:
                     AT_LOCK.release()
                 self._sms_cooldown_until = 0
@@ -65,6 +67,7 @@ class SMSDriver(BaseModule):
             AT_LOCK.acquire()  # 阻塞获取（SMS 高优先级，必须发送）
             try:
                 result = self.sms.send(phone, message)
+                self.ctx["at_cmd_count"] += 1  # AT 命令计数
                 if not result:
                     raise RuntimeError("SMS send returned error")
             finally:

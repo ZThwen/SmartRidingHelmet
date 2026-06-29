@@ -43,6 +43,7 @@ class BLEDriver(BaseModule):
             "last_tick": 0,
             "err_count": 0,
             "power_state": POWER_STATE_ACTIVE,
+            "at_cmd_count": 0,
         }
 
         self._data = {
@@ -65,9 +66,11 @@ class BLEDriver(BaseModule):
             if not ok:
                 raise RuntimeError("BLE.init() 返回 False")
 
+            self.ctx["at_cmd_count"] += 1  # AT 命令计数 (init)
             time.sleep_ms(200)
             self._ble.set_dataformat(BLE.DATAFMT_STRING)
             self._ble.start(self.cfg["device_name"])
+            self.ctx["at_cmd_count"] += 1  # AT 命令计数 (start)
 
             self._ble.add_service(0, self.cfg["service_uuid"], True)
 
@@ -125,6 +128,7 @@ class BLEDriver(BaseModule):
             return
         try:
             self._ble.notify(self.cfg["char_data"], len(json_str), json_str)
+            self.ctx["at_cmd_count"] += 1  # AT 命令计数
         except Exception as e:
             self.ctx["err_count"] += 1
             print("[%s] notify 失败: %s" % (self.name, e))
@@ -147,7 +151,9 @@ class BLEDriver(BaseModule):
         """
         try:
             self._ble.stop()
+            self.ctx["at_cmd_count"] += 1  # AT 命令计数
             self._ble.deinit()
+            self.ctx["at_cmd_count"] += 1  # AT 命令计数
             self.ctx["is_connected"] = False
             self.ctx["is_init"] = False
             print("[%s] ✓ 已停止" % self.name)
@@ -164,7 +170,9 @@ class BLEDriver(BaseModule):
             was_connected = self.ctx["is_connected"]
             if self._ble:
                 self._ble.stop()
+                self.ctx["at_cmd_count"] += 1  # AT 命令计数
                 self._ble.deinit()
+                self.ctx["at_cmd_count"] += 1  # AT 命令计数
             self.ctx["is_init"] = False
             self.ctx["is_connected"] = False
             self._data["connected_addr"] = ""
@@ -193,6 +201,7 @@ class BLEDriver(BaseModule):
             self.init()
             # 开始广播
             self._ble.advertise()
+            self.ctx["at_cmd_count"] += 1  # AT 命令计数
             print("[%s] 已开始广播" % self.name)
         except Exception as e:
             print("[%s] connect err: %s" % (self.name, e))

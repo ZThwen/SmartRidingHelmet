@@ -51,6 +51,7 @@ class AudioDriver(BaseModule):
             "err_count": 0,            # 连续操作错误计数
             "power_state": POWER_STATE_ACTIVE,  # 功耗状态
             "alarm_playing": False,    # 报警音频播放中标志
+            "at_cmd_count": 0,         # AT 命令发送计数
         }
 
         # ===================== 四元组：当前数据 =====================
@@ -233,6 +234,7 @@ class AudioDriver(BaseModule):
             AT_LOCK.acquire()  # 阻塞获取
             try:
                 self.audio.play_local(file_path, False)
+                self.ctx["at_cmd_count"] += 1  # AT 命令计数
             finally:
                 AT_LOCK.release()
             self.ctx["is_playing"] = True
@@ -268,6 +270,7 @@ class AudioDriver(BaseModule):
             AT_LOCK.acquire()  # 阻塞获取（TTS 高优先级）
             try:
                 self.audio.tts_play(text)
+                self.ctx["at_cmd_count"] += 1  # AT 命令计数
             finally:
                 AT_LOCK.release()
             self.ctx["is_tts_playing"] = True
@@ -301,6 +304,7 @@ class AudioDriver(BaseModule):
             try:
                 self.audio.play_stop()
                 self.audio.tts_stop()
+                self.ctx["at_cmd_count"] += 1  # AT 命令计数
             finally:
                 AT_LOCK.release()
             self.ctx["is_playing"] = False
@@ -324,6 +328,7 @@ class AudioDriver(BaseModule):
             AT_LOCK.acquire()
             try:
                 self.audio.set_speaker_volume(volume)
+                self.ctx["at_cmd_count"] += 1  # AT 命令计数
             finally:
                 AT_LOCK.release()
             self.cfg["speaker_volume"] = volume
@@ -352,6 +357,7 @@ class AudioDriver(BaseModule):
         speed = max(0, min(100, int(speed)))
         try:
             self.audio.tts_set_speed(speed)
+            self.ctx["at_cmd_count"] += 1  # AT 命令计数
             self.cfg["tts_speed"] = speed
             self._data["tts_speed"] = speed
             return True
@@ -369,6 +375,7 @@ class AudioDriver(BaseModule):
         volume = max(0, min(100, int(volume)))
         try:
             self.audio.tts_set_volume(volume)
+            self.ctx["at_cmd_count"] += 1  # AT 命令计数
             self.cfg["tts_volume"] = volume
             return True
         except Exception as e:
