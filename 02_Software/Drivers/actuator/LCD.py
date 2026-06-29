@@ -106,11 +106,12 @@ class LCDDriver(BaseModule):
               显示操作由Service层主动调用公共接口触发
               tick()仅用于功耗守卫、时间片控制和状态维护
         """
-        # 状态守卫：功耗模式控制
+        # ====== 1. 心跳更新（必须在所有状态守卫之前）======
+        self.ctx["last_hb"] = time.ticks_ms()
+
+        # ====== 2. 状态守卫：功耗模式控制 ======
         if self.ctx["power_state"] != POWER_STATE_ACTIVE:
             return
-
-        self.ctx["last_hb"] = time.ticks_ms()
         # 时间片校验：未到间隔立即返回
         now = time.ticks_ms()
         if time.ticks_diff(now, self.ctx["last_tick"]) < self.cfg["sample_ms"]:

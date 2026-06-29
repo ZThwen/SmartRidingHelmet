@@ -115,10 +115,11 @@ class AudioService(BaseModule):
         brief 周期调度：检查后台线程空闲，从优先级队列出队推送到播放线程
         note 每 10ms 调用一次，<5ms 返回，绝不阻塞
         """
+        # ====== 1. 心跳更新（必须在所有状态守卫之前）======
+        self.ctx["last_hb"] = time.ticks_ms()
+
         if not self.ctx["is_init"]:
             return
-
-        self.ctx["last_hb"] = time.ticks_ms()  # 心跳在 audio_driver 检查之前
 
         if not self.audio_driver:
             return

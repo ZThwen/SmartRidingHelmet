@@ -130,6 +130,9 @@ class HeartRateDriver(BaseModule):
         brief 周期调度：读取串口数据 + 解析 + 发布事件
         note 主循环每轮调用，必须快速返回（<5ms）
         """
+        # ====== 1. 心跳更新（必须在所有状态守卫之前）======
+        self.ctx["last_hb"] = time.ticks_ms()
+
         if not self.ctx["is_init"]:
             return
 
@@ -138,8 +141,6 @@ class HeartRateDriver(BaseModule):
 
         if not self.ctx["is_collecting"]:
             return
-
-        self.ctx["last_hb"] = time.ticks_ms()
         now = time.ticks_ms()
         if time.ticks_diff(now, self.ctx["last_tick"]) < self.cfg["sample_ms"]:
             return

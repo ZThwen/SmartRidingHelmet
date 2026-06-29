@@ -76,8 +76,9 @@ class NetworkDriver(BaseModule):
         """
         brief 周期调度
         note Network 为被动控制型设备，无主动采样需求，tick 保持空实现
+              心跳更新确保 SystemMonitor 不误判离线
         """
-        pass
+        self.ctx["last_hb"] = time.ticks_ms()
 
     def connect(self, timeout_ms=None):
         """

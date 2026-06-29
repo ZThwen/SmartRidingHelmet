@@ -119,9 +119,12 @@ class CloudService(BaseModule):
         """
         brief 周期调度：定时拼装传感器数据入队 + 断连检测重连
         note 上传周期由 cfg.upload_interval_ms 控制
-             实际网络发送由网络线程负责，tick 只做入队
-             重连在主线程执行（AT 指令）
+              实际网络发送由网络线程负责，tick 只做入队
+              重连在主线程执行（AT 指令）
         """
+        # ====== 1. 心跳更新（必须在所有状态守卫之前）======
+        self.ctx["last_hb"] = time.ticks_ms()
+
         now = time.ticks_ms()
 
         # ====== 1. 断连检测重连 ======

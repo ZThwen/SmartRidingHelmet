@@ -95,10 +95,12 @@ class IMUDriver(BaseModule):
         note 主循环每轮调用，必须快速返回（<5ms），不能阻塞
         note IMU为安全保障模块，不判断功耗状态，始终持续采集
         """
+        # ====== 1. 心跳更新（必须在所有状态守卫之前）======
+        self.ctx["last_hb"] = time.ticks_ms()
+
         # 放弃检查：连续10次失败后不再尝试
         if self._abandoned:
             return
-        self.ctx["last_hb"] = time.ticks_ms()
         # 时间片校验：未到采样间隔立即返回
         now = time.ticks_ms()
         if time.ticks_diff(now, self.ctx["last_tick"]) < self.cfg["sample_ms"]:

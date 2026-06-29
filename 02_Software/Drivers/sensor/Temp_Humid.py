@@ -89,11 +89,12 @@ class TempHumidDriver(BaseModule):
         brief 周期调度：数据采集 + 事件发布
         note 主循环每轮调用，必须快速返回（<5ms）
         """
-        # 状态守卫：功耗模式控制（EMERGENCY 下完全停止，不设心跳）
+        # ====== 1. 心跳更新（必须在所有状态守卫之前）======
+        self.ctx["last_hb"] = time.ticks_ms()
+
+        # ====== 2. 状态守卫：功耗模式控制（EMERGENCY 下完全停止）======
         if self.ctx["power_state"] == POWER_STATE_EMERGENCY:
             return
-
-        self.ctx["last_hb"] = time.ticks_ms()  # 心跳在所有守卫之前（除 EMERGENCY）
         now = time.ticks_ms()
 
         # 永久放弃检查

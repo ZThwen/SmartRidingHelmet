@@ -191,9 +191,11 @@ class DisplayService(BaseModule):
             raise
     
     def tick(self):
+        # ====== 1. 心跳更新（必须在所有状态守卫之前）======
+        self.ctx["last_hb"] = time.ticks_ms()
+
         if not self.ctx["is_init"]:
             return
-        self.ctx["last_hb"] = time.ticks_ms()
         now = time.ticks_ms()
         if time.ticks_diff(now, self.ctx["last_tick"]) < self.cfg["sample_ms"]:
             return

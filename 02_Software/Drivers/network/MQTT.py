@@ -126,10 +126,11 @@ class MQTTDriver(BaseModule):
         """
         brief 周期调度
         note MQTT 为被动控制型设备，无主动采样需求，tick 保持空实现
+              心跳更新必须在状态守卫之前，防止省电模式下误判离线
         """
+        self.ctx["last_hb"] = time.ticks_ms()
         if self.ctx["power_state"] != POWER_STATE_ACTIVE:
             return
-        pass
 
     def connect(self, timeout_ms=None):
         """

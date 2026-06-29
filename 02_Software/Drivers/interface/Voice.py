@@ -43,9 +43,11 @@ class VoiceDriver(BaseModule):
             raise
 
     def tick(self):
+        # ====== 1. 心跳更新（必须在所有状态守卫之前）======
+        self.ctx["last_hb"] = time.ticks_ms()
+
         if not self.uart:
             return
-        self.ctx["last_hb"] = time.ticks_ms()
         # 手动操作永远优先 — 任何电源模式下都读取语音指令
         try:
             if self.uart.any():

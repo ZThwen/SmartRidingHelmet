@@ -69,10 +69,11 @@ class Button(BaseModule):
         brief 主循环调度：检查 ISR 标志位并发布事件
         note ISR 只设置标志位，这里消费标志位并发布事件，避免 ISR 中持锁
         """
+        # ====== 1. 心跳更新（必须在所有状态守卫之前）======
+        self.ctx["last_hb"] = time.ticks_ms()
+
         if not self.ctx["is_init"]:
             return
-
-        self.ctx["last_hb"] = time.ticks_ms()
         if self.ctx["button_pressed_flag"]:
             self.ctx["button_pressed_flag"] = False
             if self.event_bus:

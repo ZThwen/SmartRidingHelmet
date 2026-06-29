@@ -117,10 +117,11 @@ class BLEService(BaseModule):
             raise
 
     def tick(self):
+        # ====== 1. 心跳更新（必须在所有状态守卫之前）======
+        self.ctx["last_hb"] = time.ticks_ms()
+
         if not self.ctx["is_init"]:
             return
-
-        self.ctx["last_hb"] = time.ticks_ms()
         # drain 环形缓冲区
         if self.cmd_ready:
             self.cmd_ready = False

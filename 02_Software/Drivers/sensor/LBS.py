@@ -80,6 +80,9 @@ class LBSDriver(BaseModule):
 
     def tick(self):
         """周期调度：触发定位（子线程执行，不阻塞主循环）"""
+        # ====== 1. 心跳更新（必须在所有状态守卫之前）======
+        self.ctx["last_hb"] = time.ticks_ms()
+
         if not self.ctx["is_init"]:
             return
         if self.ctx["power_state"] != POWER_STATE_ACTIVE:
