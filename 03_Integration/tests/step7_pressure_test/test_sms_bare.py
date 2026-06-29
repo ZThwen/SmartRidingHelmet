@@ -8,7 +8,7 @@ import gc
 import _thread
 from quectel import GNSS, Audio, SMS
 
-TEST_PHONE = "13368190189"
+TEST_PHONE = "13800000000"
 AT_LOCK = _thread.allocate_lock()
 SMS_MSG = "SOS:3(GPS):https://uri.amap.com/marker?position=116.413640,39.905604&name=SOS%E7%B4%A7%E6%80%A5%E6%B1%82%E5%8A%A9"
 

@@ -115,7 +115,7 @@ OPS_TIMELINE = [
     (255, "ble_ctrl",   '{"a":"ctrl","d":{"cmd":"power_save"}}'),
     (265, "voice",      "query_status"),
     (275, "ble_ctrl",   '{"a":"ctrl","d":{"cmd":"power_normal"}}'),
-    (285, "set_phone",  '{"a":"ctrl","d":{"cmd":"set_phone","phone":"13368190189"}}'),
+    (285, "set_phone",  '{"a":"ctrl","d":{"cmd":"set_phone","phone":"13800000000"}}'),
     (295, "voice",      "query_battery"),
 
     # ========== Phase 2: 中等负载 (300~600s) -- 加入报警 + 导航循环 ==========

@@ -22,7 +22,7 @@ from Modules.ble_service import BLEService
 from Modules.audio_service import AudioService
 from Modules.system_monitor import SystemMonitor
 
-TEST_PHONE = "13368190189"
+TEST_PHONE = "13800000000"
 
 
 def _pump(bus, mods, ms):
