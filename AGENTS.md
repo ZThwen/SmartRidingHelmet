@@ -62,28 +62,37 @@ App (02_Software/core/) → Services (02_Software/Modules/) → Device (02_Softw
 
 模板：`02_Software/Module_Template.py`（Drivers）、`02_Software/Service_Template.py`（Services）
 
-### 3.4 初始化顺序（必须严格遵守）
+### 3.4 初始化顺序（两阶段，必须严格遵守）
 
 ```
-1. 传感器: Temp_Humid → IMU → Light → Battery
-2. 执行器 + 通信: Button → LED → Audio → LCD → PWM_LED → BLE → SMS → GNSS
-3. 心率: HeartRate（必须在所有 quectel 模块之后）
-4. 服务: CollisionService → AlarmService → AudioService → DisplayService → LightService → BLEService → ControlService → NavigationService → PowerService → Voice
+Phase A（快速显示，开机画面）: LCD → DisplayService
+Phase B（后台初始化，画面持续显示）:
+  1. 传感器: Temp_Humid → IMU → GNSS → Light → Battery
+  2. 执行器 + 通信: Button → LED → Audio → PWM_LED → BLE → SMS
+  3. 心率: HeartRate（必须在所有 quectel 模块之后）
+  4. 服务: Collision → AudioService → Alarm → ControlService → PowerService → LightService → BLEService → Navigation → Voice → SystemMonitor
 ```
+
+**设计原因**：LCD+Display 提前 init 让用户尽快看到开机画面；HeartRate UART9 在所有 quectel 模块之后；SystemMonitor 最后 init 确保监控覆盖全部模块；WDT 8s 系统就绪后启动。
 
 **注意**：Network/MQTT 不是独立模块，是 CloudService 内部创建的。
 
 ### 初始化顺序约束
 
-**关键规则**：HeartRate（UART9）必须在所有 quectel 模块（Audio、BLE、SMS、GNSS）之后初始化。
+**关键规则1**：LCD + DisplayService 必须最先 init（开机画面优先显示）。
+
+**关键规则2**：HeartRate（UART9）必须在所有 quectel 模块（Audio、BLE、SMS、GNSS）之后初始化。
 
 **原因**：UART9 初始化会破坏 EC200U 的 AT 通道（懒加载机制），导致后续 AT 命令超时。
 
-**正确顺序**：
-1. 传感器：temp_humid, imu, light, battery
-2. 执行器：button, led, audio, lcd, pwm_led, ble, sms, gnss
-3. 心率：heart_rate（必须在 quectel 模块之后）
-4. 服务：collision, audio_svc, alarm, display, control_svc, power_svc, light_svc, ble_svc, nav_svc, voice
+**完整顺序**：
+1. Phase A: lcd, display（开机画面）
+2. 传感器：temp_humid, imu, gnss, light, battery_drv
+3. 执行器：button, led, audio, pwm_led, ble, sms
+4. 心率：heart_rate（必须在 quectel 模块之后）
+5. 服务：collision, audio_svc, alarm, control_svc, power_svc, light_svc, ble_svc, nav_svc, voice, sysmon
+
+**TTS 延迟**：boot 期间不发 TTS（audio_driver 尚未 init），SYSTEM_READY 后补发欢迎语。
 
 ---
 
@@ -317,6 +326,7 @@ type(scope): description
 - **覆盖状态前必须先清理** — `trigger_stealth_alarm()` 直接覆盖 `alarm_active` 等状态，但没调用 `_cancel_alarm()` 停止已有报警。静默报警前必须先取消已有报警
 - **复制粘贴后检查重复代码** — navigation_service.py 出现了两个连续的 `return`
 - **lambda 引用的方法必须存在** — `_cmd_handlers` 中的 `lambda: self._pub(...)` 引用了 `_pub` 方法，但该方法从未定义
+- **15 模块缺少 last_hb 心跳更新导致 SystemMonitor 误判离线** — 多个模块的 tick() 内 `last_hb = ticks_ms()` 放在了状态守卫之后，导致省电模式下心跳不更新。修复：心跳必须放在 tick() 最前面，在所有状态守卫之前
 
 ### 12.2 BLE & 通信
 
@@ -399,13 +409,14 @@ type(scope): description
 | Network, MQTT, BLE | ✅ 完成 | `02_Software/Drivers/network/` |
 | SMSDriver | ✅ 完成（已集成 main.py） | `02_Software/Drivers/network/SMS.py` |
 | Qth (Quectel Cloud SDK) | ⚠️ 已废弃 | `02_Software/Drivers/network/Qth.py` |
-| Services (Collision, Alarm, Cloud, Display, BLE, Light, Control, Navigation) | ✅ 完成 (v1) | `02_Software/Modules/` |
+| DisplayService (开机动画 + 两阶段 boot + 英文布局) | ✅ v2 | `02_Software/Modules/display_service.py` |
+| ControlService (统一控制) | ✅ 完成（纯事件驱动，27 指令） | `02_Software/Modules/control_service.py` |
+| main.py (21 模块集成) | ✅ v3 完成（两阶段 boot + WDT + SystemMonitor + reset_cause） | `02_Software/core/main.py` |
+| SystemMonitor (非侵入式监控) | ✅ 完成（心跳扫描 + WDT 门控 + 离线诊断） | `02_Software/Modules/sys_monitor.py` |
 | LarkCloudService (Quectel Cloud) | ⚠️ 已废弃 | `02_Software/Modules/lark_cloud.py` |
 | LightService (自适应灯光) | ✅ 完成（已集成 main.py） | `02_Software/Modules/light_service.py` |
-| ControlService (统一控制) | ✅ 完成（纯事件驱动，19 指令） | `02_Software/Modules/control_service.py` |
 | NavigationService | ✅ 完成（已集成 main.py） | `02_Software/Modules/navigation_service.py` |
-| main.py (21 模块集成) | ✅ v2 完成 | `02_Software/core/main.py` |
-| PowerService (电源管理) | ✅ 完成（已集成 main.py） | `02_Software/Modules/power_service.py` |
+| PowerService (电源管理) | ✅ 完成（_manual_locked + 报警期间禁止省电） | `02_Software/Modules/power_service.py` |
 | BatteryDriver (电池ADC) | ✅ 完成（已集成 main.py） | `02_Software/Drivers/sensor/Battery.py` |
 | HeartRate | ✅ 完成（已集成 main.py，必须在 quectel 模块之后初始化） | `02_Software/Drivers/sensor/HeartRate.py` |
 | VoiceDriver (ASRPRO) | ✅ 完成（已集成 main.py） | `02_Software/Drivers/interface/Voice.py` |

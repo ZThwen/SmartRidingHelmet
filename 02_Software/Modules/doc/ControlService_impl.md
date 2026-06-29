@@ -58,6 +58,7 @@
 | `EVENT_POWER_STATE_CHANGE` | `{power_state: "ACTIVE"/"SUSPENDED"/"EMERGENCY"/"CUSTOM"}` | 电源切换 |
 | `EVENT_CONTROL_STATE_CHANGED` | `{t:7, m, b, v, p}` | 状态回推（合并为 1 条） |
 | `EVENT_TTS_REQUEST` | `{text: "当前温度28度"}` | 查询结果 TTS 播报 |
+| `EVENT_MANUAL_ACTIVITY` | `{source: "ble"/"voice", cmd}` | 用户手动操作，通知 PowerService 暂停自动省电 |
 
 ---
 
@@ -293,6 +294,7 @@ def _on_voice_cmd(self, payload):
 - 非电源/报警指令在省电模式下执行时
 - 自动将 `power_mode` 改为 `custom`
 - 发布 `EVENT_POWER_STATE_CHANGE{power_state: CUSTOM}`
+- CUSTOM 模式覆盖：SUSPENDED/EMERGENCY 下收到手动指令，自动发布 POWER_STATE_CUSTOM 使 PWMLED 恢复响应
 
 ---
 

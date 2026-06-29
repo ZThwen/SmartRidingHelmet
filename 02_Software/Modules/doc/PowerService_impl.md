@@ -37,6 +37,9 @@
 |------|------|------|
 | `EVENT_BATTERY_READY` | `_on_battery` | 缓存电量数据，判断低电量 |
 | `EVENT_POWER_STATE_CHANGE` | `_on_power_state` | 跟踪电源状态，清除 `auto_suspended` 标记 |
+| `EVENT_ALARM_TRIGGERED` | `_on_alarm_triggered` | 报警期间禁止自动省电 |
+| `EVENT_ALARM_CANCELED` | `_on_alarm_canceled` | 报警结束后恢复自动省电判断 |
+| `EVENT_MANUAL_ACTIVITY` | `_on_manual_activity` | 用户手动操作，锁定自动省电 |
 
 ---
 
@@ -101,7 +104,29 @@ def _on_battery(self, payload):
 
 ---
 
-## 7. BatteryDriver 说明
+## 7. 手动锁定机制（_manual_locked）
+
+用户手动操作（调亮度、开关灯等）后永久禁止自动省电，直到用户手动 `power_save`。
+
+| 字段 | 说明 |
+|------|------|
+| `_manual_locked` | 手动锁定标志。True=跳过自动省电决策，仅 `power_save` 可清除 |
+| `_alarm_active` | 报警活跃标志。True=报警期间禁止自动省电 |
+
+| 回调方法 | 触发事件 | 行为 |
+|------|------|------|
+| `_on_manual_activity()` | `EVENT_MANUAL_ACTIVITY` | `_manual_locked = True` |
+| `_on_alarm_triggered()` | `EVENT_ALARM_TRIGGERED` | `_alarm_active = True` |
+| `_on_alarm_canceled()` | `EVENT_ALARM_CANCELED` | `_alarm_active = False` |
+
+| 操作 | 行为 |
+|------|------|
+| `power_save` 指令 | `_manual_locked = False`（解锁恢复自动省电） |
+| `power_normal` 指令 | 清除 `auto_suspended`，不影响 `_manual_locked` |
+
+---
+
+## 8. BatteryDriver 说明
 
 BatteryDriver 遵循 Light.py 的四元组 + ADC 模式：
 
@@ -112,7 +137,7 @@ BatteryDriver 遵循 Light.py 的四元组 + ADC 模式：
 
 ---
 
-## 8. BLE 数据推送
+## 9. BLE 数据推送
 
 BLEService 订阅 `EVENT_BATTERY_READY`，缓存 `level` 到 `_data["latest_battery"]`，在 `_enqueue_merged()` 中加入 `d["bat"]` 字段：
 
@@ -122,7 +147,7 @@ BLEService 订阅 `EVENT_BATTERY_READY`，缓存 `level` 到 `_data["latest_batt
 
 ---
 
-## 9. 语音查询
+## 10. 语音查询
 
 ControlService 订阅 `EVENT_BATTERY_READY`，缓存 `level` 到 `_sensor_cache["battery_level"]`。收到 `query_battery` 指令时：
 
@@ -136,9 +161,10 @@ def _query_battery(self):
 
 ---
 
-## 10. 变更记录
+## 11. 变更记录
 
 | 版本 | 日期 | 内容 |
 |------|------|------|
 | v1 | 2026-06-23 | 初始版本：六档映射、自动省电、TTS 通知、BLE 推送、语音查询 |
 | v2 | 2026-06-25 | 新增电量回升自动恢复 ACTIVE 逻辑 |
+| v3 | 2026-06-29 | 新增手动锁定机制（_manual_locked）、报警事件订阅、MANUAL_ACTIVITY 事件 |

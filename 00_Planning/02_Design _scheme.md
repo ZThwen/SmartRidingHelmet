@@ -12,10 +12,10 @@
 
 系统采用有限状态机(FSM)模型，避免主循环陷入混乱的逻辑判断：
 
-* **INIT (初始化态)**：调用 `network` 附网，调用 `mqtt` 连接平台，调用 `peripherals` 初始化传感器。成功后进入RUNNING；超时则进入RUNNING（离线模式）
-* **RUNNING (正常骑行态)**：周期采集数据并上传，实时监测碰撞和SOS按键
-* **ALARM (报警态)**：触发后强制发送远程报警，驱动本地声光及语音报警。30秒无二次触发恢复RUNNING
-* **SLEEP (休眠态)**：静止超时进入，降低采集频率断开网络。检测到震动中断唤醒回INIT
+* **BOOT (开机态)**：Phase A 先初始化 LCD+DisplayService 显示开机画面（洛天依头像+队名文字条），Phase B 后台初始化其余 22 个模块。LCD 硬件自主刷新不阻塞后台 init。全部完成后 `EVENT_SYSTEM_READY` 事件触发切换到 RUNNING
+* **RUNNING (正常骑行态)**：周期采集数据，实时监测碰撞和SOS按键，WDT 8s 硬件看门狗守护
+* **ALARM (报警态)**：触发后强制声光报警+BLE 推送+SMS 发送。L1/L2 碰撞 30 秒自动恢复；L3/SOS 需手动取消
+* **SLEEP (休眠态)**：静止超时进入，降低采集频率。检测到震动唤醒回 RUNNING
 
 ---
 
@@ -934,6 +934,34 @@ BLE 中断 (modem 线程)
 - `EVENT_BATTERY_READY`：来自 BatteryDriver，缓存电量数据
 - `EVENT_POWER_STATE_CHANGE`：跟踪电源状态，用户手动 `power_normal` 后清除 `auto_suspended` 标记
 
+**手动操作锁定机制**（v3 新增）：
+
+用户手动操作（调亮度、开关灯等）后，PowerService 进入手动锁定状态，永久禁止自动省电。
+
+| 字段 | 说明 |
+|------|------|
+| `_manual_locked` | 手动锁定标志。True=跳过所有自动省电决策，仅 `power_save` 可清除 |
+| `_alarm_active` | 报警活跃标志。True=报警期间禁止自动省电，报警取消后恢复 |
+
+**新增事件**：
+| 事件 | 来源 | 行为 |
+|------|------|------|
+| `EVENT_MANUAL_ACTIVITY` | ControlService | 置 `_manual_locked = True`，锁定自动省电 |
+| `EVENT_ALARM_TRIGGERED` | AlarmService | 置 `_alarm_active = True`，阻止自动省电 |
+| `EVENT_ALARM_CANCELED` | AlarmService | 置 `_alarm_active = False`，恢复自动省电判断 |
+
+**锁定与解锁**：
+| 操作 | 行为 |
+|------|------|
+| 用户手动操作（brightness_up、light_on 等） | ControlService 发布 EVENT_MANUAL_ACTIVITY → _manual_locked = True → 永久禁止自动省电 |
+| 用户手动 power_save | _manual_locked = False → 恢复自动省电 |
+| 用户手动 power_normal | 清除 auto_suspended，但不影响 _manual_locked（手动优先） |
+
+**新增订阅事件**：
+- `EVENT_ALARM_TRIGGERED`：报警期间禁止自动省电
+- `EVENT_ALARM_CANCELED`：报警结束后恢复自动省电判断
+- `EVENT_MANUAL_ACTIVITY`：用户手动操作通知，来自 ControlService
+
 **六档电量映射**（基于锂电池放电曲线）：
 
 | 档位 | ADC 电压 | 电池电压 | 含义 |
@@ -983,23 +1011,21 @@ BLE 中断 (modem 线程)
 
 **实现要求**：
 
-开机画面（init() 末尾执行）：
-1. LCD 显示队伍 Logo（RGB565 取模数据，存放于 `team_logo.py`）
-2. LCD 显示队伍名称
-3. Audio TTS 播报系统就绪提示语（`TTS_SYSTEM_READY`）
-4. 保持 2~3 秒后清屏，进入正常运行
+两阶段开机动画（事件驱动，不再使用固定定时器）：
 
-正常画面策略：
-- 定义 LCD 屏幕各信息区域的布局（如：顶部显示温湿度、中部显示定位、底部显示速度）
-- CloudService 调用 `lcd.show_normal_data()` 时按此布局渲染
+1. **Phase A 开机画面**（`init()` 末尾）：LCD 显示洛天依头像图标(100x100, RGB565) + 预渲染中文文字条"队伍：锦衣卫队"(160x20)，通过 `boot_text.py` 模块加载。状态机置为 `boot`。
+2. **Phase B 后台初始化期间**：LCD 硬件自主刷新保持画面，DisplayService 等待 `EVENT_SYSTEM_READY` 事件。
+3. **收到 `EVENT_SYSTEM_READY` 后**：释放 `luotianyi_icon_data` + `boot_text_data`（回收 ~26KB RAM），状态机切换到 `normal`，补发 TTS 欢迎语。
 
-报警画面配合：
-- 报警触发时 LCD 状态锁自动拦截正常数据刷新，DisplayService 不干预，但可配合调整背光（如报警时提高背光亮度）
-- 报警取消后 LCD 恢复 normal 模式
+**状态机**：`boot` →（`EVENT_SYSTEM_READY`）→ `normal` →（`EVENT_ALARM_TRIGGERED`）→ `alarm` →（`EVENT_ALARM_CANCELED`）→ `normal`
 
-背光调节：
-- 收到 `EVENT_LIGHT_READY` 后根据光照强度调节 LCD 背光亮度
-- 具体光照-背光映射策略由开发人员自行决定
+**新增订阅事件**：
+- `EVENT_SYSTEM_READY`：触发 boot→normal 切换，由 main.py 在所有模块初始化完成后发布
+
+**正常画面布局**（英文格式）："T:25.5C H:65%"、 "Lat:31.23 Lon:121.47"、 "V:18.5km/h"
+**碰撞画面**："CRASH!"、 "Lv:X"、 "Check Safety"、 "Cancel in 30s"
+**SOS 画面**："EMERGENCY!"、 "SOS"、 "Help Sent"、 "Press to Cancel"
+**报警渲染**：统一由 `_render_alarm_screen()` 方法处理
 
 **分层设计说明**：
 - Service 层负责显示策略和背光调节逻辑
@@ -1069,7 +1095,7 @@ BLE 中断 (modem 线程)
 
 **指令格式**：`{"a":"ctrl", "d":{"cmd":"light_on"}}`
 
-**支持指令**（19 条）：
+**支持指令**（**27 条**）：
 
 控制指令（13 条）：
 
@@ -1080,6 +1106,12 @@ BLE 中断 (modem 线程)
 | `brightness_up` | 亮度+ | `EVENT_LIGHT_CONTROL{brightness_up}` | LightService |
 | `brightness_down` | 亮度- | `EVENT_LIGHT_CONTROL{brightness_down}` | LightService |
 | `light_auto` | 自动模式 | `EVENT_LIGHT_CONTROL{auto}` | LightService |
+| `light_blink` | 灯光闪烁 | `EVENT_LIGHT_CONTROL{blink}` | LightService |
+| `ble_connect` | BLE 连接 | BLE 驱动连接 | BLEDriver |
+| `ble_disconnect` | BLE 断开 | BLE 驱动断开 | BLEDriver |
+| `voice_sleep` | 语音休眠 | 语音模块休眠 | VoiceDriver |
+| `wake` | 语音唤醒 | 语音模块唤醒 | VoiceDriver |
+| `set_phone` | 配置手机号 | `EVENT_SMS_PHONE_CONFIG` | SMS |
 | `volume_up` | 音量+ | `EVENT_VOLUME_CONTROL{up}` | AudioDriver |
 | `volume_down` | 音量- | `EVENT_VOLUME_CONTROL{down}` | AudioDriver |
 | `alarm_cancel` | 取消报警 | `EVENT_ALARM_CONTROL{cancel}` | AlarmService |
@@ -1109,6 +1141,7 @@ BLE 中断 (modem 线程)
 - `EVENT_POWER_STATE_CHANGE`：电源状态切换
 - `EVENT_CONTROL_STATE_CHANGED`：控制状态变更（合并为 1 条 `{t:7, m, b, v, p}`）
 - `EVENT_TTS_REQUEST`：TTS 播报请求
+- `EVENT_MANUAL_ACTIVITY`：用户手动操作通知，通知 PowerService 暂停自动省电
 
 **订阅事件**：
 - `EVENT_RIDE_CONTROL`：BLE 远端控制指令
@@ -1144,6 +1177,7 @@ BLE 指令 → BLEService buffer → tick 解析 → EVENT_RIDE_CONTROL → _exe
 - BLE 回推合并为 1 条消息（原 3 条 t=7/t=8/t=9 → 1 条 `{t:7,m,b,v,p}`）
 - TTS 反馈：所有控制指令执行后触发 TTS 播报（1 秒防抖，快速连按只播报最终状态）
 - 报警中 TTS 保护：`_alarm_active == True` 时不发 TTS，避免中断报警音频
+- CUSTOM 模式覆盖：SUSPENDED/EMERGENCY 下收到手动指令时，自动发布 POWER_STATE_CUSTOM 让 PWMLED 等模块恢复响应
 - 依赖可为 None，降级运行不崩溃
 
 **分层设计说明**：
@@ -1354,7 +1388,7 @@ NavigationService/ControlService → EVENT_TTS_REQUEST(priority) → AudioServic
 
 ### 2.3.1 电源模式行为矩阵
 
-系统支持 4 种电源模式：ACTIVE（正常）、SUSPENDED（省电）、EMERGENCY（紧急省电）、STEALTH_ALARM（静默报警）。
+系统支持 5 种（新增 CUSTOM 手动控制模式）电源模式：ACTIVE（正常）、SUSPENDED（省电）、EMERGENCY（紧急省电）、STEALTH_ALARM（静默报警）、CUSTOM（手动控制）。
 
 #### 传感器层
 
@@ -1368,30 +1402,38 @@ NavigationService/ControlService → EVENT_TTS_REQUEST(priority) → AudioServic
 
 #### 输出层
 
-| 模块 | ACTIVE | SUSPENDED | EMERGENCY | STEALTH_ALARM |
-|------|:------:|:---------:|:---------:|:-------------:|
-| PWM 灯 | ✅ | 默认关灯；自动正常 | 默认关灯；自动正常 | 不变 |
-| VoiceDriver | ✅ | ✅ | ✅ | ✅（可用） |
-| TTS | ✅ | ✅ | ✅ | ❌ 完全静默 |
-| 报警音频 | ✅ | ✅ | ✅ | ❌ 不播放 |
-| LED 闪烁 | ✅ | ❌ | ❌ | ❌ 不闪 |
-| Display | ✅ | ❌ | ❌ | ✅ |
-| LCD | ✅ | ❌ | ❌ | ✅ |
+| 模块 | ACTIVE | SUSPENDED | EMERGENCY | STEALTH_ALARM | CUSTOM |
+|------|:------:|:---------:|:---------:|:-------------:|:------:|
+| PWM 灯 | ✅ | 默认关灯；自动正常 | 默认关灯；自动正常 | 不变 | ✅ |
+| VoiceDriver | ✅ | ✅ | ✅ | ✅（可用） | ✅ |
+| TTS | ✅ | ✅ | ✅ | ❌ 完全静默 | ✅ |
+| 报警音频 | ✅ | ✅ | ✅ | ❌ 不播放 | ✅ |
+| LED 闪烁 | ✅ | ❌ | ❌ | ❌ 不闪 | ✅ |
+| Display | ✅ | ❌ | ❌ | ✅ | ✅ |
+| LCD | ✅ | ❌ | ❌ | ✅ | ✅ |
 
 #### 导航与通信层
 
-| 模块 | ACTIVE | SUSPENDED | EMERGENCY | STEALTH_ALARM |
-|------|:------:|:---------:|:---------:|:-------------:|
-| Navigation | ✅ LCD+TTS+小程序 | ✅ TTS+小程序（LCD 关） | ⏸ 暂停 | ✅ 小程序（TTS 静默） |
-| BLE | ✅ | ✅ | ✅ | ✅ |
-| Cloud | ✅ | ✅ | ✅ | ✅ |
+| 模块 | ACTIVE | SUSPENDED | EMERGENCY | STEALTH_ALARM | CUSTOM |
+|------|:------:|:---------:|:---------:|:-------------:|:------:|
+| Navigation | ✅ LCD+TTS+小程序 | ✅ TTS+小程序（LCD 关） | ⏸ 暂停 | ✅ 小程序（TTS 静默） | ✅ |
+| BLE | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Cloud | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 #### 安全与交互层
 
-| 模块 | ACTIVE | SUSPENDED | EMERGENCY |
-|------|:------:|:---------:|:---------:|
-| CollisionService | ✅ | ✅ | ✅ |
-| Button | ✅ | ✅ | ✅ |
+| 模块 | ACTIVE | SUSPENDED | EMERGENCY | CUSTOM |
+|------|:------:|:---------:|:---------:|:------:|
+| CollisionService | ✅ | ✅ | ✅ | ✅ |
+| Button | ✅ | ✅ | ✅ | ✅ |
+
+#### 手动锁定机制
+
+| 事件 | 行为 |
+|------|------|
+| `EVENT_MANUAL_ACTIVITY` | PowerService 置 `_manual_locked = True`，后续电池采样跳过自动省电决策（数据采集照常） |
+| `power_save` 指令 | 清除 `_manual_locked`，恢复自动省电 |
+| `power_normal` 指令 | 清除 `auto_suspended`，但不影响 `_manual_locked`（手动优先） |
 
 #### 报警规则
 
@@ -1429,6 +1471,8 @@ NavigationService/ControlService → EVENT_TTS_REQUEST(priority) → AudioServic
 | EMERGENCY → ACTIVE | 传感器恢复，导航恢复 |
 | 任意 → STEALTH_ALARM | TTS 静默，报警音不播放，LED 不闪，灯光不变 |
 | STEALTH_ALARM → 取消 | 恢复报警前状态 |
+| SUSPENDED/EMERGENCY → CUSTOM | 用户手动操作，PWMLED 恢复响应，传感器策略不变 |
+| CUSTOM → SUSPENDED | 用户手动 power_save，恢复自动省电 |
 
 ---
 
@@ -1630,6 +1674,24 @@ gnss.get_location() 返回有效数据
 
 ---
 
+#### 场景八：手动操作锁定自动省电（v3 新增）
+
+[S] 用户触发 brightness_up（BLE FFF3 / 语音）
+  → ControlService._execute_cmd ("brightness_up")
+    → power_mode ≠ active → publish EVENT_POWER_STATE_CHANGE (CUSTOM)
+    → publish EVENT_MANUAL_ACTIVITY {"cmd":"brightness_up","source":"ble"}
+    → handler → EVENT_LIGHT_CONTROL{brightness_up} → LightService → PWMLED.set_brightness
+[E] PowerService._on_manual_activity
+  → _manual_locked = True → 打印 "manual activity detected -> auto-suspend locked"
+[E] 后续 EVENT_BATTERY_READY（低电量）
+  → PowerService._on_battery: _manual_locked=True → return（跳过自动省电，数据照常采集推送）
+[S] 用户触发 power_save
+  → ControlService → EVENT_POWER_STATE_CHANGE (SUSPENDED)
+[E] PowerService._on_power_state
+  → new_mode=SUSPENDED → _manual_locked = False（解锁）→ 打印 "power: ACTIVE -> SUSPENDED"
+
+---
+
 #### 时序对照表
 
 | 周期 | 模块 | 频率 | 事件 | 消费方 |
@@ -1648,52 +1710,32 @@ gnss.get_location() 返回有效数据
 | 报警 | AlarmService | 按需 | → EVENT_ALARM_TRIGGERED | CloudService（推送） + DisplayService（LCD画面） |
 ---
 
-### 2.4 初始化顺序
+### 2.4 初始化顺序（两阶段）
 
-按依赖关系确定初始化顺序：
+**Phase A（快速显示开机画面，< 1s）**：
+1. LCD 驱动（LCDDriver）
+2. 显示管理服务（DisplayService）→ 显示开机画面 + 状态机置 boot
 
-```
-1. 温湿度驱动（Temp_Humid）（✅已实现）
-2. IMU 驱动（IMU）（✅已实现）
-3. GNSS 驱动（GNSS）（✅已实现）
-4. 光照驱动（Light）（✅已实现）
-4.1. LBS 基站定位（LBSDriver）（✅ v1 已实现）
-4.2. 语音指令驱动（Voice）（✅ 已实现）
-4.3. 电池驱动（BatteryDriver）（✅ v1 已实现）
-5. SOS 按键驱动（Button）（✅已实现）
-6. LED 驱动（LED）（✅已实现）
-7. 音频驱动（Audio）（✅已实现）
-8. LCD 驱动（LCD）（✅已实现）
-8.1. PWM LED 驱动（PWM_LED）（✅ 已实现，待集成 main.py）
-9. 网络驱动：Network → MQTT（✅已实现）
-10. 网络驱动：Qth（✅ v1 已实现）
-11. BLE 驱动（BLEDriver）（✅ 已实现，待集成到 main.py）
-11.2. SMS 驱动（SMSDriver）（✅ 已实现，已集成 main.py）
-12. 碰撞检测服务（CollisionService）（✅ v1 已实现）
-13. 电源管理服务（PowerService）（✅ v1 已完成）
-14. 报警联动服务（AlarmService）（✅ v1 已实现）
-15. 云端通信服务（CloudService）（✅ v1 已实现）
-16. 移远云通信服务（LarkCloudService）（✅ v1 已实现）
-17. 显示管理服务（DisplayService）（✅ v1 已实现）
-17.1. 自适应灯光服务（LightService）（✅ 已实现，待集成 main.py）
-17.2. 导航引导服务（NavigationService）（✅ 已实现，待集成 main.py）
-18. BLE 推送服务（BLEService）（✅ v3 已实现，待集成到 main.py）
-18.1. 统一控制服务（ControlService）（✅ v3 已实现，待集成到 main.py）
+**Phase B（后台初始化，开机画面持续显示）**：
+3. 传感器组：Temp_Humid → IMU → GNSS → Light → BatteryDriver
+4. 执行器+通信组：Button → LED → Audio → PWM_LED → BLE → SMS
+5. 心率组：HeartRate（必须在所有 quectel 模块之后，避免破坏 AT 通道）
+6. 服务组：CollisionService → AudioService → AlarmService → ControlService → PowerService → LightService → BLEService → NavigationService → VoiceDriver → SystemMonitor
 
-**v2 新增模块**：
+**设计原因**：
+- LCD+DisplayService 提前 init 让用户尽快看到开机画面
+- 其余模块在后台 init 时 LCD 硬件自主刷新不阻塞
+- HeartRate（UART9）在所有 quectel 模块之后初始化
+- SystemMonitor 最后初始化，确保所有模块都已 init 后再启动监控
+- boot 期间不发 TTS（audio_driver 尚未 init），SYSTEM_READY 后补发欢迎语
+- 系统就绪后启动 WDT 8s 硬件看门狗
 
-| # | 模块 | 状态 | 说明 |
-|:-|:----|:----|:------|
-| 4.1 | LBS 基站定位（LBSDriver） | ✅ 已实现 (06-09) | quectel.LBS 基站定位，与 GNSS 互斥 |
-| 4.2 | 语音指令驱动（VoiceDriver） | ✅ 已实现 (06-20) | ASRPRO UART hex 映射 19 指令 |
-| 17 | 心率驱动（HeartRate） | 📅 v2 | BLE 扫描心率带广播数据 |
-| 18 | PWM 调光 LED 驱动（PWM_LED） | ✅ 已实现 (06-11)，待集成 main.py | PE11 + TIM1_CH2，PWM 调光 |
-| 18.1 | 自适应灯光服务（LightService） | ✅ 已实现 (06-11)，待集成 main.py | 订阅光照事件 + PWM LED 调光 + 自动/手动模式 |
-| 19 | 导航引导服务（NavigationService） | ✅ 已实现 (06-09)，待集成 main.py | BLE FFF2 接收指令 + TTS 播报；位置播报升级 📅 |
-| 19.1 | 统一控制服务（ControlService） | ✅ v3 已实现 (06-18)，待集成 main.py | BLE FFF3 接收指令 + 统一路由到设备驱动 |
-| 20 | 微信小程序（WeChatMiniProgram） | ✅ Step A + Step B 完成 | 登录+BLE+骑行+地图+导航推送+远端控制 |
-| 21 | SMS 短信驱动（SMSDriver） | ✅ 已实现 (06-24)，已集成 main.py | quectel.SMS 原生 API，BLE 配置手机号，报警自动发送 |
-```
+**模块总览**：
+| 层 | 数量 | 模块 |
+|------|:--:|------|
+| Driver 层 | 14 | Temp_Humid, IMU, GNSS, LightSensor, Battery, HeartRate, Button, Voice, LED, Audio, LCD, PWM_LED, BLE, SMS |
+| Service 层 | 10 | Collision, AudioService, Alarm, Display, LightService, BLEService, ControlService, Navigation, PowerService, SystemMonitor |
+| 合计 | 24 | |
 
 ---
 
@@ -1996,34 +2038,34 @@ M1: 起步验证 ──→ M2: 本地闭环 ──→ M3: 云端打通 ──→
 
 ---
 
-### M5: v2 设计与集成 🔵
+### M5: v2 设计与集成 ✅
 
 **里程碑目标**：电源管理、心率监测、灯光驱动、导航引导、语音交互、微信小程序
 
-**当前状态**：🔵 **进行中（v2 模块代码已实现，待集成 main.py）**
+**当前状态**：**✅ 已完成 (06-28)**
 
 **子里程碑**：
 
 | 子里程碑 | 内容 | 状态 |
 |:--------|:----|:----:|
 | M5.1 电源管理 | PowerService + BatteryDriver | ✅ 已完成 (06-23) |
-| M5.2 灯光驱动 | PWM_LED（PE11, TIM1_CH2）+ LightService | ✅ 代码已实现 (06-11)，待集成 main.py |
-| M5.3 心率模块 | HeartRate 驱动（数据走 MQTT） | 🟡 等心率带到货 |
+| M5.2 灯光驱动 | PWM_LED（PE11, TIM1_CH2）+ LightService | ✅ 已集成 main.py (06-28) |
+| M5.3 心率模块 | HeartRate 驱动（数据走 MQTT） | ✅ 已集成 main.py (06-28) |
 | M5.4 小程序 Step A | 登录+实时数据+骑行控制+总结+地图+报警取消 | ✅ 已完成 (06-01) |
 | M5.4 小程序 Step B | 导航推送 + 远端控制 UI + BLE 服务集成 | ✅ 已完成 (06-18) |
 | M5.4 导航位置播报 | 头盔 GNSS 位置自主播报（替代 5s 推流） | 📅 规划中 |
-| M5.5 导航服务 | NavigationService（BLE FFF2 + TTS + LCD） | ✅ 代码已实现 (06-09)，待集成 main.py |
-| M5.5 控制服务 | ControlService v3（19 指令 + TTS + 报警快照） | ✅ 代码已实现 (06-18)，待集成 main.py |
-| M5.5 语音模块 | VoiceDriver（UART hex 映射 19 指令） | ✅ 代码已实现 (06-20)，待集成 main.py |
+| M5.5 导航服务 | NavigationService（BLE FFF2 + TTS + LCD） | ✅ 已集成 main.py (06-28) |
+| M5.5 控制服务 | ControlService v3（27 指令 + TTS + 报警快照） | ✅ 已集成 main.py (06-28) |
+| M5.5 语音模块 | VoiceDriver（UART hex 映射 19 指令） | ✅ 已集成 main.py (06-28) |
 | M5.6 移远云通道 | LarkCloudService + QthDriver | ✅ 已完成 (05-22) |
 
 ---
 
-### M6: 整体收官 📅
+### M6: 整体收官 🔵
 
 **里程碑目标**：文档完善 + 演示准备 + 开源整理
 
-**当前状态**：📅 **待 M5 达成后启动**
+**当前状态**：🔵 **进行中**
 
 **关键成果**（规划）：
 - 📅 完整设计文档编写完成
@@ -2031,10 +2073,11 @@ M1: 起步验证 ──→ M2: 本地闭环 ──→ M3: 云端打通 ──→
 - 📅 答辩 PPT 制作完成
 - 📅 开源代码包整理完成
 - 📅 最终演示彩排成功
+- ✅ 30 分钟全场景压力测试通过（有 SIM 卡 / 无 SIM 卡双版本）
 
 ---
 
-**文档版本**：v8.3
-**更新日期**：2026-06-24
+**文档版本**：**v9.0**
+**更新日期**：**2026-06-29**
 **维护团队**：锦依卫队
-**备注**：Phase 4 — AudioDriver tick 环形缓冲区 + BatteryDriver sample_count + PowerService 宽限期 + ControlService 电源回推
+**备注**：Phase B — 两阶段开机动画 + _manual_locked 手动锁定 + 15 模块 heartbeat 补全 + WDT 硬件看门狗 + SystemMonitor 集成 + 30 分钟压力测试通过

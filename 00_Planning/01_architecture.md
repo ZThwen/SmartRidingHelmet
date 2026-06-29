@@ -338,24 +338,24 @@ while True:
 | **系统事件** | | | |
 | EVENT_SYSTEM_READY | 系统就绪 | main.py | 各模块 |
 | EVENT_CONFIG_UPDATE | 配置更新 | CloudService | 各模块 |
-| EVENT_SENSOR_ERROR | 传感器错误 | 各传感器驱动 | CloudService |
+| EVENT_SENSOR_ERROR | 传感器错误 | 各传感器驱动 | — |
 | EVENT_LCD_ERROR | LCD 错误 | LCDDriver | DisplayService |
 | EVENT_BUTTON_ERROR | 按键错误 | Button | — |
 | EVENT_BUTTON_PRESSED | 按键按下 | Button | AlarmService |
 | EVENT_LED_ERROR | LED 错误 | LEDDriver | — |
 | EVENT_PWM_LED_ERROR | PWM 控制错误 | PWM_LED | — |
 | **传感器数据就绪** | | | |
-| EVENT_TEMP_HUMID_READY | 温湿度数据就绪 | TempHumidDriver | CloudService, BLEService, DisplayService |
+| EVENT_TEMP_HUMID_READY | 温湿度数据就绪 | TempHumidDriver | ControlService, BLEService, DisplayService |
 | EVENT_IMU_READY | IMU 加速度数据就绪 | IMUDriver | CollisionService |
-| EVENT_GNSS_READY | GNSS 定位数据就绪 | GNSSDriver | CloudService, BLEService, NavigationService |
+| EVENT_GNSS_READY | GNSS 定位数据就绪 | GNSSDriver | ControlService, BLEService, NavigationService |
 | EVENT_LIGHT_READY | 光照数据就绪 | LightSensorDriver | DisplayService, LightService |
 | EVENT_HEARTRATE_READY | 心率血氧数据就绪 | HeartRateDriver | ControlService |
-| EVENT_LBS_READY | LBS 基站定位就绪 | GNSSDriver | CloudService |
+| EVENT_LBS_READY | LBS 基站定位就绪 | GNSSDriver | — |
 | **报警事件** | | | |
-| EVENT_COLLISION_DETECTED | 碰撞检测到 | CollisionService | AlarmService, CloudService |
+| EVENT_COLLISION_DETECTED | 碰撞检测到 | CollisionService | AlarmService |
 | EVENT_SOS_TRIGGERED | SOS 按键触发 | Button | AlarmService |
-| EVENT_ALARM_TRIGGERED | 报警触发（通用） | AlarmService | CloudService, BLEService, DisplayService |
-| EVENT_ALARM_CANCELED | 报警取消 | AlarmService | CloudService, BLEService, DisplayService |
+| EVENT_ALARM_TRIGGERED | 报警触发（通用） | AlarmService | BLEService, DisplayService |
+| EVENT_ALARM_CANCELED | 报警取消 | AlarmService | BLEService, DisplayService |
 | **音频事件** | | | |
 | EVENT_AUDIO_PLAYBACK_START | 音频开始播放 | AudioDriver | AlarmService |
 | EVENT_AUDIO_PLAYBACK_END | 音频播放结束 | AudioDriver | AlarmService |
@@ -364,14 +364,17 @@ while True:
 | EVENT_NAV_DISPLAY | 导航显示内容变更 | NavigationService | DisplayService |
 | **电源事件** | | | |
 | EVENT_BATTERY_READY | 电池电量数据就绪 | BatteryDriver | PowerService, BLEService, ControlService |
-| EVENT_BATTERY_LOW | 低电量警告 | PowerService | AlarmService, CloudService, DisplayService |
-| EVENT_BATTERY_CRITICAL | 电量严重不足 | PowerService | AlarmService, CloudService |
+| EVENT_BATTERY_LOW | 低电量警告 | PowerService | AlarmService, DisplayService |
+| EVENT_BATTERY_CRITICAL | 电量严重不足 | PowerService | AlarmService |
 | EVENT_POWER_STATE_CHANGE | 功耗状态切换 | ControlService, PowerService | 各传感器, LightService |
+| EVENT_MANUAL_ACTIVITY | 手动活动（按键/语音） | ControlService | PowerService |
+| EVENT_SYSTEM_READY | 系统就绪 | main.py | DisplayService |
+| EVENT_LIGHT_BLINK_STATE | 灯光闪烁状态 | LightService | ControlService |
 | **GNSS 事件** | | | |
 | EVENT_GPS_LOST | GPS 信号丢失 | GNSSDriver | AlarmService, DisplayService |
 | **网络事件** | | | |
-| EVENT_NETWORK_CONNECTED | 网络连接成功 | Network | CloudService |
-| EVENT_NETWORK_DISCONNECTED | 网络断开 | Network | CloudService |
+| EVENT_NETWORK_CONNECTED | 网络连接成功 | Network | — |
+| EVENT_NETWORK_DISCONNECTED | 网络断开 | Network | — |
 | EVENT_DATA_UPLOAD_SUCCESS | 数据上传成功 | CloudService | — |
 | EVENT_DATA_UPLOAD_FAILED | 数据上传失败 | CloudService | — |
 | **BLE 事件（Phase 4 新增）** | | | |
@@ -417,46 +420,40 @@ while True:
 | DisplayService | Modules/display_service.py | Service | ✅ | LCD 显示管理 |
 | BLEService | Modules/ble_service.py | Service | ✅ v3 | 环形缓冲区、快照合并推送 |
 | LightService | Modules/light_service.py | Service | ✅ v1 | 自适应灯光（光照→PWM 非线性映射） |
-| ControlService | Modules/control_service.py | Service | ✅ v3 | 纯事件驱动、26 条指令（含唤醒/蓝牙/休眠/闪烁）、TTS、报警快照 |
+| ControlService | Modules/control_service.py | Service | ✅ v3 | 纯事件驱动、27 条指令（含 set_phone）、TTS、报警快照 |
 | NavigationService | Modules/navigation_service.py | Service | ✅ v1 | 导航指令处理（腾讯地图 API） |
 | PowerService | Modules/power_service.py | Service | ✅ v1 | 电源管理，6 档电量+自动省电切换 |
+| SystemMonitor | Service | 非侵入式监控：心跳扫描 + WDT 门控 + 离线诊断 | ✅ v3 |
 
-### 3.5 初始化顺序
+### 3.5 初始化顺序（两阶段）
 
-> `main.py` 严格按以下顺序初始化模块。每步失败仅跳过，不阻塞后续模块。
+**Phase A（开机画面优先显示）**：
+1. LCD 驱动（LCDDriver）
+2. 显示管理服务（DisplayService）→ 显示开机画面
 
-```
-阶段 1 — 传感器（数据源最先就绪）
-  1. Temp_Humid    → I2C1 温湿度
-  2. IMU           → I2C1 加速度/陀螺仪
-  3. GNSS          → EC200U 内置 GNSS
-  4. Light         → ADC 光照
-  5. Battery       → ADC PC4 电池电压
-  6. HeartRate     → UART5 TX=PC12 RX=PD2 心率血氧（v2 新增）
+**Phase B（后台初始化）**：
+3. 传感器组：Temp_Humid → IMU → GNSS → Light → BatteryDriver
+4. 执行器组：Button → LED → Audio → PWM_LED → BLE → SMS
+5. 心率组：HeartRate（必须在所有 quectel 模块之后）
+6. 服务组：CollisionService → AudioService → AlarmService → ControlService → PowerService → LightService → BLEService → NavigationService → Voice → SystemMonitor
 
-阶段 2 — 执行器 + 网络（硬件接口就绪）
-  7. Button        → GPIO SOS 按键
-  8. LED           → Timer1 LED 指示灯
-  9. Audio         → EC200U 音频输出
-  10. LCD          → SPI1 显示屏
-  11. PWM_LED      → PE11 PWM 调光灯
-  12. BLE          → EC200U BLE 4.2
-  13. SMS          → EC200U 短信发送
+**设计原因**：Phase A 让用户尽快看到开机画面（LCD 硬件自主刷新不阻塞后台 init）；HeartRate UART9 在所有 quectel 模块之后避免破坏 AT 通道；SystemMonitor 最后初始化确保所有模块就绪后再启动监控。
 
-阶段 3 — 业务服务（依赖下层模块）
-  14. CollisionService  → 碰撞检测
-  15. AudioService      → 统一音频调度
-  16. AlarmService      → 报警联动
-  17. DisplayService    → LCD 显示管理
-  18. ControlService    → 统一控制（26 条指令）
-  19. PowerService      → 电源管理
-  20. LightService      → 自适应灯光
-  21. BLEService        → BLE 推送服务
-  22. NavigationService → 导航引导
-  23. Voice             → ASRPRO 语音指令
-```
+**SystemMonitor 说明**：非侵入式监控层（24 个模块心跳扫描 + WDT 8s 门控 + 离线模块诊断）。15s 启动宽限期内无条件喂狗，之后需所有 CRITICAL 模块心跳有效才喂狗。连续 5 次 WDT 复位进入安全模式。
 
 **依赖注入**：Service 层模块通过构造函数注入 Device 层引用（如 `AlarmService(event_bus, led=led, audio=audio)`），禁止 Service 间直接引用。
+
+### 3.6 WDT 硬件看门狗
+
+| 参数 | 值 |
+|------|----|
+| 超时时间 | 8000ms（8 秒） |
+| 启动时机 | 系统就绪后（main.py Phase B 完成） |
+| 门控逻辑 | SystemMonitor.should_feed_wdt() |
+| 宽限期 | 启动后 15s 无条件喂狗 |
+| 安全模式 | 连续 5 次 WDT 复位后进入 |
+
+实现位置：`main.py:164-170`（启动）、`main.py:180-181`（主循环喂狗）、`system_monitor.py`（门控逻辑）。
 
 ---
 
@@ -622,7 +619,7 @@ def tick(self):
 
 ---
 
-**文档版本**：v7.5
-**更新日期**：2026-06-25
+**文档版本**：v7.6
+**更新日期**：2026-06-29
 **维护团队**：锦依卫队
 **备注**：Phase 4 代码完成。HeartRate 使用 UART5（原 UART9 方案走不通已切换）。CloudService/Network/MQTT 已废弃，数据通道改为 BLE 直连手机。文档同步修正（以代码为准）。
