@@ -230,9 +230,7 @@ class AudioDriver(BaseModule):
         self.ctx["is_busy"] = True
         try:
             from core.config import AT_LOCK
-            if not AT_LOCK.acquire(timeout_ms=2000):
-                print("[Audio] AT_LOCK acquire timeout in play_file")
-                return False
+            AT_LOCK.acquire()  # 阻塞获取
             try:
                 self.audio.play_local(file_path, False)
             finally:
@@ -267,9 +265,7 @@ class AudioDriver(BaseModule):
         self.ctx["is_busy"] = True
         try:
             from core.config import AT_LOCK
-            if not AT_LOCK.acquire(timeout_ms=2000):
-                print("[Audio] AT_LOCK acquire timeout in play_tts")
-                return False
+            AT_LOCK.acquire()  # 阻塞获取（TTS 高优先级）
             try:
                 self.audio.tts_play(text)
             finally:
@@ -301,9 +297,7 @@ class AudioDriver(BaseModule):
             return False
         try:
             from core.config import AT_LOCK
-            if not AT_LOCK.acquire(timeout_ms=2000):
-                print("[Audio] AT_LOCK acquire timeout in stop")
-                return False
+            AT_LOCK.acquire()
             try:
                 self.audio.play_stop()
                 self.audio.tts_stop()

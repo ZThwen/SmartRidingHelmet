@@ -38,8 +38,6 @@ class EventBus:
             "POWER_STATE_CHANGE", "TTS_REQUEST",
         }
 
-        self._pumping = False
-
     def subscribe(self, event_name, callback):
         """
         brief 订阅事件：注册回调函数到指定事件
@@ -98,25 +96,19 @@ class EventBus:
         brief 事件泵：必须在主循环中定期调用，处理队列中的事件
         note 逐个触发订阅者回调，异常隔离确保单个模块错误不影响全局
         """
-        if self._pumping:
-            return
-        self._pumping = True
-        try:
-            while True:
-                self._lock.acquire()
-                if not self._queue:
-                    self._lock.release()
-                    break
-                event_name, payload = self._queue.pop(0)
+        while True:
+            self._lock.acquire()
+            if not self._queue:
                 self._lock.release()
+                break
+            event_name, payload = self._queue.pop(0)
+            self._lock.release()
 
-                # 触发所有订阅者
-                if event_name in self._subscribers:
-                    for callback in self._subscribers[event_name]:
-                        try:
-                            callback(payload)
-                        except Exception as e:
-                            # 核心：异常隔离。一个模块报错绝不中断其他回调和主循环
-                            print(f"[EVENT_ERR] {event_name} -> {callback.__name__}: {e}")
-        finally:
-            self._pumping = False
+            # 触发所有订阅者
+            if event_name in self._subscribers:
+                for callback in self._subscribers[event_name]:
+                    try:
+                        callback(payload)
+                    except Exception as e:
+                        # 核心：异常隔离。一个模块报错绝不中断其他回调和主循环
+                        print(f"[EVENT_ERR] {event_name} -> {callback.__name__}: {e}")

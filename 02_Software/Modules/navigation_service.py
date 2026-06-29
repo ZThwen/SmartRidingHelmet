@@ -171,7 +171,7 @@ class NavigationService(BaseModule):
 
     def tick(self):
         """事件驱动，无需轮询"""
-        pass
+        self.ctx["last_hb"] = time.ticks_ms()
 
     def _on_power_state_change(self, payload):
         """电源状态变化回调"""

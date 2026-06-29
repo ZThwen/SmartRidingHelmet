@@ -139,6 +139,7 @@ class HeartRateDriver(BaseModule):
         if not self.ctx["is_collecting"]:
             return
 
+        self.ctx["last_hb"] = time.ticks_ms()
         now = time.ticks_ms()
         if time.ticks_diff(now, self.ctx["last_tick"]) < self.cfg["sample_ms"]:
             return

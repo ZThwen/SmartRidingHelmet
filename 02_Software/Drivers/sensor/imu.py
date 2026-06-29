@@ -98,6 +98,7 @@ class IMUDriver(BaseModule):
         # 放弃检查：连续10次失败后不再尝试
         if self._abandoned:
             return
+        self.ctx["last_hb"] = time.ticks_ms()
         # 时间片校验：未到采样间隔立即返回
         now = time.ticks_ms()
         if time.ticks_diff(now, self.ctx["last_tick"]) < self.cfg["sample_ms"]:

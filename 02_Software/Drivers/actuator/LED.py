@@ -99,7 +99,7 @@ class LEDDriver(BaseModule):
         brief 周期调度：LED模块主要通过硬件定时器工作，tick()为空实现
         note 主循环每轮调用，必须快速返回（<5ms），不能阻塞
         """
-        pass
+        self.ctx["last_hb"] = time.ticks_ms()
 
     def blink(self, duration_ms, interval_ms):
         """

@@ -99,6 +99,7 @@ class PWMLEDDriver(BaseModule):
         brief 闪烁状态机
         note 主循环每轮调用，必须快速返回（<5ms），不能阻塞
         """
+        self.ctx["last_hb"] = time.ticks_ms()
         if not self.ctx["blink_active"]:
             return
         now = time.ticks_ms()

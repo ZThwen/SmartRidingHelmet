@@ -110,7 +110,9 @@ class BLEDriver(BaseModule):
         """
         brief 周期调度
         note BLE 为事件驱动设备，tick 保持空实现
+              心跳必须在状态守卫之前更新，防止挂起时产生假超时
         """
+        self.ctx["last_hb"] = time.ticks_ms()
         if self.ctx["power_state"] != POWER_STATE_ACTIVE:
             return
 

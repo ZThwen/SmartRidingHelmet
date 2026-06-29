@@ -90,7 +90,7 @@ class LightService(BaseModule):
         brief 周期调度：Service层不需要周期调度
         note 事件驱动，tick()为空实现
         """
-        pass
+        self.ctx["last_hb"] = time.ticks_ms()
 
     def _on_light_control(self, payload):
         """

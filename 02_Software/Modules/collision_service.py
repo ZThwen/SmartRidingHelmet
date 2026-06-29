@@ -97,6 +97,7 @@ class CollisionService(BaseModule):
         brief 周期调度：功耗守卫 + 时间片控制
         note 当前为保留占位，判决逻辑在 _on_imu_data 回调中执行
         """
+        self.ctx["last_hb"] = time.ticks_ms()
         if self.ctx["power_state"] != POWER_STATE_ACTIVE:
             return
 

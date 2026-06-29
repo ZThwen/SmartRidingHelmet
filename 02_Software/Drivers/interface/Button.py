@@ -72,6 +72,7 @@ class Button(BaseModule):
         if not self.ctx["is_init"]:
             return
 
+        self.ctx["last_hb"] = time.ticks_ms()
         if self.ctx["button_pressed_flag"]:
             self.ctx["button_pressed_flag"] = False
             if self.event_bus:

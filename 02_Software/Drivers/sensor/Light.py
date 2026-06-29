@@ -74,11 +74,13 @@ class LightSensorDriver(BaseModule):
         brief 周期调度：数据采集 + 事件发布
         note 主循环每轮调用，必须快速返回（<5ms），不能阻塞
         """
-        # ====== 1. 状态守卫 ======
+        # ====== 1. 心跳更新（必须在状态守卫之前）======
+        self.ctx["last_hb"] = time.ticks_ms()
+
+        # ====== 2. 状态守卫 ======
         if self.ctx["power_state"] == POWER_STATE_EMERGENCY:
             if self.ctx.get("light_mode") != "auto":
                 return  # EMERGENCY + 手动模式：停止采样
-
         # ====== 2. 时间片校验 ======
         now = time.ticks_ms()
         if time.ticks_diff(now, self.ctx["last_tick"]) < self.cfg["sample_ms"]:
