@@ -46,6 +46,7 @@ class LCDDriver(BaseModule):
             "last_tick": 0,             # 上次操作时间戳
             "err_count": 0,             # 连续操作错误计数
             "power_state": POWER_STATE_ACTIVE,  # 功耗状态
+            "alarm_override": False,    # 报警优先覆盖：True时非ACTIVE模式也允许背光
         }
 
         # ===================== 四元组：当前数据 =====================
@@ -109,6 +110,7 @@ class LCDDriver(BaseModule):
         if self.ctx["power_state"] != POWER_STATE_ACTIVE:
             return
 
+        self.ctx["last_hb"] = time.ticks_ms()
         # 时间片校验：未到间隔立即返回
         now = time.ticks_ms()
         if time.ticks_diff(now, self.ctx["last_tick"]) < self.cfg["sample_ms"]:
@@ -291,7 +293,8 @@ class LCDDriver(BaseModule):
             level = 0
 
         # ====== 休眠联动 ======
-        if self.ctx["power_state"] != POWER_STATE_ACTIVE:
+        # 报警优先覆盖：报警期间允许非ACTIVE模式保持背光
+        if self.ctx["power_state"] != POWER_STATE_ACTIVE and not self.ctx.get("alarm_override", False):
             level = 0
 
         old_backlight = self._data["backlight"]
@@ -309,7 +312,7 @@ class LCDDriver(BaseModule):
         param y: 起始Y坐标
         param w: 图标宽度
         param h: 图标高度
-        param data: RGB565格式图标数据 (bytearray)
+        param data: RGB565格式图标数据 (bytes or bytearray)
         """
         if not self.ctx["is_init"]:
             return
