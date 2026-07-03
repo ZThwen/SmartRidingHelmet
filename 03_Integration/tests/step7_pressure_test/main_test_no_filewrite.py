@@ -2,6 +2,7 @@
 brief 智能骑行头盔系统入口 — v2 Step 7（开机动画版）
 note 集成 23 个模块（6 传感器 + 6 执行器/接口 + 1 网络 + 1 SMS + 9 Service）
 note 两阶段初始化：Phase A 先显示开机画面（LCD+Display），Phase B 后台初始化其余模块
+note TEST VARIANT: 无文件写入 + 无调试打印 — 隔离 sysmon._record_pre_feed_state 和 print 开销
 """
 import sys
 import time
@@ -46,6 +47,7 @@ def main():
     """
     brief 系统入口: 23 个模块全集成，v2 Step 7（开机动画 + 后台初始化）
     note 两阶段初始化：LCD+Display 先显示开机画面，其余模块后台 init（不阻塞显示）
+    note TEST VARIANT: 无文件写入 + 无调试打印
     """
     GC_THRESHOLD = 8000  # 内存阈值（bytes）
     GC_CHECK_INTERVAL = 500  # 每 500 次循环检查
@@ -60,7 +62,7 @@ def main():
     except Exception:
         pass
 
-    print("🚀 智能骑行头盔系统启动...")
+    print("=== main_no_filewrite: 无文件写入 + 无调试打印 ===")
 
     # 1. 创建事件总线
     event_bus = EventBus()
@@ -172,13 +174,16 @@ def main():
     # 5. 主循环
     print("▶ 进入主循环（事件驱动）")
     loop_count = 0
+    slow_modules = []          # 慢模块记录 [(name, cost_ms, ts), ...]
     try:
         while True:
             loop_start = time.ticks_ms()
 
-            # 0. 喂看门狗
+            # 0. 喂看门狗（喂狗前记录状态快照）
             if wdt and sysmon.should_feed_wdt():
+                # sysmon._record_pre_feed_state(slow_modules)  # TEST: 注释掉，隔离文件写入开销
                 wdt.feed()
+                slow_modules = []  # 喂狗后清空慢模块记录
 
             # 5a. 逐模块 tick + 单模块耗时监控
             for mod in init_order:
@@ -192,6 +197,9 @@ def main():
                 mod_cost = time.ticks_diff(time.ticks_ms(), mod_start)
                 if mod_cost > 5:
                     print(f"⚠️ 真阻塞: [{mod.name}] tick 耗时 {mod_cost}ms！")
+                    slow_modules.append((mod.name, mod_cost, time.ticks_ms()))
+                    if len(slow_modules) > 10:
+                        slow_modules = slow_modules[-10:]
 
             # 5b. 系统监控
             sysmon.tick()
@@ -218,6 +226,13 @@ def main():
                     print(f"[GC] 内存 {free_bytes} bytes，执行回收")
                     gc.collect()
                     print(f"  -> 回收后 {gc.mem_free()} bytes")
+
+            # # 每 200 次循环（约 2 秒）打印一次数据快照  # TEST: 注释掉，隔离 print 开销
+            # if loop_count % 200 == 0:
+            #     print("\n--- 模块数据 (每 2 秒) ---")
+            #     for mod in init_order:
+            #         if mod.ctx.get("is_init", False):
+            #             print(f"  [{mod.name}] {mod.get_data()}")
 
     except KeyboardInterrupt:
         print("\n✓ 系统已停止")

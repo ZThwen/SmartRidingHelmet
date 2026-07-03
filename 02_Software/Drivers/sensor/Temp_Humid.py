@@ -93,7 +93,7 @@ class TempHumidDriver(BaseModule):
         self.ctx["last_hb"] = time.ticks_ms()
 
         # ====== 2. 状态守卫：功耗模式控制（EMERGENCY 下完全停止）======
-        if self.ctx["power_state"] == POWER_STATE_EMERGENCY:
+        if self.ctx["power_state"] not in (POWER_STATE_ACTIVE, POWER_STATE_SUSPENDED):
             return
         now = time.ticks_ms()
 
@@ -185,7 +185,7 @@ class TempHumidDriver(BaseModule):
             if payload["power_state"] == POWER_STATE_SUSPENDED:
                 self.cfg["sample_ms"] = TEMP_HUMID_SUSPENDED_MS
             elif payload["power_state"] == POWER_STATE_EMERGENCY:
-                self.cfg["sample_ms"] = 0  # tick() 中直接判断停止采样
+                pass  # tick 中 power_state 守卫直接 return，无需修改 sample_ms
             elif payload["power_state"] == POWER_STATE_ACTIVE:
                 self.cfg["sample_ms"] = TEMP_HUMID_SAMPLE_MS
             print(f"[{self.name}] 功耗状态: {old_state} -> {payload['power_state']}")

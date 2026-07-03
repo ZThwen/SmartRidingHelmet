@@ -150,6 +150,7 @@ class DisplayService(BaseModule):
         self._collision_flash_state = False
         self._collision_flash_last_tick = 0
         self._needs_clear = False  # 报警取消后需要清屏标志
+        self._needs_switch_to_normal = False  # 新增: _on_system_ready 延迟标志
         
         self._data = {
             "temp": None,
@@ -215,6 +216,11 @@ class DisplayService(BaseModule):
                     self._flash_collision_text()
         
         self.ctx["last_tick"] = now
+        
+        # --- 新增: SYSTEM_READY 延迟切换（从 pump 回调移到 tick，避免阻塞 pump）---
+        if self._needs_switch_to_normal and self.ctx["display_mode"] == "boot":
+            self._switch_to_normal()
+            self._needs_switch_to_normal = False
         
         # 报警画面延迟渲染（从回调移到tick，避免阻塞EventBus）
         if self.ctx["display_mode"] == "alarm" and self._alarm_needs_render:
@@ -397,11 +403,11 @@ class DisplayService(BaseModule):
             })
             print("[{}] TTS播报(延迟): {}".format(self.name, self.cfg['tts_welcome']))
         
-        print("[{}] 收到系统就绪事件，切换到正常画面".format(self.name))
-        self._switch_to_normal()
+        print("[{}] 收到系统就绪事件，延迟切换到正常画面".format(self.name))
+        self._needs_switch_to_normal = True
     
     def _switch_to_normal(self):
-        """切换到正常骑行画面 + 释放开机图片数据（回收约26KB RAM）"""
+        """切换到正常骑行画面"""
         if not self.lcd_driver:
             return
         self.ctx["is_busy"] = True
@@ -409,18 +415,6 @@ class DisplayService(BaseModule):
             self.lcd_driver.clear()
             self.ctx["display_mode"] = "normal"
             self.ctx["boot_displayed"] = True
-            
-            # 释放洛天依头像 + 开机文字条数据，回收约26KB RAM
-            self.luotianyi_icon_data = None
-            self._data["luotianyi_loaded"] = False
-            self.boot_text_data = None
-            self._data["boot_text_loaded"] = False
-            try:
-                import gc
-                gc.collect()
-                print("[{}] 开机图片数据已释放(26KB)，GC完成".format(self.name))
-            except Exception:
-                pass
             
             # 背光恢复
             if self._data["light_intensity"] is not None:
