@@ -13,38 +13,97 @@ var _callbacks = { onData: null, onStatus: null, onConnected: null, onDisconnect
 var _reconnectCount = 0;
 var _scanTimeout = null;
 var _foundDevices = [];
+var _listenersRegistered = false;
 
 function init(callbacks) {
   _callbacks = callbacks;
-  return new Promise(function(resolve, reject) {
+  return new Promise(function (resolve, reject) {
     wx.openBluetoothAdapter({
-      success: function() {
+      success: function () {
         logger.log('BLE', '蓝牙适配器就绪');
         _registerListeners();
         resolve();
       },
-      fail: function(err) { reject(err); },
+      fail: function (err) { reject(err); },
     });
   });
 }
 
+function _addFoundDevice(d, name) {
+  var exists = false;
+  for (var j = 0; j < _foundDevices.length; j++) {
+    if (_foundDevices[j].deviceId === d.deviceId) {
+      exists = true;
+      _foundDevices[j].name = name;
+      _foundDevices[j].rssi = d.RSSI || 0;
+      break;
+    }
+  }
+  if (!exists) {
+    _foundDevices.push({ deviceId: d.deviceId, name: name, rssi: d.RSSI || 0 });
+    logger.log('BLE', '匹配到目标头盔设备: ' + name + ' (' + d.deviceId + ') RSSI=' + (d.RSSI || 0));
+  }
+  if (_callbacks.onDeviceFound) {
+    _callbacks.onDeviceFound(_foundDevices.slice());
+  }
+}
+
+function _checkCachedDevices() {
+  wx.getBluetoothDevices({
+    success: function (res) {
+      var devices = res.devices || [];
+      logger.log('BLE', 'wx.getBluetoothDevices 查到 ' + devices.length + ' 个已存在/缓存设备');
+      for (var i = 0; i < devices.length; i++) {
+        var d = devices[i];
+        var name = d.localName || d.name || '';
+        logger.log('BLE_CACHE', '缓存设备[' + i + ']: name="' + (d.name || '') + '" localName="' + (d.localName || '') + '" id=' + d.deviceId + ' RSSI=' + (d.RSSI || 0));
+        if (name && name.indexOf(protocol.DEVICE_PREFIX) >= 0) {
+          _addFoundDevice(d, name);
+        }
+      }
+    },
+    fail: function (err) {
+      logger.log('BLE', 'wx.getBluetoothDevices 失败: ' + err.errMsg);
+    }
+  });
+}
+
 function scan() {
-  if (_state.scanning) return;
+  stopScan();
   _foundDevices = [];
   _state.scanning = true;
+  logger.log('BLE', '开始扫描 BLE 设备...');
+
   wx.startBluetoothDevicesDiscovery({
-    allowDuplicates: false,
-    success: function() {
-      logger.log('BLE', '扫描中...');
+    allowDuplicates: true,
+    success: function () {
+      logger.log('BLE', 'wx.startBluetoothDevicesDiscovery 启动成功');
       if (_callbacks.onStatus) _callbacks.onStatus('扫描中...');
-      _scanTimeout = setTimeout(function() {
+
+      // 1. 立刻主动检查已存在的系统蓝牙缓存
+      _checkCachedDevices();
+
+      // 2. 3s 和 6s 再次轮询兜底
+      var poll1 = setTimeout(_checkCachedDevices, 3000);
+      var poll2 = setTimeout(_checkCachedDevices, 6000);
+
+      _scanTimeout = setTimeout(function () {
+        clearTimeout(poll1);
+        clearTimeout(poll2);
         if (!_state.connected) {
           stopScan();
-          if (_callbacks.onStatus) _callbacks.onStatus('未找到设备');
-          logger.log('BLE', '扫描超时，未找到 SmartHelmet 设备');
+          if (_callbacks.onStatus && _foundDevices.length === 0) {
+            _callbacks.onStatus('未找到设备');
+          }
+          logger.log('BLE', '扫描结束，共发现目标设备数: ' + _foundDevices.length);
         }
       }, 10000);
     },
+    fail: function (err) {
+      _state.scanning = false;
+      logger.log('BLE', 'wx.startBluetoothDevicesDiscovery 失败: ' + err.errMsg);
+      if (_callbacks.onStatus) _callbacks.onStatus('扫描启动失败');
+    }
   });
 }
 
@@ -55,25 +114,25 @@ function stopScan() {
 }
 
 function _registerListeners() {
-  wx.onBluetoothDeviceFound(function(res) {
+  if (_listenersRegistered) {
+    logger.log('BLE', '监听器已注册，无需重复注册');
+    return;
+  }
+  _listenersRegistered = true;
+
+  wx.onBluetoothDeviceFound(function (res) {
     var devices = res.devices || [];
     for (var i = 0; i < devices.length; i++) {
       var d = devices[i];
-      if (d.name && d.name.indexOf(protocol.DEVICE_PREFIX) >= 0) {
-        var exists = false;
-        for (var j = 0; j < _foundDevices.length; j++) {
-          if (_foundDevices[j].deviceId === d.deviceId) { exists = true; break; }
-        }
-        if (!exists) {
-          _foundDevices.push({ deviceId: d.deviceId, name: d.name, rssi: d.RSSI || 0 });
-          logger.log('BLE', '发现设备: ' + d.name + ' (' + d.deviceId + ')');
-          if (_callbacks.onDeviceFound) _callbacks.onDeviceFound(_foundDevices.slice());
-        }
+      var name = d.localName || d.name || '';
+      logger.log('BLE_FOUND', '广播: name="' + (d.name || '') + '" localName="' + (d.localName || '') + '" id=' + d.deviceId + ' RSSI=' + (d.RSSI || 0));
+      if (name && name.indexOf(protocol.DEVICE_PREFIX) >= 0) {
+        _addFoundDevice(d, name);
       }
     }
   });
 
-  wx.onBLECharacteristicValueChange(function(res) {
+  wx.onBLECharacteristicValueChange(function (res) {
     if (!_callbacks.onData) return;
     var cid = res.characteristicId || '';
     if (cid.indexOf('FFF1') < 0) return;
@@ -88,7 +147,8 @@ function _registerListeners() {
     }
   });
 
-  wx.onBLEConnectionStateChange(function(res) {
+  wx.onBLEConnectionStateChange(function (res) {
+    logger.log('BLE', '连接状态变更: deviceId=' + res.deviceId + ' connected=' + res.connected);
     if (res.connected) return;
     _state.connected = false;
     _state.charNotify = '';
@@ -102,15 +162,17 @@ function _registerListeners() {
 }
 
 function connect(deviceId) {
+  _reconnectCount = 0;
   stopScan();
-  logger.log('BLE', '正在连接...');
+  logger.log('BLE', '正在连接: ' + deviceId);
   wx.createBLEConnection({
     deviceId: deviceId,
-    success: function() {
+    success: function () {
       _state.deviceId = deviceId;
+      logger.log('BLE', 'wx.createBLEConnection 成功，开始获取服务...');
       _discoverServices(deviceId);
     },
-    fail: function(err) {
+    fail: function (err) {
       logger.log('BLE', '连接失败: ' + err.errMsg);
       _tryReconnect();
     },
@@ -124,7 +186,7 @@ function connectById(deviceId) {
 function _discoverServices(deviceId) {
   wx.getBLEDeviceServices({
     deviceId: deviceId,
-    success: function(res) {
+    success: function (res) {
       for (var i = 0; i < res.services.length; i++) {
         var s = res.services[i];
         if (s.uuid.indexOf('FFF0') >= 0) {
@@ -142,7 +204,7 @@ function _discoverChars(deviceId, serviceId) {
   wx.getBLEDeviceCharacteristics({
     deviceId: deviceId,
     serviceId: serviceId,
-    success: function(res) {
+    success: function (res) {
       var chars = res.characteristics;
       for (var i = 0; i < chars.length; i++) {
         var c = chars[i];
@@ -172,10 +234,10 @@ function _enableNotify(deviceId, serviceId, charId) {
     serviceId: serviceId,
     characteristicId: charId,
     state: true,
-    success: function() {
+    success: function () {
       logger.log('BLE', 'CCCD 订阅成功: ' + charId.slice(-4));
     },
-    fail: function(err) {
+    fail: function (err) {
       logger.log('BLE', 'CCCD 订阅失败: ' + JSON.stringify(err));
     },
   });
@@ -214,10 +276,10 @@ function _write(charId, json) {
     serviceId: _state.serviceId,
     characteristicId: charId,
     value: _str2ab(json),
-    success: function() {
+    success: function () {
       logger.log('BLE', '_write OK ' + charId.slice(-4) + ': ' + json);
     },
-    fail: function(err) {
+    fail: function (err) {
       logger.log('BLE', '_write FAIL ' + charId.slice(-4) + ': ' + err.errMsg + ' json=' + json);
       if (_callbacks.onStatus) _callbacks.onStatus('BLE 写入失败');
     },
@@ -226,6 +288,7 @@ function _write(charId, json) {
 
 function disconnect() {
   _reconnectCount = protocol.RECONNECT_MAX;
+  stopScan();
   if (_state.deviceId) {
     wx.closeBLEConnection({ deviceId: _state.deviceId });
   }
@@ -245,11 +308,11 @@ function _tryReconnect() {
     // 先尝试直连上次设备
     wx.createBLEConnection({
       deviceId: _state.deviceId,
-      success: function() {
+      success: function () {
         logger.log('BLE', '直连成功');
         _discoverServices(_state.deviceId);
       },
-      fail: function() {
+      fail: function () {
         // 直连失败，回退到扫描
         logger.log('BLE', '直连失败，重新扫描');
         setTimeout(scan, protocol.RECONNECT_DELAY);

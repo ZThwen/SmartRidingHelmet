@@ -323,9 +323,9 @@ Page({
     this._onBleConnected = function() {
       // 根据骑行状态设置 status，避免未骑行时显示"骑行中..."
       if (RideService.isActive()) {
-        that.setData({ bleConnected: true, bleStatus: '已连接', status: '骑行中...', isOnline: true });
+        that.setData({ bleConnected: true, bleStatus: '已连接', status: '骑行中...', isOnline: true, showBlePicker: false });
       } else {
-        that.setData({ bleConnected: true, bleStatus: '已连接', status: '已连接', isOnline: true });
+        that.setData({ bleConnected: true, bleStatus: '已连接', status: '已连接', isOnline: true, showBlePicker: false });
       }
       that._syncTabBar();
     };
@@ -348,6 +348,7 @@ Page({
 
     // BLE 设备发现
     this._onDeviceFound = function(devices) {
+      if (that.data.bleConnected) return;
       that.setData({ bleDevices: devices, showBlePicker: true });
     };
 

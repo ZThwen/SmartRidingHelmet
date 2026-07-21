@@ -1,0 +1,253 @@
+<mxfile host="app.diagrams.net" modified="2026-07-09" agent="CodeArts" version="21.0">
+  <diagram name="图2-11 BLE数据流向图" id="fig211">
+    <mxGraphModel dx="1600" dy="1000" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1000" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <!-- 标题 -->
+        <mxCell id="title" value="图2-11  BLE数据流向图" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=18;fontStyle=1;fontColor=#2B579A;" vertex="1" parent="1">
+          <mxGeometry x="560" y="15" width="320" height="40" as="geometry"/>
+        </mxCell>
+
+        <!-- 左右标题 -->
+        <mxCell id="left_title" value="头盔端（MicroPython）" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=14;fontStyle=1;fontColor=#2B579A;" vertex="1" parent="1">
+          <mxGeometry x="220" y="55" width="200" height="30" as="geometry"/>
+        </mxCell>
+        <mxCell id="right_title" value="手机端（微信小程序）" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=14;fontStyle=1;fontColor=#2E7D32;" vertex="1" parent="1">
+          <mxGeometry x="920" y="55" width="200" height="30" as="geometry"/>
+        </mxCell>
+
+        <!-- 分隔线 -->
+        <mxCell id="divider" value="" style="line;strokeWidth=1;strokeColor=#808080;dashed=1;html=1;" vertex="1" parent="1">
+          <mxGeometry x="730" y="90" width="1" height="830" as="geometry"/>
+        </mxCell>
+
+        <!-- ===== 左侧：上行链路 ===== -->
+        <mxCell id="up_label" value="↑ 上行数据流（头盔→手机）" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=11;fontStyle=1;fontColor=#2B579A;" vertex="1" parent="1">
+          <mxGeometry x="30" y="90" width="220" height="30" as="geometry"/>
+        </mxCell>
+
+        <!-- 3个传感器事件 -->
+        <mxCell id="evt_th" value="EVENT_TEMP&lt;br&gt;_HUMID_READY" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E3F2FD;strokeColor=#1565C0;fontColor=#1565C0;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="40" y="130" width="130" height="45" as="geometry"/>
+        </mxCell>
+        <mxCell id="evt_gnss" value="EVENT_GNSS&lt;br&gt;_READY" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E3F2FD;strokeColor=#1565C0;fontColor=#1565C0;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="200" y="130" width="130" height="45" as="geometry"/>
+        </mxCell>
+        <mxCell id="evt_light" value="EVENT_LIGHT&lt;br&gt;_READY" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E3F2FD;strokeColor=#1565C0;fontColor=#1565C0;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="360" y="130" width="130" height="45" as="geometry"/>
+        </mxCell>
+
+        <!-- BLEService 核心 -->
+        <mxCell id="ble_svc" value="BLEService（核心枢纽）&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;订阅传感器 · tick()合并JSON · 快照推送 · 心跳5s&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D6E8F7;strokeColor=#2B579A;strokeWidth=3;fontColor=#2B579A;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="120" y="230" width="310" height="70" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="e_th_blesvc" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#2B579A;" edge="1" source="evt_th" target="ble_svc" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_gnss_blesvc" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#2B579A;" edge="1" source="evt_gnss" target="ble_svc" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_light_blesvc" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#2B579A;" edge="1" source="evt_light" target="ble_svc" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- send_queue -->
+        <mxCell id="send_q" value="send_queue（线程安全队列）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E3F2FD;strokeColor=#1565C0;fontColor=#1565C0;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="170" y="340" width="220" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_blesvc_sendq" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#2B579A;" edge="1" source="ble_svc" target="send_q" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- notify_thread -->
+        <mxCell id="notify_t" value="notify_thread（后台线程）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E3F2FD;strokeColor=#1565C0;fontColor=#1565C0;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="170" y="410" width="220" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_sendq_notify" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#2B579A;" edge="1" source="send_q" target="notify_t" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- BLEDriver -->
+        <mxCell id="ble_drv" value="BLEDriver.notify_data()" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E3F2FD;strokeColor=#1565C0;fontColor=#1565C0;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="170" y="480" width="220" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_notify_drv" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#2B579A;" edge="1" source="notify_t" target="ble_drv" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- FFF1 → 右侧 -->
+        <mxCell id="e_drv_right" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#2B579A;strokeWidth=2.5;fontColor=#2B579A;fontStyle=1;fontSize=10;" edge="1" source="ble_drv" target="ble_comp" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_drv_right_l" value="FFF1 Notify" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=10;fontStyle=1;fontColor=#2B579A;" vertex="1" connectable="0" parent="e_drv_right" parent="1">
+          <mxGeometry relative="1" as="geometry"><mxPoint as="offset"/></mxGeometry>
+        </mxCell>
+
+        <!-- ===== 左侧：下行链路 ===== -->
+        <mxCell id="down_label" value="↓ 下行数据流（手机→头盔）" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=11;fontStyle=1;fontColor=#ED7D31;" vertex="1" parent="1">
+          <mxGeometry x="30" y="550" width="220" height="30" as="geometry"/>
+        </mxCell>
+
+        <!-- BLE回调 -->
+        <mxCell id="ble_cb" value="BLE回调（modem线程）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#ED7D31;fontColor=#ED7D31;fontStyle=1;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="130" y="590" width="200" height="40" as="geometry"/>
+        </mxCell>
+
+        <!-- cmd_buffer -->
+        <mxCell id="cmd_buf" value="cmd_buffer（环形缓冲区，最大16条）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#ED7D31;fontColor=#ED7D31;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="110" y="660" width="260" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_cb_buf" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#ED7D31;" edge="1" source="ble_cb" target="cmd_buf" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_cb_buf_l" value="微秒级返回" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=8;fontStyle=1;fontColor=#ED7D31;" vertex="1" connectable="0" parent="e_cb_buf" parent="1">
+          <mxGeometry relative="1" as="geometry"><mxPoint as="offset"/></mxGeometry>
+        </mxCell>
+
+        <!-- tick drain 回路 -->
+        <mxCell id="e_buf_blesvc" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#ED7D31;fontColor=#ED7D31;fontStyle=1;fontSize=9;entryX=0;entryY=0.5;entryDx=0;entryDy=0;exitX=0;exitY=0.5;exitDx=0;exitDy=0;" edge="1" source="cmd_buf" target="ble_svc" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="60" y="680"/>
+              <mxPoint x="60" y="265"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_buf_blesvc_l" value="tick() drain" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=8;fontStyle=1;fontColor=#ED7D31;" vertex="1" connectable="0" parent="e_buf_blesvc" parent="1">
+          <mxGeometry relative="1" as="geometry"><mxPoint as="offset"/></mxGeometry>
+        </mxCell>
+
+        <!-- 3个Service -->
+        <mxCell id="ctrl_svc" value="ControlService" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E2EFDA;strokeColor=#2E7D32;fontColor=#2E7D32;fontStyle=1;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="50" y="740" width="140" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="nav_svc" value="NavigationService" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E2EFDA;strokeColor=#2E7D32;fontColor=#2E7D32;fontStyle=1;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="220" y="740" width="160" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="alarm_svc" value="AlarmService" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#ED7D31;fontColor=#ED7D31;fontStyle=1;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="410" y="740" width="130" height="40" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="e_blesvc_ctrl" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#ED7D31;fontColor=#ED7D31;fontSize=8;" edge="1" source="ble_svc" target="ctrl_svc" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_blesvc_ctrl_l" value="RIDE_CONTROL" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=7;fontStyle=1;fontColor=#ED7D31;" vertex="1" connectable="0" parent="e_blesvc_ctrl" parent="1">
+          <mxGeometry relative="1" as="geometry"><mxPoint as="offset"/></mxGeometry>
+        </mxCell>
+
+        <mxCell id="e_blesvc_nav" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#ED7D31;fontColor=#ED7D31;fontSize=8;" edge="1" source="ble_svc" target="nav_svc" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_blesvc_nav_l" value="NAV_CMD" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=7;fontStyle=1;fontColor=#ED7D31;" vertex="1" connectable="0" parent="e_blesvc_nav" parent="1">
+          <mxGeometry relative="1" as="geometry"><mxPoint as="offset"/></mxGeometry>
+        </mxCell>
+
+        <mxCell id="e_blesvc_alarm" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#ED7D31;fontColor=#ED7D31;fontSize=8;" edge="1" source="ble_svc" target="alarm_svc" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_blesvc_alarm_l" value="ALARM_ACK" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=7;fontStyle=1;fontColor=#ED7D31;" vertex="1" connectable="0" parent="e_blesvc_alarm" parent="1">
+          <mxGeometry relative="1" as="geometry"><mxPoint as="offset"/></mxGeometry>
+        </mxCell>
+
+        <!-- ===== 右侧：上行接收 ===== -->
+        <mxCell id="up_recv_label" value="↑ 上行接收" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=11;fontStyle=1;fontColor=#2B579A;" vertex="1" parent="1">
+          <mxGeometry x="780" y="90" width="100" height="30" as="geometry"/>
+        </mxCell>
+
+        <!-- BleComponent -->
+        <mxCell id="ble_comp" value="BleComponent&lt;br&gt;（全局BLE数据入口）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D6E8F7;strokeColor=#2B579A;strokeWidth=3;fontColor=#2B579A;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="830" y="130" width="260" height="65" as="geometry"/>
+        </mxCell>
+
+        <!-- 分发组件 -->
+        <mxCell id="ride_comp" value="RideComponent" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E2EFDA;strokeColor=#2E7D32;fontColor=#2E7D32;fontStyle=1;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="800" y="260" width="140" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="map_comp" value="MapComponent" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E3F2FD;strokeColor=#1565C0;fontColor=#1565C0;fontStyle=1;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="970" y="260" width="140" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="alarm_comp" value="AlarmComponent" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#ED7D31;fontColor=#ED7D31;fontStyle=1;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="800" y="330" width="140" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="remote_comp" value="RemoteControl&lt;br&gt;Component" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E2EFDA;strokeColor=#2E7D32;fontColor=#2E7D32;fontStyle=1;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="970" y="330" width="150" height="45" as="geometry"/>
+        </mxCell>
+
+        <!-- BleComponent → 组件 -->
+        <mxCell id="e_blecomp_ride" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#2B579A;fontColor=#2B579A;fontSize=8;" edge="1" source="ble_comp" target="ride_comp" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_blecomp_ride_l" value="t=0 传感器" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=8;fontStyle=1;fontColor=#2B579A;" vertex="1" connectable="0" parent="e_blecomp_ride" parent="1">
+          <mxGeometry relative="1" as="geometry"><mxPoint as="offset"/></mxGeometry>
+        </mxCell>
+
+        <mxCell id="e_blecomp_map" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#2B579A;fontColor=#2B579A;fontSize=8;" edge="1" source="ble_comp" target="map_comp" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_blecomp_map_l" value="t=0 轨迹" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=8;fontStyle=1;fontColor=#2B579A;" vertex="1" connectable="0" parent="e_blecomp_map" parent="1">
+          <mxGeometry relative="1" as="geometry"><mxPoint as="offset"/></mxGeometry>
+        </mxCell>
+
+        <mxCell id="e_blecomp_alarm" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#2B579A;fontColor=#2B579A;fontSize=8;" edge="1" source="ble_comp" target="alarm_comp" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_blecomp_alarm_l" value="t=5 报警 / t=6 取消" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=8;fontStyle=1;fontColor=#ED7D31;" vertex="1" connectable="0" parent="e_blecomp_alarm" parent="1">
+          <mxGeometry relative="1" as="geometry"><mxPoint as="offset"/></mxGeometry>
+        </mxCell>
+
+        <mxCell id="e_blecomp_remote" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#2B579A;fontColor=#2B579A;fontSize=8;" edge="1" source="ble_comp" target="remote_comp" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_blecomp_remote_l" value="t=7 控制状态" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=8;fontStyle=1;fontColor=#2E7D32;" vertex="1" connectable="0" parent="e_blecomp_remote" parent="1">
+          <mxGeometry relative="1" as="geometry"><mxPoint as="offset"/></mxGeometry>
+        </mxCell>
+
+        <!-- ===== 右侧：下行发送 ===== -->
+        <mxCell id="down_send_label" value="↓ 下行发送" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=11;fontStyle=1;fontColor=#ED7D31;" vertex="1" parent="1">
+          <mxGeometry x="780" y="550" width="100" height="30" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="nav_comp" value="NavComponent" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E3F2FD;strokeColor=#1565C0;fontColor=#1565C0;fontStyle=1;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="800" y="590" width="130" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="remote_send" value="RemoteControl&lt;br&gt;Component" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E2EFDA;strokeColor=#2E7D32;fontColor=#2E7D32;fontStyle=1;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="960" y="590" width="150" height="45" as="geometry"/>
+        </mxCell>
+        <mxCell id="alarm_send" value="AlarmComponent" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#ED7D31;fontColor=#ED7D31;fontStyle=1;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1140" y="595" width="130" height="40" as="geometry"/>
+        </mxCell>
+
+        <!-- 下行箭头 → 左侧BLE回调 -->
+        <mxCell id="e_nav_cb" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#ED7D31;fontColor=#ED7D31;fontStyle=1;fontSize=8;" edge="1" source="nav_comp" target="ble_cb" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_nav_cb_l" value="FFF2 sendNav" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=8;fontStyle=1;fontColor=#ED7D31;" vertex="1" connectable="0" parent="e_nav_cb" parent="1">
+          <mxGeometry relative="1" as="geometry"><mxPoint as="offset"/></mxGeometry>
+        </mxCell>
+
+        <mxCell id="e_remote_cb" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#ED7D31;fontColor=#ED7D31;fontStyle=1;fontSize=8;" edge="1" source="remote_send" target="ble_cb" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_remote_cb_l" value="FFF3 sendCtrl" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=8;fontStyle=1;fontColor=#ED7D31;" vertex="1" connectable="0" parent="e_remote_cb" parent="1">
+          <mxGeometry relative="1" as="geometry"><mxPoint as="offset"/></mxGeometry>
+        </mxCell>
+
+        <mxCell id="e_alarm_cb" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#ED7D31;fontColor=#ED7D31;fontStyle=1;fontSize=8;" edge="1" source="alarm_send" target="ble_cb" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_alarm_cb_l" value="FFF4 sendAck" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=8;fontStyle=1;fontColor=#ED7D31;" vertex="1" connectable="0" parent="e_alarm_cb" parent="1">
+          <mxGeometry relative="1" as="geometry"><mxPoint as="offset"/></mxGeometry>
+        </mxCell>
+
+        <!-- 底部说明 -->
+        <mxCell id="bottom_note" value="↑ FFF1 Notify（头盔→手机，2s周期+立即推送）    ↓ FFF2/FFF3/FFF4 Write（手机→头盔，用户触发）" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;size=15;fillColor=#F5F5F5;strokeColor=#808080;fontColor=#808080;fontSize=9;align=center;" vertex="1" parent="1">
+          <mxGeometry x="250" y="830" width="600" height="40" as="geometry"/>
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

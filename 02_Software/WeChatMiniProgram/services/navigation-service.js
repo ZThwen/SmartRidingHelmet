@@ -257,7 +257,9 @@ function _clearTimer() {
 function updateStep() {
   if (_state.state !== 'navigating') return;
   if (_state.stepIndex >= _state.steps.length) {
-    stopNavigation('arrived');
+    _clearTimer();
+    _state.state = 'arrived';
+    _notifyState();
     return;
   }
 
@@ -269,6 +271,13 @@ function updateStep() {
     logger.log('NAV', '推送 [' + _state.stepIndex + '] ' + step.instruction);
   } else {
     logger.log('NAV', 'BLE 未连接，跳过推送');
+  }
+
+  if (step.action === 'arrive') {
+    _clearTimer();
+    _state.state = 'arrived';
+    _notifyState();
+    return;
   }
 
   // 更新剩余距离
