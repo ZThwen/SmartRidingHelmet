@@ -79,25 +79,37 @@ def _build_tts_text(dir_str, dist, road):
         return "前方%d米%s" % (dist, cn_dir)
 
 
-def _build_lcd_text(dir_str, dist, road):
+def _build_lcd_text(dir_str, dist, road=None):
     """
-    构造 LCD 导航行文本（尽量短，适配 160px 宽度）
-    有路名: "> 200m 中山路"
-    无路名: "> 200m"
-    到达:   "已到达"
-    取消:   "导航结束"
+    构造 LCD 导航行文本（纯 ASCII 高对比，配合高亮色块）
+    left:         "<<<  LEFT  200m"
+    right:        "RIGHT  200m  >>>"
+    straight:     "^^^ STRAIGHT 500m"
+    slight_left:  "<<  KEEP LEFT 150m"
+    slight_right: "KEEP RIGHT 150m >>"
+    uturn:        "U-TURN  100m"
+    arrive:       "*** ARRIVED ***"
+    cancel:       "--- NAV END ---"
     """
     if dir_str == "arrive":
-        return "已到达"
+        return "*** ARRIVED ***"
     if dir_str == "cancel":
-        return "导航结束"
+        return "--- NAV END ---"
 
-    sym = _DIR_SYMBOL.get(dir_str, "^")
-    if road:
-        # 截断路名避免超出屏幕（约 20 字符上限）
-        short_road = road[:10]
-        return "%s %dm %s" % (sym, dist, short_road)
+    if dir_str == "left":
+        return "<<<  LEFT  %dm" % dist
+    elif dir_str == "right":
+        return "RIGHT  %dm  >>>" % dist
+    elif dir_str == "slight_left":
+        return "<<  KEEP LEFT %dm" % dist
+    elif dir_str == "slight_right":
+        return "KEEP RIGHT %dm >>" % dist
+    elif dir_str == "uturn":
+        return "U-TURN  %dm" % dist
+    elif dir_str == "straight":
+        return "^^^ STRAIGHT %dm" % dist
     else:
+        sym = _DIR_SYMBOL.get(dir_str, "^")
         return "%s %dm" % (sym, dist)
 
 
@@ -268,7 +280,11 @@ class NavigationService(BaseModule):
 
         # 发布导航显示事件（DisplayService 订阅并缓存，渲染时恢复）
         if self.event_bus:
-            self.event_bus.publish(EVENT_NAV_DISPLAY, {"text": lcd_text})
+            self.event_bus.publish(EVENT_NAV_DISPLAY, {
+                "text": lcd_text,
+                "action": dir_str,
+                "dist": dist
+            })
 
     def get_data(self):
         """获取当前导航数据"""

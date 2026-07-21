@@ -164,8 +164,12 @@ class DisplayService(BaseModule):
             "boot_text_loaded": False,
         }
         
-        # 导航文字缓存
+        # 导航文字、动作缓存与渲染状态
         self._nav_text = ""
+        self._nav_action = ""
+        self._rendered_nav_text = None
+        self._rendered_nav_action = None
+        self._nav_expire_time = 0
     
     def init(self):
         try:
@@ -227,14 +231,30 @@ class DisplayService(BaseModule):
             self._render_alarm_screen()
             self._alarm_needs_render = False
         
-        # 报警取消后清屏
+        # 报警取消后清屏并重置导航渲染缓存
         if self._needs_clear and self.ctx["display_mode"] == "normal" and self.lcd_driver:
             try:
                 self.lcd_driver.clear()
+                self._rendered_nav_text = None
+                self._rendered_nav_action = None
             except Exception as e:
                 self.ctx["err_count"] += 1
                 print("[{}] 报警取消清屏失败: {}".format(self.name, e))
             self._needs_clear = False
+        
+        # 导航到达/取消 10s 自动消隐检测
+        if self._nav_expire_time > 0 and self.ctx["display_mode"] == "normal":
+            if time.ticks_diff(now, self._nav_expire_time) >= 0:
+                self._nav_text = ""
+                self._nav_action = ""
+                self._rendered_nav_text = None
+                self._rendered_nav_action = None
+                self._nav_expire_time = 0
+                if self.lcd_driver and hasattr(self.lcd_driver, 'show_nav_line'):
+                    try:
+                        self.lcd_driver.show_nav_line(0, 104, "", bg=0x0000)
+                    except Exception:
+                        pass
         
         # 非 ACTIVE 模式跳过正常画面渲染
         if self.ctx["power_state"] != POWER_STATE_ACTIVE:
@@ -413,6 +433,8 @@ class DisplayService(BaseModule):
         self.ctx["is_busy"] = True
         try:
             self.lcd_driver.clear()
+            self._rendered_nav_text = None
+            self._rendered_nav_action = None
             self.ctx["display_mode"] = "normal"
             self.ctx["boot_displayed"] = True
             
@@ -516,15 +538,51 @@ class DisplayService(BaseModule):
                 print("[{}] 正常画面渲染: {} {} {} {}".format(
                     self.name, temp_str, humid_str, location_str, speed_str))
                 
-                # 恢复导航文字
-                if self._nav_text and hasattr(self.lcd_driver, 'show_nav_line'):
-                    try:
-                        self.lcd_driver.show_nav_line(10, 110, self._nav_text)
-                    except Exception:
-                        pass
+                # 恢复导航高亮卡片（全宽高对比底栏，无频闪防抖缓存）
+                if hasattr(self.lcd_driver, 'show_nav_line'):
+                    if self._nav_text:
+                        if (self._nav_text != self._rendered_nav_text or 
+                            self._nav_action != self._rendered_nav_action):
+                            try:
+                                fg, bg = self._get_nav_colors(self._nav_action)
+                                self.lcd_driver.show_nav_line(0, 104, self._nav_text, fg=fg, bg=bg)
+                                self._rendered_nav_text = self._nav_text
+                                self._rendered_nav_action = self._nav_action
+                            except Exception as e:
+                                print("[{}] 绘制导航卡片失败: {}".format(self.name, e))
+                    else:
+                        if self._rendered_nav_text is not None:
+                            try:
+                                self.lcd_driver.show_nav_line(0, 104, "", bg=0x0000)
+                                self._rendered_nav_text = None
+                                self._rendered_nav_action = None
+                            except Exception:
+                                pass
         
         except Exception as e:
             print("[{}] 正常画面渲染失败: {}".format(self.name, e))
+
+    def _get_nav_colors(self, action):
+        """根据导航动作返回 (fg, bg) 高对比色彩搭配"""
+        if not self.lcd_driver or not hasattr(self.lcd_driver, 'lcd') or not self.lcd_driver.lcd:
+            return 0x07E0, 0x0000
+        lcd = self.lcd_driver.lcd
+
+        if action in ("left", "slight_left"):
+            return lcd.BLACK, lcd.GREEN       # 亮绿底 + 黑字
+        elif action in ("right", "slight_right"):
+            return lcd.BLACK, lcd.YELLOW      # 亮黄底 + 黑字
+        elif action == "straight":
+            return lcd.WHITE, lcd.BLUE        # 蓝底 + 白字
+        elif action == "uturn":
+            return lcd.WHITE, lcd.RED         # 红底 + 白字
+        elif action == "arrive":
+            cyan = getattr(lcd, 'CYAN', 0x07FF)
+            return lcd.BLACK, cyan            # 青底 + 黑字
+        elif action == "cancel":
+            return lcd.WHITE, 0x4208          # 暗灰底 + 白字
+        else:
+            return lcd.BLACK, lcd.GREEN
     
     def _update_normal_display(self):
         """更新正常画面显示"""
@@ -881,6 +939,11 @@ class DisplayService(BaseModule):
     def _on_nav_display(self, payload):
         """导航显示内容变更回调"""
         self._nav_text = payload.get("text", "")
+        self._nav_action = payload.get("action", "")
+        if self._nav_action in ("arrive", "cancel"):
+            self._nav_expire_time = time.ticks_ms() + 10000  # 10秒后消隐
+        else:
+            self._nav_expire_time = 0
         self._dirty = True
     
     # ==================== 数据接口 ====================

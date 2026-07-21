@@ -339,13 +339,13 @@ class LCDDriver(BaseModule):
 
     def show_nav_line(self, x, y, text, fg=None, bg=None):
         """
-        brief 在指定位置显示导航文本行（供 NavigationService 调用）
+        brief 在指定位置显示全宽高亮导航底栏（供 DisplayService / NavigationService 调用）
         param x: 起始X坐标
-        param y: 起始Y坐标
+        param y: 起始Y坐标（默认104）
         param text: 文本内容
         param fg: 前景色，默认 GREEN
         param bg: 背景色，默认 BLACK
-        note 封装 lcd.show_string + fill_rectangle，避免外部直接访问 self.lcd
+        note 自动计算居中坐标，绘制 160x24 全宽高对比色块底栏
         """
         if not self.ctx["is_init"] or not self.lcd:
             return
@@ -358,8 +358,14 @@ class LCDDriver(BaseModule):
                 fg = self.lcd.GREEN
             if bg is None:
                 bg = self.lcd.BLACK
-            self.lcd.fill_rectangle(x, y, 150, 16, bg)
-            self.lcd.show_string(x, y, text, fg, bg)
+            # 全宽 160px，高度 24px 高对比矩形色块卡片 (y=104~128)
+            nav_y = y if y is not None else 104
+            self.lcd.fill_rectangle(0, nav_y, 160, 24, bg)
+            # 计算文字居中 X 坐标 (每字符 8px 宽)
+            text_len = len(text) if text else 0
+            text_x = max(0, (160 - text_len * 8) // 2)
+            text_y = nav_y + 4  # 垂直居中
+            self.lcd.show_string(text_x, text_y, text, fg, bg)
             self.lcd.flush()
         except Exception as e:
             print("[{}] show_nav_line 失败: {}".format(self.name, e))
