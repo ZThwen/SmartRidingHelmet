@@ -74,6 +74,7 @@ class HeartRateDriver(BaseModule):
             "is_collecting": False,
             "start_time": 0,
             "packet_count": 0,
+            "last_valid_time": 0,    # 最后一次成功接收有效包的时间戳
         }
 
         self._data = {
@@ -114,6 +115,7 @@ class HeartRateDriver(BaseModule):
 
             self.ctx["is_collecting"] = True
             self.ctx["start_time"] = time.ticks_ms()
+            self.ctx["last_valid_time"] = time.ticks_ms()
 
             if self.event_bus:
                 self.event_bus.subscribe(EVENT_POWER_STATE_CHANGE, self._on_config_update)
@@ -141,24 +143,34 @@ class HeartRateDriver(BaseModule):
 
         if not self.ctx["is_collecting"]:
             return
+
         now = time.ticks_ms()
+
+        # ====== 2. 脱落/超时 动态适应判断 =====
+        # 正常模式 6 秒；省电模式 (如 sample_ms=10000ms) 自动放宽为 21 秒，绝不误判
+        timeout_limit = max(6000, self.cfg["sample_ms"] * 2 + 1000)
+        if self._data["valid"] and time.ticks_diff(now, self.ctx.get("last_valid_time", 0)) > timeout_limit:
+            self._data["valid"] = False
+            self._data["heart_rate"] = 0
+            self._data["spo2"] = 0
+            if self.event_bus:
+                self.event_bus.publish(EVENT_HEARTRATE_READY, self.get_data())
+
         if time.ticks_diff(now, self.ctx["last_tick"]) < self.cfg["sample_ms"]:
             return
 
         self.ctx["last_tick"] = now
 
+        # ====== 3. 保持 100% 不间断的串口监听（绝不因未算处有效数据而停止或冷静） ======
         try:
             self._read_uart()
         except Exception as e:
             self.ctx["err_count"] += 1
-            print("[%s] tick err: %s" % (self.name, e))
-            if self.ctx["err_count"] > 10:
-                print("[%s] too many errors, stopping" % self.name)
-                self.ctx["is_collecting"] = False
+            print("[%s] uart phys err: %s" % (self.name, e))
 
     def _read_uart(self):
         """
-        brief 读取串口数据，解析数据包
+        brief 读取串口数据，极简原生的 bytes 扫描解包
         note 限制每次读取字节数 + 帧扫描上限，防止阻塞主循环
         """
         try:
@@ -171,19 +183,19 @@ class HeartRateDriver(BaseModule):
 
             self.ctx["is_busy"] = True
 
-            # 限制读取量，防止阻塞（最多 200 字节 ≈ 4 帧）
+            # 限制读取量（最多 200 字节 ≈ 4 帧）
             max_read = min(available, 200)
             buf = self.uart.read(max_read)
             if not buf:
                 return
 
-            # 扫描帧头，最多处理 4 帧
+            # 扫描帧头 0xFF
             frames_processed = 0
+
             for i in range(len(buf)):
-                if frames_processed >= 4:
+                if frames_processed >= 2:  # 限制单次 tick 最多处理 2 帧
                     break
                 if buf[i] == self.cfg["header"]:
-                    # 检查是否有足够字节组成完整帧
                     if i + self.cfg["data_len"] <= len(buf):
                         frame = buf[i:i + self.cfg["data_len"]]
                         result = self._parse_packet(frame)
@@ -192,6 +204,7 @@ class HeartRateDriver(BaseModule):
                             self._data["spo2"] = result["spo2"]
                             self._data["valid"] = True
                             self._data["timestamp"] = time.ticks_ms()
+                            self.ctx["last_valid_time"] = time.ticks_ms()
                             self.ctx["err_count"] = 0
                             self.ctx["packet_count"] += 1
                             if self.event_bus:
@@ -266,6 +279,10 @@ class HeartRateDriver(BaseModule):
         self.ctx["is_collecting"] = True
         self.ctx["start_time"] = time.ticks_ms()
         self.ctx["packet_count"] = 0
+        self.ctx["err_count"] = 0
+        self.ctx["in_cooldown"] = False
+        self.ctx["retry_attempts"] = 0
+        self._rx_buf = bytearray()
         self._data["valid"] = False
         print("[%s] start collect" % self.name)
 

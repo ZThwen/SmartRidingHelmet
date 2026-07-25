@@ -487,31 +487,17 @@ class SystemMonitor(BaseModule):
         self._clear_reset_count_file()
 
     def _save_reset_count_file(self, count):
-        """将复位计数写入持久化文件 sysmon_reset.cnt"""
-        try:
-            with open("sysmon_reset.cnt", "w") as f:
-                f.write(str(count))
-        except Exception:
-            pass
+        """将复位计数保存到 RAM（不写 Flash 避免文件系统损坏）"""
+        # 复位计数仅保存在 ctx 中，重启后从 0 开始
+        pass
 
     def _load_reset_count_file(self):
-        """从 sysmon_reset.cnt 读取复位计数"""
-        try:
-            with open("sysmon_reset.cnt", "r") as f:
-                return int(f.read().strip())
-        except Exception:
-            return 0
+        """从 RAM 读取复位计数（不读 Flash）"""
+        return self.ctx.get("reset_count", 0)
 
     def _clear_reset_count_file(self):
-        """删除复位计数持久化文件"""
-        try:
-            import os
-            try:
-                os.remove("sysmon_reset.cnt")
-            except OSError:
-                pass
-        except Exception:
-            pass
+        """清零复位计数（仅 RAM，不删 Flash 文件）"""
+        pass
 
     # ==================== 安全模式 ====================
 
@@ -557,16 +543,11 @@ class SystemMonitor(BaseModule):
             pass  # 首次运行或无持久化文件
 
     def _save_ec200u_snapshot(self, total_at_cmds, at_stats):
-        """保存当前 EC200U 快照（用于重启后诊断）"""
-        try:
-            parts = ["AT_total=%d" % total_at_cmds]
-            for name in sorted(at_stats.keys()):
-                parts.append("%s=%d" % (name, at_stats[name]))
-            snapshot = " ".join(parts)
-            with open("ec200u_diag.cnt", "w") as f:
-                f.write(snapshot)
-        except Exception:
-            pass
+        """保存当前 EC200U 快照到 RAM（仅 print 输出，不写 Flash 避免文件系统损坏）"""
+        parts = ["AT_total=%d" % total_at_cmds]
+        for name in sorted(at_stats.keys()):
+            parts.append("%s=%d" % (name, at_stats[name]))
+        self.ctx["ec200u_snapshot"] = " ".join(parts)
 
     def _check_ec200u_status(self, now):
         """

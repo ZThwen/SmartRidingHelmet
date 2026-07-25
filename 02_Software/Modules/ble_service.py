@@ -270,10 +270,12 @@ class BLEService(BaseModule):
 
     def _on_heartrate(self, payload):
         """brief 缓存心率血氧，由 _enqueue_merged 统一推送"""
-        if not payload.get("valid"):
-            return
-        self._data["latest_heart_rate"] = payload.get("heart_rate")
-        self._data["latest_spo2"] = payload.get("spo2")
+        if not payload.get("valid", False):
+            self._data["latest_heart_rate"] = None
+            self._data["latest_spo2"] = None
+        else:
+            self._data["latest_heart_rate"] = payload.get("heart_rate")
+            self._data["latest_spo2"] = payload.get("spo2")
 
     def _on_alarm(self, payload):
         alarm_type = payload.get("alarm_type", "collision")
