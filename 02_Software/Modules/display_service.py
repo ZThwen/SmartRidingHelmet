@@ -3,7 +3,7 @@ brief 显示管理服务 - 洛天依主题开机动画、报警差异化显示�
 note Service层业务服务，MicroPython环境，在真实硬件上运行
 
 功能：
-1. 开机画面：洛天依头像(100x100图片) + "队伍：锦衣卫队"(160x20预渲染中文图片条)；TTS欢迎语延迟到SYSTEM_READY后播报
+1. 开机画面：洛天依头像(100x100图片) + "队伍：锦依卫队"(160x20预渲染中文图片条)；TTS欢迎语延迟到SYSTEM_READY后播报
 2. 正常画面：英文显示温度、湿度、定位、速度数据（font=8仅支持ASCII）
 3. 光照自动调节背光：订阅Light传感器事件
 4. 报警差异化显示（全部英文，font=8）：
@@ -35,7 +35,7 @@ note Service层业务服务，MicroPython环境，在真实硬件上运行
 
 画面布局（开机画面，160x128）：
     第0-99行: 洛天依头像（100x100图片, x=30）
-    第108-127行: "队伍：锦衣卫队"（160x20预渲染图片条, x=0）
+    第108-127行: "队伍：锦依卫队"（160x20预渲染图片条, x=0）
     boot画面持续显示直到EVENT_SYSTEM_READY触发切换到normal
 
 图片说明：
@@ -371,7 +371,7 @@ class DisplayService(BaseModule):
                     )
                     print("[{}] 洛天依头像显示成功".format(self.name))
             
-            # 显示"队伍：锦衣卫队"中文文字条（160x20预渲染图片）
+            # 显示"队伍：锦依卫队"中文文字条（160x20预渲染图片）
             if self._data["boot_text_loaded"] and self.boot_text_data:
                 if self._validate_image_data(
                     self.boot_text_data,

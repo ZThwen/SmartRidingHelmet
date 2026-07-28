@@ -179,7 +179,7 @@ _data:
 
 **不再使用 2500ms 定时器**。改为事件驱动 boot→normal 切换。
 
-1. `init()` 末尾：显示洛天依头像(100x100 RGB565) + 预渲染中文文字条"队伍：锦衣卫队"(160x20, 来自 `boot_text.py`)。
+1. `init()` 末尾：显示洛天依头像(100x100 RGB565) + 预渲染中文文字条"队伍：锦依卫队"(160x20, 来自 `boot_text.py`)。
 2. 状态机置为 `boot`，等待 `EVENT_SYSTEM_READY` 事件。
 3. 收到 `EVENT_SYSTEM_READY` 后：释放 `luotianyi_icon_data` + `boot_text_data`（回收 ~26KB RAM），切换 `normal`。
 

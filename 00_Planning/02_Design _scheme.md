@@ -1013,7 +1013,7 @@ BLE 中断 (modem 线程)
 
 两阶段开机动画（事件驱动，不再使用固定定时器）：
 
-1. **Phase A 开机画面**（`init()` 末尾）：LCD 显示洛天依头像图标(100x100, RGB565) + 预渲染中文文字条"队伍：锦衣卫队"(160x20)，通过 `boot_text.py` 模块加载。状态机置为 `boot`。
+1. **Phase A 开机画面**（`init()` 末尾）：LCD 显示洛天依头像图标(100x100, RGB565) + 预渲染中文文字条"队伍：锦依卫队"(160x20)，通过 `boot_text.py` 模块加载。状态机置为 `boot`。
 2. **Phase B 后台初始化期间**：LCD 硬件自主刷新保持画面，DisplayService 等待 `EVENT_SYSTEM_READY` 事件。
 3. **收到 `EVENT_SYSTEM_READY` 后**：释放 `luotianyi_icon_data` + `boot_text_data`（回收 ~26KB RAM），状态机切换到 `normal`，补发 TTS 欢迎语。
 
