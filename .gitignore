@@ -48,8 +48,6 @@ skills-guide.md
 02_Software/Tests/[0-9].py
 /generated-images
 04_Docs_for_Competition/第二部分_系统组成及功能说明.docx
-00_Planning/04_LifecycleManager_Future_Extension.md
-00_Planning/05_SystemMonitor_Design.md
 01_Hardware/电源检测拓展板.eprj2
 
 # 竞赛大文件（体积大，不需要提交 GitHub）
